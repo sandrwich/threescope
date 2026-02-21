@@ -13,11 +13,14 @@ export default defineConfig({
         background_color: '#101010',
         display: 'standalone',
         icons: [
-          { src: '/textures/sat_icon.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' }
+          { src: '/textures/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/textures/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/textures/icon-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+          { src: '/textures/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,png,jpg}'],
+        globPatterns: ['**/*.{js,css,html,png,jpg,ttf}'],
         maximumFileSizeToCacheInBytes: 25 * 1024 * 1024, // 25 MB for large textures
         runtimeCaching: [
           {
