@@ -1,0 +1,11 @@
+export const EARTH_RADIUS_KM = 6371.0;
+export const MOON_RADIUS_KM = 1737.4;
+export const MU = 398600.4418;
+export const DRAW_SCALE = 3000.0;
+export const FP_RINGS = 12;
+export const FP_PTS = 120;
+export const DEG2RAD = Math.PI / 180.0;
+export const RAD2DEG = 180.0 / Math.PI;
+export const TWO_PI = 2.0 * Math.PI;
+export const MAP_W = 2048.0;
+export const MAP_H = 1024.0;

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Threescope</title>
+  <link rel="icon" type="image/png" href="/textures/sat_icon.png">
+  <style>
+    @font-face {
+      font-family: 'Overpass Mono';
+      src: url('/textures/overpass-mono.ttf') format('truetype');
+      font-weight: 400;
+      font-display: swap;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #101010;
+      font-family: 'Overpass Mono', 'Courier New', monospace;
+      color: #fff;
+    }
+    canvas { display: block; }
+
+    #ui-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; user-select: none;
+    }
+    #ui-overlay > * { pointer-events: auto; }
+
+    /* Loading screen */
+    #loading-screen {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: #101010; z-index: 1000;
+    }
+    #loading-screen .bar-outer {
+      width: 400px; height: 30px; border: 2px solid #fff;
+    }
+    #loading-screen .bar-inner {
+      height: 100%; width: 0%; background: #d3d3d3; transition: width 0.3s;
+      margin: 4px; height: calc(100% - 8px);
+    }
+    #loading-screen .msg {
+      margin-bottom: 16px; font-size: 20px; color: #fff;
+    }
+
+    /* Top-left controls text */
+    #controls-panel {
+      position: absolute; top: 10px; left: 10px;
+      font-size: 20px; line-height: 24px; color: #d3d3d3;
+      letter-spacing: 0.5px;
+    }
+    #controls-panel .time-line { color: #fff; }
+
+    /* Bottom-left: attribution */
+    #bottom-panel {
+      position: absolute; bottom: 10px; left: 10px;
+      font-size: 14px; line-height: 1.5; color: #666;
+    }
+
+    /* Checkboxes — matching raygui box style */
+    #checkbox-panel {
+      position: absolute; top: 114px; left: 10px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    #checkbox-panel label {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 16px; cursor: pointer; color: #fff;
+      line-height: 24px;
+    }
+    /* Hide native checkbox */
+    #checkbox-panel input[type="checkbox"] {
+      appearance: none; -webkit-appearance: none;
+      width: 20px; height: 20px;
+      border: 2px solid #aaa; background: transparent;
+      cursor: pointer; position: relative; flex-shrink: 0;
+    }
+    #checkbox-panel input[type="checkbox"]:hover {
+      border-color: #fff;
+    }
+    /* Checked: solid inner square (raygui style) */
+    #checkbox-panel input[type="checkbox"]:checked::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 2px; right: 2px; bottom: 2px;
+      background: #fff;
+    }
+
+    /* TLE Picker */
+    #tle-picker {
+      position: absolute; bottom: 10px; right: 10px;
+    }
+    #tle-picker select {
+      background: #1a1a1a; color: #fff; border: 1px solid #666;
+      padding: 4px 8px; font-size: 16px; font-family: inherit;
+      cursor: pointer;
+    }
+    #tle-picker select:hover { border-color: #aaa; }
+
+    /* Stats (top-right) */
+    #stats-panel {
+      position: absolute; top: 10px; right: 10px;
+      text-align: right;
+    }
+    #stats-panel .fps { color: #00ff00; font-size: 20px; font-weight: bold; }
+    #stats-panel .sat-count { color: #d3d3d3; font-size: 16px; margin-top: 2px; }
+
+    /* Satellite info tooltip */
+    #sat-info {
+      position: absolute; display: none;
+      background: rgba(0,0,0,0.8); padding: 10px 14px;
+      font-size: 18px; line-height: 1.4;
+      min-width: 260px; pointer-events: none;
+    }
+    #sat-info .sat-name { font-size: 20px; margin-bottom: 6px; }
+    #sat-info .sat-detail { color: #fff; }
+
+    /* Apsis labels */
+    .apsis-label {
+      position: absolute; display: none; font-size: 16px;
+      pointer-events: none; white-space: nowrap;
+    }
+    .apsis-label.peri { color: #87ceeb; }
+    .apsis-label.apo { color: #ffa500; }
+
+    #bottom-panel a {
+      color: #888; text-decoration: none; pointer-events: auto;
+    }
+    #bottom-panel a:hover { color: #ccc; }
+  </style>
+</head>
+<body>
+  <div id="loading-screen">
+    <div class="msg" id="loading-msg">Initializing...</div>
+    <div class="bar-outer"><div class="bar-inner" id="loading-bar"></div></div>
+  </div>
+
+  <div id="ui-overlay">
+    <div id="controls-panel"></div>
+    <div id="checkbox-panel">
+      <label><input type="checkbox" id="cb-hide-unselected"> Hide Unselected</label>
+      <label><input type="checkbox" id="cb-clouds"> Show Clouds</label>
+      <label><input type="checkbox" id="cb-night-lights" checked> Night Lights</label>
+    </div>
+    <div id="tle-picker">
+      <select id="tle-select"></select>
+    </div>
+    <div id="stats-panel">
+      <div class="fps" id="fps-display">-- FPS</div>
+      <div class="sat-count" id="sat-count-display">0 Sats</div>
+    </div>
+    <div id="sat-info">
+      <div class="sat-name" id="sat-info-name"></div>
+      <div class="sat-detail" id="sat-info-detail"></div>
+    </div>
+    <div class="apsis-label peri" id="peri-label"></div>
+    <div class="apsis-label apo" id="apo-label"></div>
+    <div id="bottom-panel">
+      <div>
+        TLE data from <a href="https://celestrak.org" target="_blank">CelesTrak</a><br>
+        Based on <a href="https://github.com/aweeri/TLEscope" target="_blank">TLEscope</a> by aweeri
+        &middot; <a href="https://github.com/aweeri/TLEscope/blob/main/LICENSE" target="_blank">AGPL-3.0</a>
+        &middot; <a href="https://github.com/sandrwich/threescope" target="_blank">Source code</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
