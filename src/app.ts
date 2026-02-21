@@ -7,6 +7,7 @@ import { TimeSystem } from './simulation/time-system';
 import { Earth } from './scene/earth';
 import { CloudLayer } from './scene/cloud-layer';
 import { MoonScene } from './scene/moon-scene';
+import { SunScene } from './scene/sun-scene';
 import { SatelliteManager } from './scene/satellite-manager';
 import { OrbitRenderer } from './scene/orbit-renderer';
 import { FootprintRenderer } from './scene/footprint-renderer';
@@ -38,6 +39,7 @@ export class App {
   private earth!: Earth;
   private cloudLayer!: CloudLayer;
   private moonScene!: MoonScene;
+  private sunScene!: SunScene;
   private satManager!: SatelliteManager;
   private orbitRenderer!: OrbitRenderer;
   private footprintRenderer!: FootprintRenderer;
@@ -192,6 +194,11 @@ export class App {
     // Moon
     this.moonScene = new MoonScene(moonTex);
     this.scene3d.add(this.moonScene.mesh);
+
+    // Sun
+    this.sunScene = new SunScene();
+    this.scene3d.add(this.sunScene.disc);
+    this.scene3d.add(this.sunScene.corona);
 
     // Satellites
     this.satManager = new SatelliteManager(satTex);
@@ -425,6 +432,7 @@ export class App {
       this.cfg.showNightLights = (e.target as HTMLInputElement).checked;
     });
 
+
     // Info modal (mobile)
     const infoModal = document.getElementById('info-modal')!;
     document.getElementById('info-btn')!.addEventListener('click', () => {
@@ -533,9 +541,12 @@ export class App {
           const moonR = MOON_RADIUS_KM / DRAW_SCALE;
           const moonSphere = new THREE.Sphere(this.moonScene.drawPos, moonR);
           const earthSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), earthR);
+          const sunSphere = new THREE.Sphere(this.sunScene.disc.position, 6); // generous hit radius
           const moonHit = raycaster.ray.intersectsSphere(moonSphere);
           const earthHit = raycaster.ray.intersectsSphere(earthSphere);
-          if (moonHit && !earthHit) this.activeLock = TargetLock.MOON;
+          const sunHit = raycaster.ray.intersectsSphere(sunSphere);
+          if (sunHit && !earthHit && !moonHit) this.activeLock = TargetLock.SUN;
+          else if (moonHit && !earthHit) this.activeLock = TargetLock.MOON;
           else if (earthHit) this.activeLock = TargetLock.EARTH;
         } else {
           this.activeLock = TargetLock.EARTH;
@@ -678,9 +689,12 @@ export class App {
             const moonR = MOON_RADIUS_KM / DRAW_SCALE;
             const moonSphere = new THREE.Sphere(this.moonScene.drawPos, moonR);
             const earthSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), earthR);
+            const sunSphere = new THREE.Sphere(this.sunScene.disc.position, 6);
             const moonHit = raycaster.ray.intersectsSphere(moonSphere);
             const earthHit = raycaster.ray.intersectsSphere(earthSphere);
-            if (moonHit && !earthHit) this.activeLock = TargetLock.MOON;
+            const sunHit = raycaster.ray.intersectsSphere(sunSphere);
+            if (sunHit && !earthHit && !moonHit) this.activeLock = TargetLock.SUN;
+            else if (moonHit && !earthHit) this.activeLock = TargetLock.MOON;
             else if (earthHit) this.activeLock = TargetLock.EARTH;
           } else {
             this.activeLock = TargetLock.EARTH;
@@ -741,6 +755,10 @@ export class App {
       } else {
         this.targetTarget3d.copy(this.moonScene.drawPos);
       }
+    } else if (this.activeLock === TargetLock.SUN) {
+      if (this.viewMode === ViewMode.VIEW_3D) {
+        this.targetTarget3d.copy(this.sunScene.disc.position);
+      }
     }
 
     // Smooth camera lerp
@@ -754,11 +772,13 @@ export class App {
     this.camDistance += (this.targetCamDistance - this.camDistance) * smooth;
     this.target3d.lerp(this.targetTarget3d, smooth);
 
-    // Update 3D camera position
+    // Update 3D camera position (co-rotate with Earth so it appears stationary)
+    const earthRotRad = (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD;
+    const camAX = this.camAngleX + earthRotRad;
     this.camera3d.position.set(
-      this.target3d.x + this.camDistance * Math.cos(this.camAngleY) * Math.sin(this.camAngleX),
+      this.target3d.x + this.camDistance * Math.cos(this.camAngleY) * Math.sin(camAX),
       this.target3d.y + this.camDistance * Math.sin(this.camAngleY),
-      this.target3d.z + this.camDistance * Math.cos(this.camAngleY) * Math.cos(this.camAngleX)
+      this.target3d.z + this.camDistance * Math.cos(this.camAngleY) * Math.cos(camAX)
     );
     this.camera3d.lookAt(this.target3d);
 
@@ -787,6 +807,7 @@ export class App {
       this.earth.update(epoch, gmstDeg, this.cfg.earthRotationOffset, this.cfg.showNightLights);
       this.cloudLayer.update(epoch, gmstDeg, this.cfg.earthRotationOffset, this.cfg.showClouds, this.cfg.showNightLights);
       this.moonScene.update(epoch);
+      this.sunScene.update(epoch);
 
       this.satManager.update(
         this.satellites, epoch, this.camera3d.position,

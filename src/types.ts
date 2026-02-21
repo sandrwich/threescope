@@ -44,5 +44,5 @@ export interface AppConfig {
   markers: Marker[];
 }
 
-export enum TargetLock { NONE, EARTH, MOON }
+export enum TargetLock { NONE, EARTH, MOON, SUN }
 export enum ViewMode { VIEW_3D, VIEW_2D }
