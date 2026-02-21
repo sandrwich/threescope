@@ -817,7 +817,8 @@ export class App {
 
       const drawPos = sat.currentPos.clone().divideScalar(DRAW_SCALE);
       const distToCam = this.camera3d.position.distanceTo(drawPos);
-      const hitRadius = 0.015 * distToCam * this.cfg.uiScale;
+      const touchScale = this.touchCount > 0 || ('ontouchstart' in window) ? 3.0 : 1.0;
+      const hitRadius = 0.015 * distToCam * this.cfg.uiScale * touchScale;
 
       const sphere = new THREE.Sphere(drawPos, hitRadius);
       if (raycaster.ray.intersectsSphere(sphere)) {
@@ -836,7 +837,8 @@ export class App {
     const mouseWorldX = this.camera2d.left + (this.mousePos.x / window.innerWidth) * (this.camera2d.right - this.camera2d.left);
     const mouseWorldY = this.camera2d.top + (this.mousePos.y / window.innerHeight) * (this.camera2d.bottom - this.camera2d.top);
 
-    const hitRadius = 12.0 * this.cfg.uiScale / this.cam2dZoom;
+    const touchScale = this.touchCount > 0 || ('ontouchstart' in window) ? 3.0 : 1.0;
+    const hitRadius = 12.0 * this.cfg.uiScale * touchScale / this.cam2dZoom;
     let closestDist = 9999;
 
     for (const sat of this.satellites) {
@@ -994,12 +996,18 @@ export class App {
         screenPos = new THREE.Vector2(nx * window.innerWidth, ny * window.innerHeight);
       }
 
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      infoEl.style.display = 'block';
+      const infoW = infoEl.offsetWidth;
+      const infoH = infoEl.offsetHeight;
+
+      // Place to the right/below the satellite, flip if it would overflow
       let boxX = screenPos.x + 15;
       let boxY = screenPos.y + 15;
-      if (boxX + 280 > window.innerWidth) boxX = screenPos.x - 295;
-      if (boxY + 200 > window.innerHeight) boxY = screenPos.y - 215;
+      if (boxX + infoW > vw - 4) boxX = Math.max(4, screenPos.x - infoW - 15);
+      if (boxY + infoH > vh - 4) boxY = Math.max(4, screenPos.y - infoH - 15);
 
-      infoEl.style.display = 'block';
       infoEl.style.left = `${boxX}px`;
       infoEl.style.top = `${boxY}px`;
 
@@ -1014,15 +1022,28 @@ export class App {
         const pp = pDraw.project(this.camera3d);
         const ap = aDraw.project(this.camera3d);
 
-        periLabel.style.display = 'block';
-        periLabel.style.left = `${(pp.x * 0.5 + 0.5) * window.innerWidth + 20}px`;
-        periLabel.style.top = `${(-pp.y * 0.5 + 0.5) * window.innerHeight - 8}px`;
-        periLabel.textContent = `Peri: ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
+        // Only show if in front of camera and on screen
+        const ppX = (pp.x * 0.5 + 0.5) * vw;
+        const ppY = (-pp.y * 0.5 + 0.5) * vh;
+        if (pp.z < 1 && ppX > -50 && ppX < vw + 50 && ppY > -20 && ppY < vh + 20) {
+          periLabel.textContent = `Peri: ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
+          periLabel.style.display = 'block';
+          periLabel.style.left = `${ppX + 20}px`;
+          periLabel.style.top = `${ppY - 8}px`;
+        } else {
+          periLabel.style.display = 'none';
+        }
 
-        apoLabel.style.display = 'block';
-        apoLabel.style.left = `${(ap.x * 0.5 + 0.5) * window.innerWidth + 20}px`;
-        apoLabel.style.top = `${(-ap.y * 0.5 + 0.5) * window.innerHeight - 8}px`;
-        apoLabel.textContent = `Apo: ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
+        const apX = (ap.x * 0.5 + 0.5) * vw;
+        const apY = (-ap.y * 0.5 + 0.5) * vh;
+        if (ap.z < 1 && apX > -50 && apX < vw + 50 && apY > -20 && apY < vh + 20) {
+          apoLabel.textContent = `Apo: ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
+          apoLabel.style.display = 'block';
+          apoLabel.style.left = `${apX + 20}px`;
+          apoLabel.style.top = `${apY - 8}px`;
+        } else {
+          apoLabel.style.display = 'none';
+        }
       } else {
         periLabel.style.display = 'none';
         apoLabel.style.display = 'none';
