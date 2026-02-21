@@ -175,10 +175,10 @@ export class App {
     });
 
     const [dayTex, nightTex, cloudTex, moonTex, satTex, markerTex] = await Promise.all([
-      load('/textures/earth.png'),
-      load('/textures/earth_night.png'),
-      load('/textures/clouds.png'),
-      load('/textures/moon.png'),
+      load('/textures/earth.webp'),
+      load('/textures/earth_night.webp'),
+      load('/textures/clouds.webp'),
+      load('/textures/moon.webp'),
       load('/textures/sat_icon.png'),
       load('/textures/marker_icon.png'),
     ]);
