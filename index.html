@@ -90,13 +90,28 @@
     /* TLE Picker */
     #tle-picker {
       position: absolute; bottom: 10px; right: 10px;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
     }
-    #tle-picker select {
+    #tle-picker select, #tle-picker button, #tle-picker input[type="text"] {
       background: #1a1a1a; color: #fff; border: 1px solid #666;
       padding: 4px 8px; font-size: 16px; font-family: inherit;
       cursor: pointer;
     }
-    #tle-picker select:hover { border-color: #aaa; }
+    #tle-picker select:hover, #tle-picker button:hover, #tle-picker input[type="text"]:hover {
+      border-color: #aaa;
+    }
+    #tle-custom-row {
+      display: none; gap: 4px; align-items: center;
+    }
+    #tle-custom-row.visible { display: flex; }
+    #tle-url-input {
+      width: 260px; cursor: text;
+    }
+    #tle-url-input::placeholder { color: #555; }
+    #tle-file-input {
+      position: absolute; width: 0; height: 0; overflow: hidden;
+      opacity: 0; pointer-events: none;
+    }
 
     /* Stats (top-right) */
     #stats-panel {
@@ -145,6 +160,12 @@
     </div>
     <div id="tle-picker">
       <select id="tle-select"></select>
+      <div id="tle-custom-row">
+        <input type="text" id="tle-url-input" placeholder="TLE URL...">
+        <button id="tle-url-btn">Load</button>
+        <button id="tle-file-btn">File</button>
+        <input type="file" id="tle-file-input" accept=".tle,.txt,.3le">
+      </div>
     </div>
     <div id="stats-panel">
       <div class="fps" id="fps-display">-- FPS</div>

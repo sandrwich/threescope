@@ -16,7 +16,7 @@ import { getMapCoordinates } from './astro/coordinates';
 import { calculatePosition } from './astro/propagator';
 import { epochToGmst } from './astro/epoch';
 import { calculateSunPosition } from './astro/sun';
-import { fetchTLEData, type FetchResult } from './data/tle-loader';
+import { fetchTLEData, parseTLEText, type FetchResult } from './data/tle-loader';
 import { TLE_SOURCES, DEFAULT_GROUP } from './data/tle-sources';
 
 function formatAge(ms: number): string {
@@ -297,9 +297,30 @@ export class App {
     }
   }
 
+  private loadCustomTLE(text: string, label: string) {
+    const statusEl = document.getElementById('sat-count-display')!;
+    try {
+      this.satellites = parseTLEText(text);
+      this.selectedSat = null;
+      this.hoveredSat = null;
+      this.orbitRenderer.precomputeOrbits(this.satellites);
+      statusEl.textContent = `${this.satellites.length} Sats (${label})`;
+    } catch (e) {
+      console.error('Failed to parse TLE data:', e);
+      statusEl.textContent = 'Parse failed';
+    }
+  }
+
   private setupUI() {
     // TLE picker
     const select = document.getElementById('tle-select') as HTMLSelectElement;
+    const customRow = document.getElementById('tle-custom-row')!;
+
+    const customOpt = document.createElement('option');
+    customOpt.value = '__custom__';
+    customOpt.textContent = 'Custom...';
+    select.appendChild(customOpt);
+
     for (const src of TLE_SOURCES) {
       const opt = document.createElement('option');
       opt.value = src.group;
@@ -307,12 +328,56 @@ export class App {
       if (src.group === DEFAULT_GROUP) opt.selected = true;
       select.appendChild(opt);
     }
+
     select.addEventListener('change', async () => {
+      if (select.value === '__custom__') {
+        customRow.classList.add('visible');
+        return;
+      }
+      customRow.classList.remove('visible');
       this.setLoading(0.5, 'Loading satellite data...');
       this.loadingScreen.style.display = 'flex';
       await this.loadTLEGroup(select.value);
       this.loadingScreen.style.display = 'none';
     });
+
+    // File upload
+    const fileInput = document.getElementById('tle-file-input') as HTMLInputElement;
+    document.getElementById('tle-file-btn')!.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      this.setLoading(0.5, 'Reading file...');
+      this.loadingScreen.style.display = 'flex';
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.loadCustomTLE(reader.result as string, file.name);
+        this.loadingScreen.style.display = 'none';
+      };
+      reader.readAsText(file);
+      fileInput.value = '';
+    });
+
+    // URL load
+    const urlInput = document.getElementById('tle-url-input') as HTMLInputElement;
+    const urlLoad = async () => {
+      const url = urlInput.value.trim();
+      if (!url) return;
+      this.setLoading(0.5, 'Fetching TLE from URL...');
+      this.loadingScreen.style.display = 'flex';
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const text = await resp.text();
+        this.loadCustomTLE(text, 'URL');
+      } catch (e) {
+        console.error('Failed to fetch TLE URL:', e);
+        document.getElementById('sat-count-display')!.textContent = 'URL fetch failed';
+      }
+      this.loadingScreen.style.display = 'none';
+    };
+    document.getElementById('tle-url-btn')!.addEventListener('click', urlLoad);
+    urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') urlLoad(); });
 
     // Checkboxes
     document.getElementById('cb-hide-unselected')!.addEventListener('change', (e) => {
@@ -434,8 +499,8 @@ export class App {
 
     // Keyboard
     window.addEventListener('keydown', (e) => {
-      // Ignore if typing in input elements
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      // Ignore if typing in input/select elements
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
       switch (e.key) {
         case ' ':
