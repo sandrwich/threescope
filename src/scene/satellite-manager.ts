@@ -10,6 +10,7 @@ export class SatelliteManager {
   private colorAttr: THREE.BufferAttribute;
   private alphaAttr: THREE.BufferAttribute;
   private maxSats: number;
+  private updateFrame = 0;
 
   constructor(satTexture: THREE.Texture, maxSats = 15000) {
     this.maxSats = maxSats;
@@ -70,7 +71,10 @@ export class SatelliteManager {
     selectedSat: Satellite | null,
     unselectedFade: number,
     hideUnselected: boolean,
-    colorConfig: { normal: string; highlighted: string; selected: string }
+    colorConfig: { normal: string; highlighted: string; selected: string },
+    timeMultiplier = 1.0,
+    dt = 1 / 60,
+    maxBatch = 16
   ) {
     const earthRadius = EARTH_RADIUS_KM / DRAW_SCALE;
     const cNormal = parseHexColor(colorConfig.normal);
@@ -81,9 +85,27 @@ export class SatelliteManager {
     const drawRange = this.points.geometry.drawRange;
     drawRange.count = count;
 
+    // Delta-based SGP4 batching: only propagate 1/N satellites per frame.
+    // N is derived from sim-time per frame to keep max position staleness under ~1s
+    // of sim-time. At 1s staleness, LEO error ≈ 7.5km ≈ 2px at maximum zoom.
+    //
+    // batchCount = floor(1s / simTimePerFrame), clamped to [1, 64]
+    //   1x @ 60fps  → simDt=0.016s → batch 62→capped by maxBatch setting
+    //   10x @ 60fps → simDt=0.16s  → batch 6
+    //   100x @ 60fps→ simDt=1.6s   → batch 1 → all sats every frame
+    //
+    // Adapts to both speed AND framerate: lower FPS means fewer but larger batches.
+    // Hovered/selected satellites always update for responsive interaction.
+    const simDtPerFrame = dt * Math.abs(timeMultiplier);
+    const batchCount = Math.max(1, Math.min(maxBatch, Math.floor(1.0 / Math.max(simDtPerFrame, 0.001))));
+    const batch = this.updateFrame++ % batchCount;
+
     for (let i = 0; i < count; i++) {
       const sat = satellites[i];
-      sat.currentPos = calculatePosition(sat, currentEpoch);
+
+      if (i % batchCount === batch || sat === hoveredSat || sat === selectedSat) {
+        sat.currentPos = calculatePosition(sat, currentEpoch);
+      }
 
       const dx = sat.currentPos.x / DRAW_SCALE;
       const dy = sat.currentPos.y / DRAW_SCALE;

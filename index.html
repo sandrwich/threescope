@@ -23,6 +23,7 @@
     }
 
     :root {
+      color-scheme: dark;
       --bg: #101010;
       --ui-bg: #1a1a1a;
       --border: #555;
@@ -360,6 +361,15 @@
         <select id="theme-select">
           <option value="default">Default</option>
           <option value="oled">OLED</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label>Update quality</label>
+        <select id="update-quality-select">
+          <option value="8">High</option>
+          <option value="16" selected>Balanced</option>
+          <option value="32">Low</option>
+          <option value="64">Lowest</option>
         </select>
       </div>
       <div class="settings-row">

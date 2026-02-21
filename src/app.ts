@@ -486,6 +486,16 @@ export class App {
       if (e.target === infoModal) infoModal.classList.remove('visible');
     });
 
+    // Update quality (SGP4 batch cap)
+    const qualitySelect = document.getElementById('update-quality-select') as HTMLSelectElement;
+    const savedQuality = localStorage.getItem('threescope_update_quality') || '16';
+    qualitySelect.value = savedQuality;
+    this.maxBatch = Number(savedQuality);
+    qualitySelect.addEventListener('change', () => {
+      this.maxBatch = Number(qualitySelect.value);
+      localStorage.setItem('threescope_update_quality', qualitySelect.value);
+    });
+
     // Unlock FPS
     const unlockCb = document.getElementById('cb-unlock-fps') as HTMLInputElement;
     const savedUnlock = localStorage.getItem('threescope_unlock_fps') === 'true';
@@ -771,6 +781,7 @@ export class App {
   }
 
   private unlockFps = false;
+  private maxBatch = 16;
   private mcChannel = new MessageChannel();
 
   private scheduleUnlocked() {
@@ -886,7 +897,8 @@ export class App {
       this.satManager.update(
         this.satellites, epoch, this.camera3d.position,
         this.hoveredSat, this.selectedSat, this.unselectedFade, this.hideUnselected,
-        { normal: this.cfg.satNormal, highlighted: this.cfg.satHighlighted, selected: this.cfg.satSelected }
+        { normal: this.cfg.satNormal, highlighted: this.cfg.satHighlighted, selected: this.cfg.satSelected },
+        this.timeSystem.timeMultiplier, dt, this.maxBatch
       );
 
       this.orbitRenderer.update(
