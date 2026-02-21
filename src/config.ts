@@ -3,19 +3,14 @@ import type { AppConfig } from './types';
 export const defaultConfig: AppConfig = {
   earthRotationOffset: 0.0,
   orbitsToDraw: 3.0,
-  showClouds: false,
+  showClouds: true,
   showNightLights: true,
-  bgColor: '#101010',
-  orbitNormal: '#D3D3D326',
+  bgColor: '#000000',
+  orbitNormal: '#D3D3D360',
   orbitHighlighted: '#CCCCCCFF',
-  satNormal: '#EEEEEE66',
+  satNormal: '#EEEEEEA0',
   satHighlighted: '#FFFF00FF',
   satSelected: '#00FF00FF',
-  textMain: '#FFFFFFFF',
-  textSecondary: '#D3D3D3FF',
-  uiBg: '#000000CC',
-  periapsis: '#87CEEBFF',
-  apoapsis: '#FFA500FF',
   footprintBg: '#FFFFFF22',
   footprintBorder: '#FFFFFF88',
   markers: [
@@ -32,16 +27,17 @@ export const defaultConfig: AppConfig = {
   ]
 };
 
-export function parseHexColor(hex: string): { r: number; g: number; b: number; a: number } {
-  hex = hex.replace('#', '');
-  const r = parseInt(hex.substring(0, 2), 16) / 255;
-  const g = parseInt(hex.substring(2, 4), 16) / 255;
-  const b = parseInt(hex.substring(4, 6), 16) / 255;
-  const a = hex.length >= 8 ? parseInt(hex.substring(6, 8), 16) / 255 : 1.0;
-  return { r, g, b, a };
-}
+const hexCache = new Map<string, { r: number; g: number; b: number; a: number }>();
 
-export function hexToCSS(hex: string): string {
-  const c = parseHexColor(hex);
-  return `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${c.a.toFixed(2)})`;
+export function parseHexColor(hex: string): { r: number; g: number; b: number; a: number } {
+  let cached = hexCache.get(hex);
+  if (cached) return cached;
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16) / 255;
+  const g = parseInt(h.substring(2, 4), 16) / 255;
+  const b = parseInt(h.substring(4, 6), 16) / 255;
+  const a = h.length >= 8 ? parseInt(h.substring(6, 8), 16) / 255 : 1.0;
+  cached = { r, g, b, a };
+  hexCache.set(hex, cached);
+  return cached;
 }

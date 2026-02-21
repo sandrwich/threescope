@@ -281,8 +281,7 @@ export class OrbitRenderer {
     selectedSat: Satellite | null,
     unselectedFade: number,
     orbitsToDraw: number,
-    colorConfig: { orbitNormal: string; orbitHighlighted: string },
-    _dt: number
+    colorConfig: { orbitNormal: string; orbitHighlighted: string }
   ) {
     // --- J2 periodic recomputation ---
     if (this.precomputedAll && this.perifocalAll) {
@@ -342,7 +341,7 @@ export class OrbitRenderer {
     }
 
     // --- Normal orbits: assembled from precomputed analytical data ---
-    if (unselectedFade <= 0.01 || !this.precomputedAll || this.precomputedSatCount !== satellites.length) {
+    if ((selectedSat !== null && unselectedFade <= 0.01) || !this.precomputedAll || this.precomputedSatCount !== satellites.length) {
       this.normalLines.visible = false;
       return;
     }
@@ -389,15 +388,10 @@ export class OrbitRenderer {
 
     this.normalLines.geometry.setDrawRange(0, this.assembledVertFloats / 3);
     const cNorm = parseHexColor(colorConfig.orbitNormal);
-    const isUnselected = selectedSat !== null;
-    const alpha = isUnselected ? cNorm.a * unselectedFade : cNorm.a;
+    const alpha = cNorm.a * unselectedFade;
     this.normalMat.color.setRGB(cNorm.r, cNorm.g, cNorm.b);
     this.normalMat.opacity = alpha;
     this.normalLines.visible = this.assembledVertFloats > 0;
-  }
-
-  invalidateCache() {
-    this.lastActiveSat = undefined; // force reassembly on next update
   }
 
   clear() {

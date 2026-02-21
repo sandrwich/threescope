@@ -8,13 +8,7 @@
   <meta name="theme-color" content="#101010">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" href="/textures/icon-192.png">
-  <script>
-    // Apply theme before first paint to prevent flash
-    var t = localStorage.getItem('threescope_theme');
-    if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'oled' : 'default';
-    if (t !== 'default') document.documentElement.setAttribute('data-theme', t);
-  </script>
-  <style>
+<style>
     @font-face {
       font-family: 'Overpass Mono';
       src: url('/textures/overpass-mono.ttf') format('truetype');
@@ -24,8 +18,8 @@
 
     :root {
       color-scheme: dark;
-      --bg: #101010;
-      --ui-bg: #1a1a1a;
+      --bg: #000000;
+      --ui-bg: #0a0a0a;
       --border: #555;
       --border-hover: #aaa;
       --text: #fff;
@@ -34,30 +28,12 @@
       --text-faint: #777;
       --text-ghost: #555;
       --card-bg: rgba(0,0,0,0.85);
-      --modal-bg: #1a1a1a;
-      --modal-overlay: rgba(0,0,0,0.7);
-      --kbd-bg: #333;
+      --modal-bg: #0a0a0a;
+      --modal-overlay: rgba(0,0,0,0.8);
+      --kbd-bg: #222;
       --link: #666;
       --link-hover: #aaa;
       --attrib: #555;
-    }
-    [data-theme="oled"] {
-      --bg: #000000;
-      --ui-bg: #0a0a0a;
-      --border: #333;
-      --border-hover: #666;
-      --text: #ddd;
-      --text-dim: #aaa;
-      --text-muted: #777;
-      --text-faint: #555;
-      --text-ghost: #333;
-      --card-bg: rgba(0,0,0,0.95);
-      --modal-bg: #0a0a0a;
-      --modal-overlay: rgba(0,0,0,0.85);
-      --kbd-bg: #1a1a1a;
-      --link: #444;
-      --link-hover: #888;
-      --attrib: #333;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -97,6 +73,9 @@
     #status-line {
       font-size: 13px; color: var(--text-muted); white-space: nowrap;
     }
+    #speed-line {
+      font-size: 12px; color: var(--text-muted); white-space: nowrap;
+    }
 
     /* Stats (top-right) */
     #stats-panel {
@@ -107,17 +86,18 @@
     #stats-panel .sat-count { color: var(--text-muted); font-size: 12px; margin-top: 1px; }
 
     #toggle-row {
-      display: flex; align-items: center; gap: 10px;
+      display: flex; flex-direction: column; gap: 3px;
+      margin-top: 4px;
     }
     #toggle-row label {
       display: flex; align-items: center; gap: 6px;
       font-size: 13px; cursor: pointer; color: var(--text-dim);
-      line-height: 20px;
+      line-height: 18px;
     }
     #toggle-row label:hover { color: var(--text); }
     #toggle-row input[type="checkbox"] {
       appearance: none; -webkit-appearance: none;
-      width: 16px; height: 16px;
+      width: 14px; height: 14px;
       border: 2px solid var(--border-hover); background: transparent;
       cursor: pointer; position: relative; flex-shrink: 0;
     }
@@ -156,6 +136,18 @@
     #tle-custom-row { display: none; gap: 4px; align-items: center; }
     #tle-custom-row.visible { display: flex; }
     #tle-url-input { width: 220px; cursor: text; }
+
+    /* Planet picker */
+    #planet-picker-row { display: flex; justify-content: flex-end; margin-right: 16px; margin-bottom: 16px; }
+    #planet-btn {
+      background: none; border: none;
+      width: 36px; height: 36px; padding: 0;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    #planet-btn canvas { width: 36px; height: 36px; transition: filter 0.15s; display: block; }
+    #planet-btn:hover canvas { filter: brightness(1.4); }
+    #planet-btn.loading { opacity: 0.5; pointer-events: none; }
+
     #tle-url-input::placeholder { color: var(--text-ghost); }
     #tle-file-input {
       position: absolute; width: 0; height: 0; overflow: hidden;
@@ -284,8 +276,8 @@
     @media (max-width: 600px) {
       #status-line { font-size: 11px; }
       #toggle-row label { font-size: 12px; }
-      #toggle-row input[type="checkbox"] { width: 22px; height: 22px; }
-      #toggle-row { gap: 10px; }
+      #toggle-row input[type="checkbox"] { width: 20px; height: 20px; }
+      #toggle-row { gap: 6px; }
       #sat-info { font-size: 12px; min-width: 170px; }
       #sat-info .sat-name { font-size: 13px; }
       #tle-picker select, #tle-picker button, #tle-picker input[type="text"] {
@@ -357,13 +349,6 @@
     <div id="settings-modal-content">
       <h3>Settings</h3>
       <div class="settings-row">
-        <label>Theme</label>
-        <select id="theme-select">
-          <option value="default">Default</option>
-          <option value="oled">OLED</option>
-        </select>
-      </div>
-      <div class="settings-row">
         <label>Update quality</label>
         <select id="update-quality-select">
           <option value="8">High</option>
@@ -383,11 +368,17 @@
   <div id="ui-overlay">
     <div id="top-panel">
       <div id="status-line"></div>
+      <div id="speed-line"></div>
       <div id="toggle-row">
-        <label title="Hide all satellites except selected"><input type="checkbox" id="cb-hide-unselected"> Spotlight</label>
-        <label title="Show cloud layer on Earth"><input type="checkbox" id="cb-clouds"> Clouds</label>
-        <label title="Show city lights on night side"><input type="checkbox" id="cb-night-lights" checked> Night</label>
         <label title="HDR bloom and atmosphere glow"><input type="checkbox" id="cb-rtx" checked> RTX</label>
+        <span id="earth-toggles" style="display:contents">
+          <label title="Hide all satellites except selected"><input type="checkbox" id="cb-hide-unselected" checked> Spotlight</label>
+          <label title="Show cloud layer on Earth"><input type="checkbox" id="cb-clouds"> Clouds</label>
+          <label title="Show launch site markers"><input type="checkbox" id="cb-markers"> Markers</label>
+        </span>
+        <span id="night-toggle" style="display:contents">
+          <label title="Show city lights on night side"><input type="checkbox" id="cb-night-lights" checked> Night</label>
+        </span>
       </div>
     </div>
     <div id="stats-panel">
@@ -395,6 +386,11 @@
       <div class="sat-count" id="sat-count-display"></div>
     </div>
     <div id="tle-picker">
+      <div id="planet-picker-row">
+        <button id="planet-btn" title="Solar System Explorer">
+          <canvas id="planet-btn-canvas" width="56" height="56"></canvas>
+        </button>
+      </div>
       <div id="tle-main-row">
         <button id="settings-btn" title="Settings">&#9881;</button>
         <button id="info-btn">?</button>

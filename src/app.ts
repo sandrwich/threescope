@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Satellite } from './types';
 import { TargetLock, ViewMode } from './types';
-import { defaultConfig, parseHexColor, hexToCSS } from './config';
+import { defaultConfig, parseHexColor } from './config';
 import { DRAW_SCALE, EARTH_RADIUS_KM, MOON_RADIUS_KM, MU, RAD2DEG, DEG2RAD, MAP_W, MAP_H, TWO_PI } from './constants';
 import { TimeSystem } from './simulation/time-system';
 import { Earth } from './scene/earth';
@@ -13,7 +13,8 @@ import { OrbitRenderer } from './scene/orbit-renderer';
 import { FootprintRenderer } from './scene/footprint-renderer';
 import { MarkerManager } from './scene/marker-manager';
 import { PostProcessing } from './scene/post-processing';
-import { getMinZoom, BODIES } from './bodies';
+import { getMinZoom, BODIES, PLANETS, type PlanetDef } from './bodies';
+import { Orrery, type PromotedPlanet } from './scene/orrery';
 import { Atmosphere } from './scene/atmosphere';
 import { computeApsis } from './astro/apsis';
 import { getMapCoordinates } from './astro/coordinates';
@@ -50,6 +51,18 @@ export class App {
   private postProcessing!: PostProcessing;
   private atmosphere!: Atmosphere;
   private bloomEnabled = true;
+  private starTex!: THREE.Texture;
+  private activePlanet: PlanetDef | null = null;
+  private promotedPlanet: PromotedPlanet | null = null;
+  private pendingHiTex: THREE.Texture | null = null;
+  private orrery: Orrery | null = null;
+
+  // Mini planet spinner for the picker button
+  private miniRenderer!: THREE.WebGLRenderer;
+  private miniScene = new THREE.Scene();
+  private miniCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 10);
+  private miniSphere!: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  private miniTextureId = '';
 
   private satellites: Satellite[] = [];
   private hoveredSat: Satellite | null = null;
@@ -57,8 +70,16 @@ export class App {
   private activeLock = TargetLock.EARTH;
   private viewMode = ViewMode.VIEW_3D;
   private hideUnselected = false;
+  private showMarkers = false;
   private unselectedFade = 1.0;
+  private fadingInSat: Satellite | null = null;
+  private prevSelectedSat: Satellite | null = null;
   private cfg = { ...defaultConfig };
+
+  // Reusable temp objects (avoid per-frame allocations)
+  private raycaster = new THREE.Raycaster();
+  private tmpVec3 = new THREE.Vector3();
+  private tmpSphere = new THREE.Sphere();
 
   // 3D camera state
   private camDistance = 35.0;
@@ -128,6 +149,17 @@ export class App {
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     document.getElementById('ui-overlay')!.before(this.renderer.domElement);
 
+    // Mini planet renderer for picker button
+    const miniCanvas = document.getElementById('planet-btn-canvas') as HTMLCanvasElement;
+    this.miniRenderer = new THREE.WebGLRenderer({ canvas: miniCanvas, alpha: true, antialias: true });
+    this.miniRenderer.setSize(56, 56);
+    this.miniRenderer.setPixelRatio(window.devicePixelRatio);
+    const geo = new THREE.SphereGeometry(1, 32, 32);
+    const mat = new THREE.MeshBasicMaterial();
+    this.miniSphere = new THREE.Mesh(geo, mat);
+    this.miniScene.add(this.miniSphere);
+    this.miniCamera.position.z = 3.2;
+
     // Cameras
     this.camera3d = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10000);
     this.scene3d = new THREE.Scene();
@@ -149,8 +181,9 @@ export class App {
     this.setLoading(0.2, 'Loading textures...');
     await this.loadTextures();
 
+    const savedGroup = localStorage.getItem('threescope_tle_group') || 'none';
     this.setLoading(0.6, 'Fetching satellite data...');
-    await this.loadTLEGroup(DEFAULT_GROUP);
+    await this.loadTLEGroup(savedGroup);
 
     this.setLoading(0.9, 'Setting up UI...');
     this.setupUI();
@@ -175,13 +208,14 @@ export class App {
       loader.load(url, resolve, undefined, () => resolve(new THREE.Texture()));
     });
 
-    const [dayTex, nightTex, cloudTex, moonTex, satTex, markerTex] = await Promise.all([
+    const [dayTex, nightTex, cloudTex, moonTex, satTex, markerTex, starTex] = await Promise.all([
       load('/textures/earth.webp'),
       load('/textures/earth_night.webp'),
       load('/textures/clouds.webp'),
       load('/textures/moon.webp'),
       load('/textures/sat_icon.png'),
       load('/textures/marker_icon.png'),
+      load('/textures/stars.webp'),
     ]);
 
     // Match Raylib's texture behavior:
@@ -194,6 +228,12 @@ export class App {
       tex.flipY = false;
       tex.colorSpace = THREE.NoColorSpace;
     }
+
+    // Star background (equirectangular → 3D skybox)
+    starTex.mapping = THREE.EquirectangularReflectionMapping;
+    starTex.colorSpace = THREE.SRGBColorSpace;
+    this.starTex = starTex;
+    this.scene3d.background = starTex;
 
     this.setLoading(0.4, 'Building scene...');
 
@@ -216,7 +256,6 @@ export class App {
     // Sun
     this.sunScene = new SunScene();
     this.scene3d.add(this.sunScene.disc);
-    this.scene3d.add(this.sunScene.corona);
 
     // Satellites
     this.satManager = new SatelliteManager(satTex);
@@ -396,17 +435,206 @@ export class App {
     }
   }
 
-  private static readonly THEME_BG: Record<string, string> = {
-    default: '#101010',
-    oled: '#000000',
-  };
 
-  private applyTheme(theme: string) {
-    document.documentElement.setAttribute('data-theme', theme === 'default' ? '' : theme);
-    const bg = App.THEME_BG[theme] || App.THEME_BG.default;
-    this.cfg.bgColor = bg;
-    this.scene3d.background = new THREE.Color(bg);
-    this.scene2d.background = new THREE.Color(bg);
+  private setEarthVisible(visible: boolean) {
+    this.earth.mesh.visible = visible;
+    this.atmosphere.mesh.visible = visible;
+    this.cloudLayer.mesh.visible = visible;
+    this.moonScene.mesh.visible = visible;
+    this.sunScene.setVisible(visible);
+    this.satManager.setVisible(visible);
+    this.orbitRenderer.clear();
+    this.footprintRenderer.clear();
+    this.markerManager.hide();
+  }
+
+  /** Check if a URL is already cached (service worker, browser cache, etc.) */
+  private async isCached(url: string): Promise<boolean> {
+    try {
+      // Check Cache API (service worker / PWA cache)
+      const keys = await caches.keys();
+      for (const key of keys) {
+        const cache = await caches.open(key);
+        if (await cache.match(url)) return true;
+      }
+      // Check browser HTTP cache
+      const resp = await fetch(url, { method: 'HEAD', cache: 'only-if-cached', mode: 'same-origin' });
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Promote the focused orrery body to planet view (upgrade material, load hi-res) */
+  private async promoteToPlanetView(planet: PlanetDef) {
+    if (!this.orrery || this.activePlanet?.id === planet.id) return;
+
+    this.setEarthVisible(false);
+    this.selectedSat = null;
+    this.hoveredSat = null;
+    this.activePlanet = planet;
+    this.activeLock = TargetLock.PLANET;
+    this.updatePlanetPickerUI();
+
+    // Upgrade orrery ball material to sun-lit shader (in place, no new mesh)
+    this.promotedPlanet = this.orrery.promoteBody(planet.id);
+    document.getElementById('planet-btn')!.style.display = '';
+
+    // Tauri bundles all assets locally — always instant. Also check browser cache.
+    const local = '__TAURI__' in window;
+    const cached = local || await this.isCached(planet.textureUrl);
+    if (cached && this.activePlanet?.id === planet.id && this.promotedPlanet) {
+      const loader = new THREE.TextureLoader();
+      loader.load(planet.textureUrl, (hiTex) => {
+        hiTex.colorSpace = THREE.SRGBColorSpace;
+        if (this.activePlanet?.id === planet.id && this.promotedPlanet) {
+          this.promotedPlanet.material.uniforms.map.value = hiTex;
+        } else {
+          hiTex.dispose();
+        }
+      });
+      return;
+    }
+
+    // Not cached — load in background, swap once camera settles
+    this.pendingHiTex = null;
+    const loader = new THREE.TextureLoader();
+    loader.load(planet.textureUrl, (hiTex) => {
+      hiTex.colorSpace = THREE.SRGBColorSpace;
+      if (this.activePlanet?.id === planet.id && this.promotedPlanet) {
+        this.pendingHiTex = hiTex;
+      } else {
+        hiTex.dispose();
+      }
+    });
+  }
+
+  private unpromoteToOrrery() {
+    this.activePlanet = null;
+    this.promotedPlanet = null;
+    if (this.pendingHiTex) { this.pendingHiTex.dispose(); this.pendingHiTex = null; }
+    this.activeLock = TargetLock.NONE;
+    // Recreate orrery (promotion destroyed the original material)
+    this.exitOrrery();
+    this.enterOrrery();
+  }
+
+  private navigateToEarth() {
+    this.exitOrrery();
+    this.activePlanet = null;
+    this.promotedPlanet = null;
+    if (this.pendingHiTex) { this.pendingHiTex.dispose(); this.pendingHiTex = null; }
+    this.activeLock = TargetLock.EARTH;
+    this.setEarthVisible(true);
+    this.targetTarget3d.set(0, 0, 0);
+    this.updatePlanetPickerUI();
+  }
+
+  private updatePlanetPickerUI() {
+    const thumbUrl = this.activePlanet?.thumbnailUrl ?? '/textures/planets/thumb/earth.webp';
+    if (this.miniTextureId !== thumbUrl) {
+      this.miniTextureId = thumbUrl;
+      new THREE.TextureLoader().load(thumbUrl, (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const old = this.miniSphere.material.map;
+        this.miniSphere.material.map = tex;
+        this.miniSphere.material.needsUpdate = true;
+        if (old) old.dispose();
+      });
+    }
+    // Update active state in overlay
+    document.querySelectorAll('.ss-item').forEach(el => {
+      el.classList.toggle('active', el.getAttribute('data-planet') === (this.activePlanet?.id ?? 'earth'));
+    });
+  }
+
+  private orreryMode = false;
+
+  private enterOrrery() {
+    if (this.orreryMode) return;
+    this.orreryMode = true;
+    this.activePlanet = null;
+    this.promotedPlanet = null;
+    document.getElementById('planet-btn')!.style.display = 'none';
+
+    // Create orrery (vertical on portrait screens)
+    this.orrery = new Orrery(this.camera3d.aspect);
+    this.scene3d.add(this.orrery.group);
+
+    // Hide Earth/moon/sats
+    this.setEarthVisible(false);
+    this.selectedSat = null;
+    this.hoveredSat = null;
+
+    // Position camera to fit all planets with some padding
+    this.activeLock = TargetLock.NONE;
+    const halfSpan = this.orrery.totalSpan / 2 + 6; // padding for outermost spheres + labels
+    const vFov = this.camera3d.fov * Math.PI / 360; // half vertical FOV in radians
+    if (this.orrery.vertical) {
+      // Look straight on; offset target slightly right to account for side labels
+      this.targetTarget3d.set(2, 0, 0);
+      this.targetCamDistance = halfSpan / Math.tan(vFov);
+      this.targetCamAngleY = 0;
+    } else {
+      this.targetTarget3d.set(0, 0, 0);
+      const hFov = Math.atan(Math.tan(vFov) * this.camera3d.aspect);
+      this.targetCamDistance = halfSpan / Math.tan(hFov);
+      this.targetCamAngleY = 0.3;
+    }
+    this.targetCamAngleX = 0;
+  }
+
+  private exitOrrery() {
+    if (!this.orreryMode) return;
+    this.orreryMode = false;
+    document.getElementById('planet-btn')!.style.display = '';
+
+    if (this.orrery) {
+      this.scene3d.remove(this.orrery.group);
+      this.orrery.dispose();
+      this.orrery = null;
+    }
+  }
+
+  private handleOrreryClick() {
+    if (!this.orrery) return;
+
+    this.raycaster.setFromCamera(this.mouseNDC, this.camera3d);
+    const hit = this.orrery.pick(this.raycaster);
+    if (!hit) return;
+
+    // Earth/Moon have dedicated scenes — navigate immediately with matching zoom
+    if (hit.id === 'earth') {
+      this.navigateToEarth();
+      this.targetCamDistance = 10.5;
+      this.camDistance = 10.5;
+      this.target3d.set(0, 0, 0);
+      return;
+    } else if (hit.id === 'moon') {
+      this.navigateToEarth();
+      this.activeLock = TargetLock.MOON;
+      // Snap camera to moon immediately — no long fly-in from orrery position
+      this.targetTarget3d.copy(this.moonScene.drawPos);
+      this.target3d.copy(this.moonScene.drawPos);
+      this.targetCamDistance = 3.0;
+      this.camDistance = 3.0;
+      return;
+    }
+
+    // Other planets: snap camera to the ball, promote in place
+    this.orrery.focusBody(hit.id);
+    const pos = this.orrery.getBodyPosition(hit.id);
+    const bodyR = this.orrery.getBodyDrawRadius(hit.id);
+    if (pos) {
+      this.targetTarget3d.copy(pos);
+      this.target3d.copy(pos);
+      this.targetCamDistance = bodyR * 3.5;
+      this.camDistance = bodyR * 3.5;
+    }
+
+    if (hit.planetDef) {
+      this.promoteToPlanetView(hit.planetDef);
+    }
   }
 
   private setupUI() {
@@ -423,9 +651,11 @@ export class App {
       const opt = document.createElement('option');
       opt.value = src.group;
       opt.textContent = src.name;
-      if (src.group === DEFAULT_GROUP) opt.selected = true;
       select.appendChild(opt);
     }
+
+    // Restore saved selection
+    select.value = this.currentGroup;
 
     select.addEventListener('change', async () => {
       if (select.value === '__custom__') {
@@ -433,6 +663,7 @@ export class App {
         return;
       }
       customRow.classList.remove('visible');
+      localStorage.setItem('threescope_tle_group', select.value);
       this.setLoading(0.5, 'Loading satellite data...');
       this.loadingScreen.style.display = 'flex';
       await this.loadTLEGroup(select.value);
@@ -477,60 +708,50 @@ export class App {
     document.getElementById('tle-url-btn')!.addEventListener('click', urlLoad);
     urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') urlLoad(); });
 
-    // Checkboxes
-    const spotlightCb = document.getElementById('cb-hide-unselected') as HTMLInputElement;
-    const savedSpotlight = localStorage.getItem('threescope_spotlight') === 'true';
-    spotlightCb.checked = savedSpotlight;
-    this.hideUnselected = savedSpotlight;
-    spotlightCb.addEventListener('change', () => {
-      this.hideUnselected = spotlightCb.checked;
-      localStorage.setItem('threescope_spotlight', String(spotlightCb.checked));
+    // Planet picker
+    document.getElementById('planet-btn')!.addEventListener('click', () => {
+      if (this.promotedPlanet) {
+        // Viewing a planet — go back to orrery picker
+        this.unpromoteToOrrery();
+      } else if (this.orreryMode) {
+        // Browsing orrery — go back to Earth
+        this.exitOrrery();
+        this.navigateToEarth();
+      } else {
+        this.enterOrrery();
+      }
+    });
+    this.updatePlanetPickerUI();
+
+    // Checkbox helper: bind element ↔ localStorage ↔ onChange callback
+    const bindCheckbox = (id: string, key: string, defaultOn: boolean, onChange: (v: boolean) => void) => {
+      const cb = document.getElementById(id) as HTMLInputElement;
+      const saved = localStorage.getItem(key);
+      const initial = saved !== null ? (defaultOn ? saved !== 'false' : saved === 'true') : defaultOn;
+      cb.checked = initial;
+      onChange(initial);
+      cb.addEventListener('change', () => {
+        onChange(cb.checked);
+        localStorage.setItem(key, String(cb.checked));
+      });
+    };
+
+    bindCheckbox('cb-hide-unselected', 'threescope_spotlight', true, v => { this.hideUnselected = v; });
+    bindCheckbox('cb-clouds', 'threescope_clouds', true, v => { this.cfg.showClouds = v; });
+    bindCheckbox('cb-night-lights', 'threescope_night', true, v => {
+      this.cfg.showNightLights = v;
+      this.moonScene.setShowNight(v);
+    });
+    bindCheckbox('cb-markers', 'threescope_markers', false, v => {
+      this.showMarkers = v;
+      if (!v) this.markerManager.hide();
+    });
+    bindCheckbox('cb-rtx', 'threescope_bloom', true, v => {
+      this.bloomEnabled = v;
+      this.earth.setNightEmission(v ? 1.5 : 1.0);
+      this.sunScene.setBloomEnabled(v);
     });
 
-    const cloudsCb = document.getElementById('cb-clouds') as HTMLInputElement;
-    const savedClouds = localStorage.getItem('threescope_clouds') === 'true';
-    cloudsCb.checked = savedClouds;
-    this.cfg.showClouds = savedClouds;
-    cloudsCb.addEventListener('change', () => {
-      this.cfg.showClouds = cloudsCb.checked;
-      localStorage.setItem('threescope_clouds', String(cloudsCb.checked));
-    });
-
-    const nightCb = document.getElementById('cb-night-lights') as HTMLInputElement;
-    const savedNight = localStorage.getItem('threescope_night') !== 'false';
-    nightCb.checked = savedNight;
-    this.cfg.showNightLights = savedNight;
-    this.moonScene.setShowNight(savedNight);
-    nightCb.addEventListener('change', () => {
-      this.cfg.showNightLights = nightCb.checked;
-      this.moonScene.setShowNight(nightCb.checked);
-      localStorage.setItem('threescope_night', String(nightCb.checked));
-    });
-
-    // RTX (bloom + atmosphere)
-    const rtxCb = document.getElementById('cb-rtx') as HTMLInputElement;
-    const savedRtx = localStorage.getItem('threescope_bloom') !== 'false';
-    rtxCb.checked = savedRtx;
-    this.bloomEnabled = savedRtx;
-    this.earth.setNightEmission(savedRtx ? 1.5 : 1.0);
-    this.sunScene.setBloomEnabled(savedRtx);
-    rtxCb.addEventListener('change', () => {
-      this.bloomEnabled = rtxCb.checked;
-      this.earth.setNightEmission(rtxCb.checked ? 1.5 : 1.0);
-      this.sunScene.setBloomEnabled(rtxCb.checked);
-      localStorage.setItem('threescope_bloom', String(rtxCb.checked));
-    });
-
-    // Theme switcher
-    const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
-    const savedTheme = localStorage.getItem('threescope_theme')
-      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'oled' : 'default');
-    this.applyTheme(savedTheme);
-    themeSelect.value = savedTheme;
-    themeSelect.addEventListener('change', () => {
-      this.applyTheme(themeSelect.value);
-      localStorage.setItem('threescope_theme', themeSelect.value);
-    });
 
     // Info modal
     const infoModal = document.getElementById('info-modal')!;
@@ -660,25 +881,19 @@ export class App {
       // Ignore clicks on UI area
       if (e.clientX < 220 && e.clientY > 110 && e.clientY < 210) return;
 
+      // Orrery mode: pick planet
+      if (this.orreryMode) {
+        this.handleOrreryClick();
+        return;
+      }
+
       this.selectedSat = this.hoveredSat;
 
       // Double click detection for target lock
       const now = performance.now() / 1000;
       if (now - this.lastLeftClickTime < 0.3) {
         if (this.viewMode === ViewMode.VIEW_3D) {
-          const raycaster = new THREE.Raycaster();
-          raycaster.setFromCamera(this.mouseNDC, this.camera3d);
-          const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
-          const moonR = MOON_RADIUS_KM / DRAW_SCALE;
-          const moonSphere = new THREE.Sphere(this.moonScene.drawPos, moonR);
-          const earthSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), earthR);
-          const sunSphere = new THREE.Sphere(this.sunScene.disc.position, 6); // generous hit radius
-          const moonHit = raycaster.ray.intersectsSphere(moonSphere);
-          const earthHit = raycaster.ray.intersectsSphere(earthSphere);
-          const sunHit = raycaster.ray.intersectsSphere(sunSphere);
-          if (sunHit && !earthHit && !moonHit) this.activeLock = TargetLock.SUN;
-          else if (moonHit && !earthHit) this.activeLock = TargetLock.MOON;
-          else if (earthHit) this.activeLock = TargetLock.EARTH;
+          this.handleDoubleClickLock();
         } else {
           this.activeLock = TargetLock.EARTH;
         }
@@ -807,25 +1022,19 @@ export class App {
       e.preventDefault();
       // Tap = select (only if finger didn't move)
       if (!this.touchMoved && this.touchCount === 1 && e.touches.length === 0) {
+        // Orrery mode: pick planet
+        if (this.orreryMode) {
+          this.handleOrreryClick();
+          this.touchCount = 0;
+          return;
+        }
         this.selectedSat = this.hoveredSat;
 
         // Double tap detection
         const now = performance.now() / 1000;
         if (now - this.lastLeftClickTime < 0.3) {
           if (this.viewMode === ViewMode.VIEW_3D) {
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(this.mouseNDC, this.camera3d);
-            const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
-            const moonR = MOON_RADIUS_KM / DRAW_SCALE;
-            const moonSphere = new THREE.Sphere(this.moonScene.drawPos, moonR);
-            const earthSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), earthR);
-            const sunSphere = new THREE.Sphere(this.sunScene.disc.position, 6);
-            const moonHit = raycaster.ray.intersectsSphere(moonSphere);
-            const earthHit = raycaster.ray.intersectsSphere(earthSphere);
-            const sunHit = raycaster.ray.intersectsSphere(sunSphere);
-            if (sunHit && !earthHit && !moonHit) this.activeLock = TargetLock.SUN;
-            else if (moonHit && !earthHit) this.activeLock = TargetLock.MOON;
-            else if (earthHit) this.activeLock = TargetLock.EARTH;
+            this.handleDoubleClickLock();
           } else {
             this.activeLock = TargetLock.EARTH;
           }
@@ -881,10 +1090,19 @@ export class App {
     if (shouldHide) {
       this.unselectedFade -= 3.0 * dt;
       if (this.unselectedFade < 0) this.unselectedFade = 0;
+      this.fadingInSat = null;
     } else {
+      // Detect deselection transition: selectedSat just went null while faded out
+      if (this.prevSelectedSat && !this.selectedSat && this.unselectedFade < 1.0) {
+        this.fadingInSat = this.prevSelectedSat;
+      }
       this.unselectedFade += 3.0 * dt;
-      if (this.unselectedFade > 1) this.unselectedFade = 1;
+      if (this.unselectedFade > 1) {
+        this.unselectedFade = 1;
+        this.fadingInSat = null;
+      }
     }
+    this.prevSelectedSat = this.selectedSat;
 
     // Target lock
     if (this.activeLock === TargetLock.EARTH) {
@@ -901,6 +1119,9 @@ export class App {
       if (this.viewMode === ViewMode.VIEW_3D) {
         this.targetTarget3d.copy(this.sunScene.disc.position);
       }
+    } else if (this.activeLock === TargetLock.PLANET && this.promotedPlanet) {
+      const pos = this.orrery?.getBodyPosition(this.promotedPlanet.body.id);
+      if (pos) this.targetTarget3d.copy(pos);
     }
 
     // Smooth camera lerp
@@ -916,7 +1137,8 @@ export class App {
 
     // Update 3D camera position (co-rotate with Earth so it appears stationary)
     const earthRotRad = (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD;
-    const camAX = this.camAngleX + earthRotRad;
+    // Don't co-rotate with Earth when viewing a planet or in orrery mode
+    const camAX = this.camAngleX + (this.activeLock === TargetLock.PLANET || this.orreryMode ? 0 : earthRotRad);
     this.camera3d.position.set(
       this.target3d.x + this.camDistance * Math.cos(this.camAngleY) * Math.sin(camAX),
       this.target3d.y + this.camDistance * Math.sin(this.camAngleY),
@@ -934,51 +1156,89 @@ export class App {
     this.camera2d.bottom = -halfH;
     this.camera2d.updateProjectionMatrix();
 
-    // Hover detection (3D)
+    // Hover detection (skip in planet/orrery view)
     this.hoveredSat = null;
-    if (this.viewMode === ViewMode.VIEW_3D) {
-      this.detectHover3D();
-    } else {
-      this.detectHover2D();
+    if (this.orreryMode && this.orrery) {
+      this.raycaster.setFromCamera(this.mouseNDC, this.camera3d);
+      const hovered = this.orrery.updateHover(this.raycaster);
+      this.renderer.domElement.style.cursor = hovered ? 'pointer' : '';
+    } else if (this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON) {
+      if (this.viewMode === ViewMode.VIEW_3D) {
+        this.detectHover3D();
+      } else {
+        this.detectHover2D();
+      }
     }
 
     const activeSat = this.hoveredSat ?? this.selectedSat;
 
+    const earthMode = this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON && !this.orreryMode;
+
     if (this.viewMode === ViewMode.VIEW_3D) {
       // Update 3D scene
-      this.earth.update(epoch, gmstDeg, this.cfg.earthRotationOffset, this.cfg.showNightLights);
-      this.cloudLayer.update(epoch, gmstDeg, this.cfg.earthRotationOffset, this.cfg.showClouds, this.cfg.showNightLights);
-      this.moonScene.update(epoch);
-      this.sunScene.update(epoch);
+      if (!this.orreryMode) {
+        this.earth.update(epoch, gmstDeg, this.cfg.earthRotationOffset, this.cfg.showNightLights);
+        if (earthMode) this.cloudLayer.update(epoch, gmstDeg, this.cfg.earthRotationOffset, this.cfg.showClouds, this.cfg.showNightLights);
+        this.moonScene.update(epoch);
+        this.sunScene.update(epoch);
+      }
 
       // Sun direction in ECI/world space
       const sunEciDir = calculateSunPosition(epoch).normalize();
       this.atmosphere.update(sunEciDir);
       this.moonScene.updateSunDir(sunEciDir);
-      this.atmosphere.setVisible(this.bloomEnabled);
+      this.atmosphere.setVisible(this.bloomEnabled && this.activeLock !== TargetLock.PLANET && !this.orreryMode);
 
-      this.satManager.update(
-        this.satellites, epoch, this.camera3d.position,
-        this.hoveredSat, this.selectedSat, this.unselectedFade, this.hideUnselected,
-        { normal: this.cfg.satNormal, highlighted: this.cfg.satHighlighted, selected: this.cfg.satSelected },
-        this.timeSystem.timeMultiplier, dt, this.maxBatch, this.bloomEnabled
-      );
+      // Orrery mode (includes promoted planet if any)
+      if (this.orrery) {
+        this.orrery.update();
+        if (this.promotedPlanet) {
+          this.promotedPlanet.body.mesh.rotation.y += this.promotedPlanet.rotationSpeed * dt * this.timeSystem.timeMultiplier;
+          // Swap hi-res texture only after camera zoom has fully settled
+          if (this.pendingHiTex) {
+            const zoomRatio = Math.abs(this.camDistance - this.targetCamDistance) / this.targetCamDistance;
+            if (zoomRatio < 0.005) {
+              this.promotedPlanet.material.uniforms.map.value = this.pendingHiTex;
+              this.pendingHiTex = null;
+            }
+          }
+        }
+      }
 
-      this.orbitRenderer.update(
-        this.satellites, epoch, this.hoveredSat, this.selectedSat,
-        this.unselectedFade, this.cfg.orbitsToDraw,
-        { orbitNormal: this.cfg.orbitNormal, orbitHighlighted: this.cfg.orbitHighlighted },
-        dt
-      );
+      this.satManager.setVisible(earthMode);
+      document.getElementById('earth-toggles')!.style.display = earthMode ? 'contents' : 'none';
+      const showNight = earthMode || this.activeLock === TargetLock.MOON;
+      document.getElementById('night-toggle')!.style.display = showNight ? 'contents' : 'none';
+      if (earthMode) {
+        this.satManager.update(
+          this.satellites, epoch, this.camera3d.position,
+          this.hoveredSat, this.selectedSat, this.unselectedFade, this.hideUnselected,
+          { normal: this.cfg.satNormal, highlighted: this.cfg.satHighlighted, selected: this.cfg.satSelected },
+          this.timeSystem.timeMultiplier, dt, this.maxBatch, this.bloomEnabled, this.fadingInSat
+        );
 
-      this.footprintRenderer.update(
-        activeSat ? activeSat.currentPos : null,
-        { footprintBg: this.cfg.footprintBg, footprintBorder: this.cfg.footprintBorder }
-      );
+        this.orbitRenderer.update(
+          this.satellites, epoch, this.hoveredSat, this.selectedSat,
+          this.unselectedFade, this.cfg.orbitsToDraw,
+          { orbitNormal: this.cfg.orbitNormal, orbitHighlighted: this.cfg.orbitHighlighted }
+        );
 
-      this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camDistance);
+        this.footprintRenderer.update(
+          activeSat ? activeSat.currentPos : null,
+          { footprintBg: this.cfg.footprintBg, footprintBorder: this.cfg.footprintBorder }
+        );
 
-      const useBloom = this.bloomEnabled && (BODIES[this.activeLock]?.bloom !== false);
+        if (this.showMarkers) {
+          this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camDistance);
+        } else {
+          this.markerManager.hide();
+        }
+      }
+
+      const bloomForBody = this.activeLock === TargetLock.PLANET
+        ? (this.activePlanet?.bloom !== false)
+        : (BODIES[this.activeLock]?.bloom !== false);
+      const useBloom = this.bloomEnabled && bloomForBody && !this.orreryMode;
       if (useBloom) {
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.postProcessing.render();
@@ -1002,27 +1262,47 @@ export class App {
       this.renderer.toneMapping = prevToneMapping;
     }
 
+    // Mini planet spinner (show when on Earth, Moon, or promoted planet — not orrery browse)
+    const showMini = (!this.orreryMode || this.promotedPlanet) && this.miniSphere.material.map;
+    if (showMini) {
+      this.miniSphere.rotation.y += 0.1 * dt;
+      this.miniRenderer.render(this.miniScene, this.miniCamera);
+    }
+
     this.updateUI(activeSat, gmstDeg);
   }
 
+  private handleDoubleClickLock() {
+    this.raycaster.setFromCamera(this.mouseNDC, this.camera3d);
+    const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
+    const moonR = MOON_RADIUS_KM / DRAW_SCALE;
+    this.tmpSphere.set(this.moonScene.drawPos, moonR);
+    const moonHit = this.raycaster.ray.intersectsSphere(this.tmpSphere);
+    this.tmpSphere.set(this.tmpVec3.set(0, 0, 0), earthR);
+    const earthHit = this.raycaster.ray.intersectsSphere(this.tmpSphere);
+    this.tmpSphere.set(this.sunScene.disc.position, 6);
+    const sunHit = this.raycaster.ray.intersectsSphere(this.tmpSphere);
+    if (sunHit && !earthHit && !moonHit) this.activeLock = TargetLock.SUN;
+    else if (moonHit && !earthHit) this.activeLock = TargetLock.MOON;
+    else if (earthHit) this.activeLock = TargetLock.EARTH;
+  }
+
   private detectHover3D() {
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(this.mouseNDC, this.camera3d);
+    this.raycaster.setFromCamera(this.mouseNDC, this.camera3d);
+    const touchScale = this.touchCount > 0 || ('ontouchstart' in window) ? 3.0 : 1.0;
 
     let closestDist = 9999;
     for (const sat of this.satellites) {
       if (this.hideUnselected && this.selectedSat && sat !== this.selectedSat) continue;
 
-      const drawPos = sat.currentPos.clone().divideScalar(DRAW_SCALE);
-      const distToCam = this.camera3d.position.distanceTo(drawPos);
-      const touchScale = this.touchCount > 0 || ('ontouchstart' in window) ? 3.0 : 1.0;
-      const hitRadius = 0.015 * distToCam * 1.0 * touchScale;
+      this.tmpVec3.copy(sat.currentPos).divideScalar(DRAW_SCALE);
+      const distToCam = this.camera3d.position.distanceTo(this.tmpVec3);
+      const hitRadius = 0.015 * distToCam * touchScale;
 
-      const sphere = new THREE.Sphere(drawPos, hitRadius);
-      if (raycaster.ray.intersectsSphere(sphere)) {
-        const d = this.camera3d.position.distanceTo(drawPos);
-        if (d < closestDist) {
-          closestDist = d;
+      this.tmpSphere.set(this.tmpVec3, hitRadius);
+      if (this.raycaster.ray.intersectsSphere(this.tmpSphere)) {
+        if (distToCam < closestDist) {
+          closestDist = distToCam;
           this.hoveredSat = sat;
         }
       }
@@ -1135,11 +1415,13 @@ export class App {
     const cardSat = this.selectedSat ? this.selectedSat : activeSat;
 
     // Status line
-    const statusEl = document.getElementById('status-line')!;
+    document.getElementById('status-line')!.textContent = this.timeSystem.getDatetimeStr();
     const speedVal = this.timeSystem.timeMultiplier;
     const speedStr = speedVal === 1.0 ? '1x' : `${speedVal.toFixed(speedVal >= 10 ? 0 : 1)}x`;
-    const pauseStr = this.timeSystem.paused ? ' <span style="color:#ff6666">PAUSED</span>' : '';
-    statusEl.innerHTML = `${this.timeSystem.getDatetimeStr()} <span style="color:#555">|</span> Speed: ${speedStr}${pauseStr}`;
+    const pauseStr = this.timeSystem.paused ? ' PAUSED' : '';
+    const speedEl = document.getElementById('speed-line')!;
+    speedEl.textContent = `Speed: ${speedStr}${pauseStr}`;
+    speedEl.style.color = this.timeSystem.paused ? '#ff6666' : '';
 
     // Satellite info popup
     const infoEl = document.getElementById('sat-info')!;

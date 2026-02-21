@@ -38,15 +38,10 @@ export interface AppConfig {
   satNormal: string;
   satHighlighted: string;
   satSelected: string;
-  textMain: string;
-  textSecondary: string;
-  uiBg: string;
-  periapsis: string;
-  apoapsis: string;
   footprintBg: string;
   footprintBorder: string;
   markers: Marker[];
 }
 
-export enum TargetLock { NONE, EARTH, MOON, SUN }
+export enum TargetLock { NONE, EARTH, MOON, SUN, PLANET }
 export enum ViewMode { VIEW_3D, VIEW_2D }

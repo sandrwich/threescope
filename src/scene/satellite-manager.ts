@@ -63,6 +63,10 @@ export class SatelliteManager {
     this.points.frustumCulled = false;
   }
 
+  setVisible(visible: boolean) {
+    this.points.visible = visible;
+  }
+
   update(
     satellites: Satellite[],
     currentEpoch: number,
@@ -75,7 +79,8 @@ export class SatelliteManager {
     timeMultiplier = 1.0,
     dt = 1 / 60,
     maxBatch = 16,
-    bloomEnabled = false
+    bloomEnabled = false,
+    fadingInSat: Satellite | null = null
   ) {
     const earthRadius = EARTH_RADIUS_KM / DRAW_SCALE;
     const cNormal = parseHexColor(colorConfig.normal);
@@ -128,8 +133,10 @@ export class SatelliteManager {
       this.colorAttr.array[i * 3 + 2] = c.b * boost;
 
       // Alpha: handle occlusion + fade
-      const isUnselected = selectedSat !== null && sat !== selectedSat;
-      let alpha = isUnselected ? unselectedFade : c.a;
+      let alpha = c.a;
+      if (sat !== selectedSat && sat !== hoveredSat && sat !== fadingInSat) {
+        alpha *= unselectedFade;
+      }
       if (alpha <= 0) {
         this.alphaAttr.array[i] = 0;
         continue;

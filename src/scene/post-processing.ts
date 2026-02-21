@@ -2,11 +2,13 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 export class PostProcessing {
   private composer: EffectComposer;
   private bloomPass: UnrealBloomPass;
+  private smaaPass: SMAAPass;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -27,12 +29,17 @@ export class PostProcessing {
     );
     this.composer.addPass(this.bloomPass);
 
+    // SMAA antialiasing (EffectComposer bypasses renderer MSAA)
+    this.smaaPass = new SMAAPass(window.innerWidth, window.innerHeight);
+    this.composer.addPass(this.smaaPass);
+
     this.composer.addPass(new OutputPass());
   }
 
   setSize(width: number, height: number) {
     this.composer.setSize(width, height);
     this.bloomPass.resolution.set(Math.round(width / 2), Math.round(height / 2));
+    this.smaaPass.setSize(width, height);
   }
 
   setPixelRatio(ratio: number) {
