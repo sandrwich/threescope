@@ -37,9 +37,9 @@ export async function fetchTLEData(
   onStatus?: (msg: string) => void,
   forceRetry = false,
 ): Promise<FetchResult> {
-  // Try localStorage cache first
+  // Try localStorage cache first (skip if forcing refresh)
   const cacheAge = getCacheAge(group);
-  if (cacheAge !== null && cacheAge < CACHE_MAX_AGE_MS) {
+  if (!forceRetry && cacheAge !== null && cacheAge < CACHE_MAX_AGE_MS) {
     onStatus?.('Loading cached data...');
     const cached = loadFromCache(group)!;
     return { satellites: parseTLEText(cached), source: 'cache', cacheAge };

@@ -310,33 +310,49 @@ export class App {
       }
       if (result.rateLimited) info += ' — rate limited';
       this.satStatusText = info;
-      this.showRetryLink(result.rateLimited === true);
+      if (result.rateLimited) {
+        this.showActionLink('Retry', () => {
+          clearRateLimit();
+          this.loadTLEGroup(this.currentGroup, true);
+        });
+      } else if (result.source === 'cache' || result.source === 'stale-cache') {
+        this.showActionLink('Refresh', () => {
+          this.loadTLEGroup(this.currentGroup, true);
+        });
+      } else {
+        this.hideActionLink();
+      }
     } catch (e) {
       console.error('Failed to load TLE data:', e);
       const rl = (e as any)?.rateLimited === true;
       this.satStatusText = rl ? 'Rate limited' : 'Load failed';
-      this.showRetryLink(rl);
-    }
-  }
-
-  private showRetryLink(show: boolean) {
-    let link = document.getElementById('retry-link');
-    if (show) {
-      if (!link) {
-        link = document.createElement('div');
-        link.id = 'retry-link';
-        link.style.cssText = 'color:#888;font-size:13px;cursor:pointer;text-decoration:underline;margin-top:2px;';
-        link.textContent = 'Retry';
-        link.addEventListener('click', () => {
+      if (rl) {
+        this.showActionLink('Retry', () => {
           clearRateLimit();
           this.loadTLEGroup(this.currentGroup, true);
         });
-        document.getElementById('stats-panel')!.appendChild(link);
+      } else {
+        this.hideActionLink();
       }
-      link.style.display = 'block';
-    } else if (link) {
-      link.style.display = 'none';
     }
+  }
+
+  private showActionLink(label: string, onClick: () => void) {
+    let link = document.getElementById('action-link');
+    if (!link) {
+      link = document.createElement('div');
+      link.id = 'action-link';
+      link.style.cssText = 'color:#888;font-size:12px;cursor:pointer;text-decoration:underline;margin-top:2px;';
+      document.getElementById('stats-panel')!.appendChild(link);
+    }
+    link.textContent = label;
+    link.onclick = onClick;
+    link.style.display = 'block';
+  }
+
+  private hideActionLink() {
+    const link = document.getElementById('action-link');
+    if (link) link.style.display = 'none';
   }
 
   private loadCustomTLE(text: string, label: string) {
