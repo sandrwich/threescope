@@ -2,6 +2,27 @@ import * as satellite from 'satellite.js';
 import * as THREE from 'three';
 import type { Satellite } from '../types';
 import { normalizeEpoch } from './epoch';
+import { J2, EARTH_RADIUS_EQ_KM } from '../constants';
+
+/**
+ * Compute J2 secular perturbation rates for RAAN and argument of perigee.
+ *
+ * dΩ/dt = -1.5 · n · J2 · (Re/p)² · cos(i)
+ * dω/dt =  1.5 · n · J2 · (Re/p)² · (2 - 2.5·sin²(i))
+ */
+function computeJ2Rates(
+  n: number, a: number, e: number, inc: number
+): { raanRate: number; argPerigeeRate: number } {
+  const p = a * (1 - e * e);
+  const ReOverP = EARTH_RADIUS_EQ_KM / p;
+  const factor = 1.5 * n * J2 * ReOverP * ReOverP;
+  const cosI = Math.cos(inc);
+  const sinI = Math.sin(inc);
+  return {
+    raanRate: -factor * cosI,
+    argPerigeeRate: factor * (2.0 - 2.5 * sinI * sinI),
+  };
+}
 
 export function parseTLE(name: string, line1: string, line2: string): Satellite | null {
   try {
@@ -19,6 +40,17 @@ export function parseTLE(name: string, line1: string, line2: string): Satellite 
     const MU = 398600.4418;
     const semiMajorAxis = Math.pow(MU / (meanMotion * meanMotion), 1.0 / 3.0);
 
+    // Parse ndot (first derivative of mean motion / 2) from TLE line 1 cols 33-43
+    // Format: " .NNNNNNNN" in rev/day², multiply by 2 to get full ndot
+    // Convert to rad/s²: rev/day² → rad/s² = * 2π / 86400²
+    const ndotHalf = parseFloat(line1.substring(33, 43).trim());
+    const ndot = 2.0 * ndotHalf * (2.0 * Math.PI) / (86400.0 * 86400.0);
+
+    // Compute J2 secular rates
+    const { raanRate, argPerigeeRate } = computeJ2Rates(
+      meanMotion, semiMajorAxis, eccentricity, inclination
+    );
+
     return {
       name: name.trim(),
       epochDays,
@@ -33,6 +65,9 @@ export function parseTLE(name: string, line1: string, line2: string): Satellite 
       satrec,
       tleLine1: line1,
       tleLine2: line2,
+      raanRate,
+      argPerigeeRate,
+      ndot,
     };
   } catch {
     return null;

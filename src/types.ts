@@ -15,6 +15,10 @@ export interface Satellite {
   satrec: SatRec;
   tleLine1: string;
   tleLine2: string;
+  // J2 secular perturbation rates (computed once at parse time)
+  raanRate: number;       // dΩ/dt in rad/s
+  argPerigeeRate: number; // dω/dt in rad/s
+  ndot: number;           // dn/dt in rad/s² (from TLE first derivative of mean motion)
 }
 
 export interface Marker {

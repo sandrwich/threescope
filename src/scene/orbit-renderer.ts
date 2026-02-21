@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import type { Satellite } from '../types';
-import { DRAW_SCALE, TWO_PI } from '../constants';
+import { DRAW_SCALE, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S } from '../constants';
 import { parseHexColor } from '../config';
 import { calculatePosition } from '../astro/propagator';
+import { epochToUnix } from '../astro/epoch';
 
 // Segment counts for orbit visualization
 const SEGMENTS_NORMAL = 90;
@@ -28,11 +29,22 @@ export class OrbitRenderer {
   private normalMat: THREE.LineBasicMaterial;
   private maxNormalVerts: number;
 
-  // Precomputed analytical Keplerian orbits
-  // All orbit ellipses stored contiguously: [sat0_seg0_v0, sat0_seg0_v1, ..., sat1_seg0_v0, ...]
+  // Precomputed ECI orbit vertices (line-segment pairs)
   private precomputedAll: Float32Array | null = null;
   private precomputedSatCount = 0;
   private precomputedFloatsPerOrbit = 0;
+
+  // Perifocal frame storage: (segs+1) sequential vertices per orbit, 2 floats each (xpf, ypf)
+  // Shape depends only on (a, e) — constant under J2 secular perturbation
+  private perifocalAll: Float32Array | null = null;
+  private perifocalVertsPerOrbit = 0;
+
+  // J2 recomputation tracking
+  private lastRecomputeEpoch = 0;
+  private lastRecomputeWallMs = 0;
+  private lastPeriCheckEpoch = 0;
+  private satellites: Satellite[] = [];
+  private currentSegments = 0;
 
   // Assembly state — only rebuild GPU buffer when visibility changes
   private lastActiveSat: Satellite | null | undefined = undefined; // undefined = never assembled
@@ -81,82 +93,184 @@ export class OrbitRenderer {
   }
 
   /**
-   * Precompute all orbit ellipses analytically from Keplerian elements.
-   * Called once when TLE data loads — no SGP4 involved.
-   * Each orbit is a closed ellipse in 3D defined by (a, e, i, Ω, ω).
+   * Precompute all orbit ellipses from Keplerian elements with J2 secular corrections.
+   * Phase 1: compute perifocal vertices (shape only, depends on a,e).
+   * Phase 2: rotate to ECI using J2-corrected RAAN and argPerigee.
    */
-  precomputeOrbits(satellites: Satellite[]) {
+  precomputeOrbits(satellites: Satellite[], currentEpoch: number) {
     const satCount = satellites.length;
     const segs = satCount > 500 ? SEGMENTS_LARGE : SEGMENTS_NORMAL;
     const floatsPerOrbit = segs * 6; // segs line segments × 2 verts × 3 components
+    const periVertsPerOrbit = segs + 1;
+    const periFloatsPerOrbit = periVertsPerOrbit * 2;
 
+    // Allocate ECI buffer
     this.precomputedAll = new Float32Array(satCount * floatsPerOrbit);
     this.precomputedSatCount = satCount;
     this.precomputedFloatsPerOrbit = floatsPerOrbit;
 
+    // Allocate perifocal buffer
+    this.perifocalAll = new Float32Array(satCount * periFloatsPerOrbit);
+    this.perifocalVertsPerOrbit = periVertsPerOrbit;
+    this.currentSegments = segs;
+    this.satellites = satellites;
+
+    // Phase 1: Compute perifocal vertices (shape only)
     for (let s = 0; s < satCount; s++) {
-      this.computeKeplerianOrbit(satellites[s], segs, this.precomputedAll, s * floatsPerOrbit);
+      const sat = satellites[s];
+      this.computePerifocalVertices(
+        sat.semiMajorAxis, sat.eccentricity, segs,
+        this.perifocalAll, s * periFloatsPerOrbit
+      );
     }
 
-    // Force reassembly on next update
+    // Phase 2: Rotate perifocal → ECI using J2-corrected elements
+    this.recomputeECI(currentEpoch);
+
+    this.lastRecomputeEpoch = currentEpoch;
+    this.lastRecomputeWallMs = performance.now();
+    this.lastPeriCheckEpoch = currentEpoch;
+    this.lastActiveSat = undefined; // force reassembly
+  }
+
+  /**
+   * Compute perifocal-frame vertices for one orbit.
+   * Depends only on (a, e) — constant under J2 secular perturbation.
+   * Stores (segs+1) vertices as (xpf, ypf) pairs.
+   */
+  private computePerifocalVertices(
+    a: number, e: number, segs: number, out: Float32Array, outOffset: number
+  ) {
+    const p = a * (1 - e * e);
+    let idx = outOffset;
+    for (let i = 0; i <= segs; i++) {
+      const nu = (i / segs) * TWO_PI;
+      const cosNu = Math.cos(nu);
+      const r = p / (1 + e * cosNu);
+      out[idx++] = r * cosNu;       // xpf
+      out[idx++] = r * Math.sin(nu); // ypf
+    }
+  }
+
+  /**
+   * Recompute ECI positions for all orbits using J2-corrected RAAN and argPerigee.
+   * Cost: ~6 trig calls per satellite + (segs+1) matrix multiplies.
+   * For 10k sats at 30 segs: ~5ms.
+   */
+  private recomputeECI(currentEpoch: number) {
+    if (!this.perifocalAll || !this.precomputedAll) return;
+
+    const sats = this.satellites;
+    const segs = this.currentSegments;
+    const periVertsPerOrbit = this.perifocalVertsPerOrbit;
+    const periFloatsPerOrbit = periVertsPerOrbit * 2;
+    const eciFloatsPerOrbit = this.precomputedFloatsPerOrbit;
+    const currentUnix = epochToUnix(currentEpoch);
+
+    for (let s = 0; s < sats.length; s++) {
+      const sat = sats[s];
+
+      // Time delta from TLE epoch (seconds)
+      const deltaS = currentUnix - epochToUnix(sat.epochDays);
+
+      // J2-corrected orientation angles
+      const raan = sat.raan + sat.raanRate * deltaS;
+      const w = sat.argPerigee + sat.argPerigeeRate * deltaS;
+      const inc = sat.inclination; // no secular J2 change
+
+      // Build rotation matrix R = Rz(-Ω) · Rx(-i) · Rz(-ω)
+      const cosO = Math.cos(raan), sinO = Math.sin(raan);
+      const cosI = Math.cos(inc), sinI = Math.sin(inc);
+      const cosW = Math.cos(w), sinW = Math.sin(w);
+
+      const r11 = cosO * cosW - sinO * sinW * cosI;
+      const r12 = -cosO * sinW - sinO * cosW * cosI;
+      const r21 = sinO * cosW + cosO * sinW * cosI;
+      const r22 = -sinO * sinW + cosO * cosW * cosI;
+      const r31 = sinW * sinI;
+      const r32 = cosW * sinI;
+
+      // Read perifocal, write ECI line-segment pairs
+      const periBase = s * periFloatsPerOrbit;
+      let eciIdx = s * eciFloatsPerOrbit;
+      let px = 0, py = 0, pz = 0;
+
+      for (let i = 0; i <= segs; i++) {
+        const pi = periBase + i * 2;
+        const xpf = this.perifocalAll[pi];
+        const ypf = this.perifocalAll[pi + 1];
+
+        const xeci = r11 * xpf + r12 * ypf;
+        const yeci = r21 * xpf + r22 * ypf;
+        const zeci = r31 * xpf + r32 * ypf;
+
+        // Render coords: x=eci.x, y=eci.z, z=-eci.y, divided by DRAW_SCALE
+        const cx = xeci / DRAW_SCALE;
+        const cy = zeci / DRAW_SCALE;
+        const cz = -yeci / DRAW_SCALE;
+
+        if (i > 0) {
+          this.precomputedAll![eciIdx++] = px;
+          this.precomputedAll![eciIdx++] = py;
+          this.precomputedAll![eciIdx++] = pz;
+          this.precomputedAll![eciIdx++] = cx;
+          this.precomputedAll![eciIdx++] = cy;
+          this.precomputedAll![eciIdx++] = cz;
+        }
+        px = cx; py = cy; pz = cz;
+      }
+    }
+
+    // Force GPU buffer reassembly
     this.lastActiveSat = undefined;
   }
 
   /**
-   * Compute a single orbit ellipse analytically from Keplerian elements.
-   * Uses the perifocal-to-ECI rotation matrix — just trig and matrix multiply.
-   * ~100x faster than SGP4 per point.
+   * Check if ndot-driven semi-major axis decay requires perifocal rebuild.
+   * Only checked every 6 hours of sim-time since drag is slow.
    */
-  private computeKeplerianOrbit(
-    sat: Satellite, segs: number, out: Float32Array, outOffset: number
-  ) {
-    const { semiMajorAxis: a, eccentricity: e, inclination: inc, raan, argPerigee: w } = sat;
+  private checkPeifocalRebuild(currentEpoch: number) {
+    if (!this.perifocalAll) return;
 
-    // Semi-latus rectum
-    const p = a * (1 - e * e);
+    const currentUnix = epochToUnix(currentEpoch);
+    const lastCheckUnix = epochToUnix(this.lastPeriCheckEpoch);
+    if (Math.abs(currentUnix - lastCheckUnix) < 21600) return; // 6 hours
 
-    // Perifocal-to-ECI rotation matrix (computed once per satellite)
-    const cosO = Math.cos(raan), sinO = Math.sin(raan);
-    const cosI = Math.cos(inc), sinI = Math.sin(inc);
-    const cosW = Math.cos(w), sinW = Math.sin(w);
+    this.lastPeriCheckEpoch = currentEpoch;
 
-    // R = Rz(-Ω) · Rx(-i) · Rz(-ω)
-    // Only need columns 1-2 since z_perifocal = 0
-    const r11 = cosO * cosW - sinO * sinW * cosI;
-    const r12 = -cosO * sinW - sinO * cosW * cosI;
-    const r21 = sinO * cosW + cosO * sinW * cosI;
-    const r22 = -sinO * sinW + cosO * cosW * cosI;
-    const r31 = sinW * sinI;
-    const r32 = cosW * sinI;
+    const sats = this.satellites;
+    const segs = this.currentSegments;
+    const periFloatsPerOrbit = this.perifocalVertsPerOrbit * 2;
+    let needRebuild = false;
 
-    let px = 0, py = 0, pz = 0;
-    let idx = outOffset;
-
-    for (let i = 0; i <= segs; i++) {
-      const nu = (i / segs) * TWO_PI;
-      const cosNu = Math.cos(nu);
-      const sinNu = Math.sin(nu);
-      const r = p / (1 + e * cosNu);
-
-      // Perifocal position
-      const xpf = r * cosNu;
-      const ypf = r * sinNu;
-
-      // ECI position via rotation matrix (z_pf = 0, so only 2 columns needed)
-      const xeci = r11 * xpf + r12 * ypf;
-      const yeci = r21 * xpf + r22 * ypf;
-      const zeci = r31 * xpf + r32 * ypf;
-
-      // Render coords: x=eci.x, y=eci.z, z=-eci.y, divided by DRAW_SCALE
-      const cx = xeci / DRAW_SCALE;
-      const cy = zeci / DRAW_SCALE;
-      const cz = -yeci / DRAW_SCALE;
-
-      if (i > 0) {
-        out[idx++] = px; out[idx++] = py; out[idx++] = pz;
-        out[idx++] = cx; out[idx++] = cy; out[idx++] = cz;
+    for (let s = 0; s < sats.length; s++) {
+      const sat = sats[s];
+      if (Math.abs(sat.ndot) < 1e-15) continue;
+      const deltaS = currentUnix - epochToUnix(sat.epochDays);
+      const nNew = sat.meanMotion + sat.ndot * deltaS;
+      if (nNew <= 0) continue;
+      const aNew = Math.pow(MU / (nNew * nNew), 1.0 / 3.0);
+      if (Math.abs(aNew - sat.semiMajorAxis) > 0.1) {
+        needRebuild = true;
+        break;
       }
-      px = cx; py = cy; pz = cz;
+    }
+
+    if (needRebuild) {
+      for (let s = 0; s < sats.length; s++) {
+        const sat = sats[s];
+        const deltaS = currentUnix - epochToUnix(sat.epochDays);
+        const nNew = sat.meanMotion + sat.ndot * deltaS;
+        const aNew = nNew > 0 ? Math.pow(MU / (nNew * nNew), 1.0 / 3.0) : sat.semiMajorAxis;
+        this.computePerifocalVertices(
+          aNew, sat.eccentricity, segs,
+          this.perifocalAll, s * periFloatsPerOrbit
+        );
+      }
+      // Force ECI recompute since perifocal changed
+      this.recomputeECI(currentEpoch);
+      this.lastRecomputeEpoch = currentEpoch;
+      this.lastRecomputeWallMs = performance.now();
     }
   }
 
@@ -170,6 +284,24 @@ export class OrbitRenderer {
     colorConfig: { orbitNormal: string; orbitHighlighted: string },
     _dt: number
   ) {
+    // --- J2 periodic recomputation ---
+    if (this.precomputedAll && this.perifocalAll) {
+      const now = performance.now();
+      // Wall-clock guard: max ~30 Hz recompute rate
+      if (now - this.lastRecomputeWallMs > 33) {
+        const deltaSim = Math.abs(
+          epochToUnix(currentEpoch) - epochToUnix(this.lastRecomputeEpoch)
+        );
+        if (deltaSim > ORBIT_RECOMPUTE_INTERVAL_S) {
+          this.recomputeECI(currentEpoch);
+          this.lastRecomputeEpoch = currentEpoch;
+          this.lastRecomputeWallMs = now;
+        }
+      }
+      // ndot perifocal rebuild (rare)
+      this.checkPeifocalRebuild(currentEpoch);
+    }
+
     const activeSat = hoveredSat ?? selectedSat;
     const cHL = parseHexColor(colorConfig.orbitHighlighted);
 

@@ -301,7 +301,7 @@ export class App {
       this.satellites = result.satellites;
       this.selectedSat = null;
       this.hoveredSat = null;
-      this.orbitRenderer.precomputeOrbits(this.satellites);
+      this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
 
       let info = `${this.satellites.length} sats`;
       if (result.source === 'cache' && result.cacheAge != null) {
@@ -362,7 +362,7 @@ export class App {
       this.satellites = parseTLEText(text);
       this.selectedSat = null;
       this.hoveredSat = null;
-      this.orbitRenderer.precomputeOrbits(this.satellites);
+      this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
       statusEl.textContent = `${this.satellites.length} Sats (${label})`;
     } catch (e) {
       console.error('Failed to parse TLE data:', e);

@@ -9,3 +9,8 @@ export const RAD2DEG = 180.0 / Math.PI;
 export const TWO_PI = 2.0 * Math.PI;
 export const MAP_W = 2048.0;
 export const MAP_H = 1024.0;
+
+// J2 perturbation constants
+export const J2 = 1.08263e-3;                  // Earth's J2 zonal harmonic
+export const EARTH_RADIUS_EQ_KM = 6378.137;    // WGS-84 equatorial radius (km)
+export const ORBIT_RECOMPUTE_INTERVAL_S = 900;  // recompute orbits every 15 sim-minutes
