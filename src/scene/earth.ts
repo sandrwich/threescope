@@ -8,15 +8,8 @@ import earthFragSrc from '../shaders/earth-daynight.frag.glsl?raw';
 export class Earth {
   mesh: THREE.Mesh;
   private material: THREE.ShaderMaterial;
-  private defaultMaterial: THREE.MeshBasicMaterial;
-  private dayTexture: THREE.Texture;
-  private nightTexture: THREE.Texture;
-  private useNightLights = true;
 
   constructor(dayTex: THREE.Texture, nightTex: THREE.Texture) {
-    this.dayTexture = dayTex;
-    this.nightTexture = nightTex;
-
     const radius = EARTH_RADIUS_KM / DRAW_SCALE;
     const geometry = this.genEarthGeometry(radius, 64, 64);
 
@@ -25,12 +18,12 @@ export class Earth {
         dayTexture: { value: dayTex },
         nightTexture: { value: nightTex },
         sunDir: { value: new THREE.Vector3(1, 0, 0) },
+        showNight: { value: 1.0 },
       },
       vertexShader: earthVertSrc,
       fragmentShader: earthFragSrc,
     });
 
-    this.defaultMaterial = new THREE.MeshBasicMaterial({ map: dayTex });
     this.mesh = new THREE.Mesh(geometry, this.material);
   }
 
@@ -89,18 +82,11 @@ export class Earth {
 
   update(currentEpoch: number, gmstDeg: number, earthOffset: number, showNightLights: boolean) {
     this.mesh.rotation.y = (gmstDeg + earthOffset) * DEG2RAD;
+    this.material.uniforms.showNight.value = showNightLights ? 1.0 : 0.0;
 
-    if (showNightLights !== this.useNightLights) {
-      this.useNightLights = showNightLights;
-      this.mesh.material = showNightLights ? this.material : this.defaultMaterial;
-    }
-
-    if (showNightLights) {
-      const sunEci = calculateSunPosition(currentEpoch);
-      // Rotate sun into Earth's local frame (ECEF): rotate by -GMST
-      const earthRotRad = (gmstDeg + earthOffset) * DEG2RAD;
-      const sunEcef = sunEci.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
-      this.material.uniforms.sunDir.value.copy(sunEcef);
-    }
+    const sunEci = calculateSunPosition(currentEpoch);
+    const earthRotRad = (gmstDeg + earthOffset) * DEG2RAD;
+    const sunEcef = sunEci.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
+    this.material.uniforms.sunDir.value.copy(sunEcef);
   }
 }
