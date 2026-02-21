@@ -146,6 +146,7 @@ export class App {
     this.setLoading(1.0, 'Ready!');
     setTimeout(() => { this.loadingScreen.style.display = 'none'; }, 300);
 
+    this.mcChannel.port1.onmessage = () => this.animate();
     this.clock.start();
     this.animate();
   }
@@ -485,6 +486,16 @@ export class App {
       if (e.target === infoModal) infoModal.classList.remove('visible');
     });
 
+    // Unlock FPS
+    const unlockCb = document.getElementById('cb-unlock-fps') as HTMLInputElement;
+    const savedUnlock = localStorage.getItem('threescope_unlock_fps') === 'true';
+    unlockCb.checked = savedUnlock;
+    this.unlockFps = savedUnlock;
+    unlockCb.addEventListener('change', () => {
+      this.unlockFps = unlockCb.checked;
+      localStorage.setItem('threescope_unlock_fps', String(unlockCb.checked));
+    });
+
     // Settings modal
     const settingsModal = document.getElementById('settings-modal')!;
     document.getElementById('settings-btn')!.addEventListener('click', () => {
@@ -759,8 +770,19 @@ export class App {
     }, { passive: false });
   }
 
+  private unlockFps = false;
+  private mcChannel = new MessageChannel();
+
+  private scheduleUnlocked() {
+    this.mcChannel.port2.postMessage(null);
+  }
+
   private animate() {
-    requestAnimationFrame(() => this.animate());
+    if (this.unlockFps) {
+      this.scheduleUnlocked();
+    } else {
+      requestAnimationFrame(() => this.animate());
+    }
 
     const dt = this.clock.getDelta();
     this.timeSystem.update(dt);
