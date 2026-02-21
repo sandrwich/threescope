@@ -3,6 +3,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - 'src-tauri/**'
+      - '.github/workflows/desktop.yml'
   workflow_dispatch:
 
 permissions:

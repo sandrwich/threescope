@@ -1,6 +1,7 @@
 node_modules
 dist
 _original
+src-tauri/target
 .claude
 .playwright-mcp
 
