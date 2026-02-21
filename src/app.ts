@@ -13,6 +13,7 @@ import { OrbitRenderer } from './scene/orbit-renderer';
 import { FootprintRenderer } from './scene/footprint-renderer';
 import { MarkerManager } from './scene/marker-manager';
 import { PostProcessing } from './scene/post-processing';
+import { getMinZoom, BODIES } from './bodies';
 import { Atmosphere } from './scene/atmosphere';
 import { computeApsis } from './astro/apsis';
 import { getMapCoordinates } from './astro/coordinates';
@@ -499,8 +500,10 @@ export class App {
     const savedNight = localStorage.getItem('threescope_night') !== 'false';
     nightCb.checked = savedNight;
     this.cfg.showNightLights = savedNight;
+    this.moonScene.setShowNight(savedNight);
     nightCb.addEventListener('change', () => {
       this.cfg.showNightLights = nightCb.checked;
+      this.moonScene.setShowNight(nightCb.checked);
       localStorage.setItem('threescope_night', String(nightCb.checked));
     });
 
@@ -647,9 +650,8 @@ export class App {
         this.targetCam2dZoom = Math.max(0.1, this.targetCam2dZoom);
         this.activeLock = TargetLock.NONE;
       } else {
-        const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
         this.targetCamDistance -= delta * (this.targetCamDistance * 0.1);
-        this.targetCamDistance = Math.max(earthR + 1.0, this.targetCamDistance);
+        this.targetCamDistance = Math.max(getMinZoom(this.activeLock), this.targetCamDistance);
       }
     }, { passive: false });
 
@@ -779,8 +781,7 @@ export class App {
             this.targetCam2dZoom = Math.max(0.1, this.targetCam2dZoom);
           } else {
             this.targetCamDistance /= scale;
-            const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
-            this.targetCamDistance = Math.max(earthR + 1.0, this.targetCamDistance);
+            this.targetCamDistance = Math.max(getMinZoom(this.activeLock), this.targetCamDistance);
           }
         }
 
@@ -950,9 +951,10 @@ export class App {
       this.moonScene.update(epoch);
       this.sunScene.update(epoch);
 
-      // Atmosphere rim glow (uses sun direction in ECI space)
-      const sunEciAtmo = calculateSunPosition(epoch).normalize();
-      this.atmosphere.update(sunEciAtmo);
+      // Sun direction in ECI/world space
+      const sunEciDir = calculateSunPosition(epoch).normalize();
+      this.atmosphere.update(sunEciDir);
+      this.moonScene.updateSunDir(sunEciDir);
       this.atmosphere.setVisible(this.bloomEnabled);
 
       this.satManager.update(
@@ -976,7 +978,8 @@ export class App {
 
       this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camDistance);
 
-      if (this.bloomEnabled) {
+      const useBloom = this.bloomEnabled && (BODIES[this.activeLock]?.bloom !== false);
+      if (useBloom) {
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.postProcessing.render();
       } else {
