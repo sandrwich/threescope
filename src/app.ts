@@ -71,7 +71,6 @@ export class App {
   // 2D scene objects
   private mapPlane!: THREE.Mesh;
   private mapMaterial!: THREE.ShaderMaterial;
-  private mapDefaultMaterial!: THREE.MeshBasicMaterial;
   // Pre-allocated 2D buffers
   private satPoints2d!: THREE.Points;
   private satPosBuffer2d!: THREE.BufferAttribute;
@@ -81,12 +80,17 @@ export class App {
   private hlTrackBuffer2d!: THREE.BufferAttribute;
   private maxTrackVerts2d = 4001 * 3 * 2; // 3 offsets, 2 verts per segment
 
-  // Mouse state
+  // Mouse/touch state
   private mousePos = new THREE.Vector2();
   private mouseNDC = new THREE.Vector2();
   private lastLeftClickTime = 0;
   private isRightDragging = false;
   private mouseDelta = new THREE.Vector2();
+  private touchCount = 0;
+  private lastTouchPos = new THREE.Vector2();
+  private lastPinchDist = 0;
+  private lastTwoTouchCenter = new THREE.Vector2();
+  private touchMoved = false;
 
   // FPS tracking
   private fpsFrames = 0;
@@ -207,6 +211,7 @@ export class App {
         dayTexture: { value: dayTex },
         nightTexture: { value: nightTex },
         sunDir: { value: new THREE.Vector3(1, 0, 0) },
+        showNight: { value: 1.0 },
       },
       vertexShader: `
         varying vec2 vUv;
@@ -219,9 +224,14 @@ export class App {
         uniform sampler2D dayTexture;
         uniform sampler2D nightTexture;
         uniform vec3 sunDir;
+        uniform float showNight;
         varying vec2 vUv;
         void main() {
           vec4 day = texture2D(dayTexture, vUv);
+          if (showNight < 0.5) {
+            gl_FragColor = day;
+            return;
+          }
           vec4 night = texture2D(nightTexture, vUv);
           float theta = (vUv.x - 0.5) * 6.28318530718;
           float phi = vUv.y * 3.14159265359;
@@ -233,7 +243,6 @@ export class App {
       `,
       side: THREE.DoubleSide,
     });
-    this.mapDefaultMaterial = new THREE.MeshBasicMaterial({ map: dayTex, side: THREE.DoubleSide });
 
     const planeGeo = new THREE.PlaneGeometry(MAP_W, MAP_H);
     // Flip V coords to compensate for flipY=false on textures
@@ -389,6 +398,18 @@ export class App {
     document.getElementById('cb-night-lights')!.addEventListener('change', (e) => {
       this.cfg.showNightLights = (e.target as HTMLInputElement).checked;
     });
+
+    // Info modal (mobile)
+    const infoModal = document.getElementById('info-modal')!;
+    document.getElementById('info-btn')!.addEventListener('click', () => {
+      infoModal.classList.add('visible');
+    });
+    document.getElementById('info-modal-close')!.addEventListener('click', () => {
+      infoModal.classList.remove('visible');
+    });
+    infoModal.addEventListener('click', (e) => {
+      if (e.target === infoModal) infoModal.classList.remove('visible');
+    });
   }
 
   private setupEvents() {
@@ -530,6 +551,127 @@ export class App {
           break;
       }
     });
+
+    // Touch events
+    const canvas = this.renderer.domElement;
+
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      this.touchCount = e.touches.length;
+      this.touchMoved = false;
+
+      if (e.touches.length === 1) {
+        this.lastTouchPos.set(e.touches[0].clientX, e.touches[0].clientY);
+        this.mousePos.set(e.touches[0].clientX, e.touches[0].clientY);
+        this.mouseNDC.set(
+          (e.touches[0].clientX / window.innerWidth) * 2 - 1,
+          -(e.touches[0].clientY / window.innerHeight) * 2 + 1
+        );
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[1].clientX - e.touches[0].clientX;
+        const dy = e.touches[1].clientY - e.touches[0].clientY;
+        this.lastPinchDist = Math.sqrt(dx * dx + dy * dy);
+        this.lastTwoTouchCenter.set(
+          (e.touches[0].clientX + e.touches[1].clientX) / 2,
+          (e.touches[0].clientY + e.touches[1].clientY) / 2
+        );
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      this.touchMoved = true;
+
+      if (e.touches.length === 1 && this.touchCount === 1) {
+        // Single finger: orbit (3D) or pan (2D)
+        const tx = e.touches[0].clientX, ty = e.touches[0].clientY;
+        const dx = tx - this.lastTouchPos.x;
+        const dy = ty - this.lastTouchPos.y;
+        this.lastTouchPos.set(tx, ty);
+        this.mousePos.set(tx, ty);
+        this.mouseNDC.set(
+          (tx / window.innerWidth) * 2 - 1,
+          -(ty / window.innerHeight) * 2 + 1
+        );
+
+        if (this.viewMode === ViewMode.VIEW_2D) {
+          const scale = 1.0 / this.targetCam2dZoom;
+          this.targetCam2dTarget.x -= dx * scale;
+          this.targetCam2dTarget.y -= dy * scale;
+          this.activeLock = TargetLock.NONE;
+        } else {
+          this.targetCamAngleX -= dx * 0.005;
+          this.targetCamAngleY += dy * 0.005;
+          this.targetCamAngleY = Math.max(-1.5, Math.min(1.5, this.targetCamAngleY));
+        }
+      } else if (e.touches.length === 2) {
+        // Two fingers: pinch zoom + pan
+        const dx = e.touches[1].clientX - e.touches[0].clientX;
+        const dy = e.touches[1].clientY - e.touches[0].clientY;
+        const pinchDist = Math.sqrt(dx * dx + dy * dy);
+        const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+        // Pinch zoom
+        if (this.lastPinchDist > 0) {
+          const scale = pinchDist / this.lastPinchDist;
+          if (this.viewMode === ViewMode.VIEW_2D) {
+            this.targetCam2dZoom *= scale;
+            this.targetCam2dZoom = Math.max(0.1, this.targetCam2dZoom);
+          } else {
+            this.targetCamDistance /= scale;
+            const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
+            this.targetCamDistance = Math.max(earthR + 1.0, this.targetCamDistance);
+          }
+        }
+
+        // Two-finger pan (3D only)
+        if (this.viewMode === ViewMode.VIEW_3D) {
+          const panDx = centerX - this.lastTwoTouchCenter.x;
+          const panDy = centerY - this.lastTwoTouchCenter.y;
+          const forward = new THREE.Vector3().subVectors(this.target3d, this.camera3d.position).normalize();
+          const right = new THREE.Vector3().crossVectors(forward, this.camera3d.up).normalize();
+          const upVec = new THREE.Vector3().crossVectors(right, forward).normalize();
+          const panSpeed = this.targetCamDistance * 0.001;
+          this.targetTarget3d.add(right.multiplyScalar(-panDx * panSpeed));
+          this.targetTarget3d.add(upVec.multiplyScalar(panDy * panSpeed));
+          this.activeLock = TargetLock.NONE;
+        }
+
+        this.lastPinchDist = pinchDist;
+        this.lastTwoTouchCenter.set(centerX, centerY);
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      // Tap = select (only if finger didn't move)
+      if (!this.touchMoved && this.touchCount === 1 && e.touches.length === 0) {
+        this.selectedSat = this.hoveredSat;
+
+        // Double tap detection
+        const now = performance.now() / 1000;
+        if (now - this.lastLeftClickTime < 0.3) {
+          if (this.viewMode === ViewMode.VIEW_3D) {
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(this.mouseNDC, this.camera3d);
+            const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
+            const moonR = MOON_RADIUS_KM / DRAW_SCALE;
+            const moonSphere = new THREE.Sphere(this.moonScene.drawPos, moonR);
+            const earthSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), earthR);
+            const moonHit = raycaster.ray.intersectsSphere(moonSphere);
+            const earthHit = raycaster.ray.intersectsSphere(earthSphere);
+            if (moonHit && !earthHit) this.activeLock = TargetLock.MOON;
+            else if (earthHit) this.activeLock = TargetLock.EARTH;
+          } else {
+            this.activeLock = TargetLock.EARTH;
+          }
+        }
+        this.lastLeftClickTime = now;
+      }
+      this.touchCount = e.touches.length;
+      this.lastPinchDist = 0;
+    }, { passive: false });
   }
 
   private animate() {
@@ -705,15 +847,11 @@ export class App {
 
   private update2DMap(epoch: number, gmstDeg: number) {
     // Update map shader sun direction
-    if (this.cfg.showNightLights) {
-      this.mapPlane.material = this.mapMaterial;
-      const sunEci = calculateSunPosition(epoch);
-      const earthRotRad = (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD;
-      const sunEcef = sunEci.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
-      this.mapMaterial.uniforms.sunDir.value.copy(sunEcef);
-    } else {
-      this.mapPlane.material = this.mapDefaultMaterial;
-    }
+    this.mapMaterial.uniforms.showNight.value = this.cfg.showNightLights ? 1.0 : 0.0;
+    const sunEci = calculateSunPosition(epoch);
+    const earthRotRad = (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD;
+    const sunEcef = sunEci.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
+    this.mapMaterial.uniforms.sunDir.value.copy(sunEcef);
 
     const activeSat = this.hoveredSat ?? this.selectedSat;
     const cHL = parseHexColor(this.cfg.orbitHighlighted);
@@ -785,17 +923,24 @@ export class App {
   private updateUI(activeSat: Satellite | null, gmstDeg: number) {
     // Controls text (top-left)
     const ctrlPanel = document.getElementById('controls-panel')!;
-    const viewText = this.viewMode === ViewMode.VIEW_2D
-      ? "Controls: RMB to pan, Scroll to zoom. 'M' switches to 3D."
-      : "Controls: RMB to orbit, Shift+RMB to pan. 'M' switches to 2D.";
+    const isTouch = 'ontouchstart' in window;
     const speedStr = `Speed: ${this.timeSystem.timeMultiplier.toFixed(1)}x${this.timeSystem.paused ? ' [PAUSED]' : ''}`;
 
-    ctrlPanel.innerHTML = `
-      <div>${viewText}</div>
-      <div>Time: '.' (2x), ',' (0.5x), '/' (1x), Shift+'/' (Reset)</div>
-      <div>UI Scale: '-' / '+' (${this.cfg.uiScale.toFixed(1)}x)</div>
-      <div class="time-line">${this.timeSystem.getDatetimeStr()} | ${speedStr}</div>
-    `;
+    if (isTouch) {
+      ctrlPanel.innerHTML = `
+        <div class="time-line">${this.timeSystem.getDatetimeStr()} | ${speedStr}</div>
+      `;
+    } else {
+      const viewText = this.viewMode === ViewMode.VIEW_2D
+        ? "Controls: RMB to pan, Scroll to zoom. 'M' switches to 3D."
+        : "Controls: RMB to orbit, Shift+RMB to pan. 'M' switches to 2D.";
+      ctrlPanel.innerHTML = `
+        <div>${viewText}</div>
+        <div>Time: '.' (2x), ',' (0.5x), '/' (1x), Shift+'/' (Reset)</div>
+        <div>UI Scale: '-' / '+' (${this.cfg.uiScale.toFixed(1)}x)</div>
+        <div class="time-line">${this.timeSystem.getDatetimeStr()} | ${speedStr}</div>
+      `;
+    }
 
     // Satellite info popup
     const infoEl = document.getElementById('sat-info')!;

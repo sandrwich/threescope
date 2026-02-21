@@ -143,6 +143,67 @@
       color: #888; text-decoration: none; pointer-events: auto;
     }
     #bottom-panel a:hover { color: #ccc; }
+
+    /* Info button (mobile only) */
+    #info-btn {
+      display: none;
+      position: absolute; bottom: 10px; left: 10px;
+      width: 32px; height: 32px;
+      background: rgba(255,255,255,0.1); border: 1px solid #666;
+      color: #ccc; font-size: 18px; font-family: inherit;
+      cursor: pointer; line-height: 30px; text-align: center;
+    }
+    #info-btn:hover { border-color: #aaa; color: #fff; }
+
+    /* Info modal */
+    #info-modal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 999; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.7);
+    }
+    #info-modal.visible { display: flex; }
+    #info-modal-content {
+      background: #1a1a1a; border: 1px solid #666;
+      padding: 20px 24px; max-width: 340px; width: 90%;
+      font-size: 14px; line-height: 1.6; color: #ccc;
+    }
+    #info-modal-content h3 {
+      font-size: 16px; color: #fff; margin-bottom: 10px; font-weight: normal;
+    }
+    #info-modal-content .section { margin-bottom: 14px; }
+    #info-modal-content .section:last-child { margin-bottom: 0; }
+    #info-modal-content a { color: #888; text-decoration: none; }
+    #info-modal-content a:hover { color: #ccc; }
+    #info-modal-close {
+      background: transparent; border: 1px solid #666;
+      color: #ccc; font-size: 14px; font-family: inherit;
+      padding: 6px 16px; cursor: pointer; margin-top: 12px;
+    }
+    #info-modal-close:hover { border-color: #aaa; color: #fff; }
+
+    /* Prevent overscroll/pull-to-refresh on mobile */
+    html, body { overscroll-behavior: none; touch-action: none; }
+
+    /* Mobile responsive */
+    @media (max-width: 600px) {
+      #info-btn { display: block; }
+      #controls-panel { display: none; }
+      #checkbox-panel { top: 10px; left: 10px; }
+      #checkbox-panel label { font-size: 13px; line-height: 20px; }
+      #checkbox-panel input[type="checkbox"] { width: 24px; height: 24px; min-height: 24px; }
+      #stats-panel .fps { font-size: 16px; }
+      #stats-panel .sat-count { font-size: 13px; }
+      #sat-info { font-size: 13px; min-width: 180px; padding: 8px 10px; }
+      #sat-info .sat-name { font-size: 15px; }
+      #tle-picker select, #tle-picker button, #tle-picker input[type="text"] {
+        font-size: 14px; padding: 6px 8px;
+      }
+      #tle-url-input { width: 140px; }
+      #tle-custom-row { flex-wrap: wrap; justify-content: flex-end; }
+      #bottom-panel { display: none; }
+      #loading-screen .bar-outer { width: 80%; max-width: 300px; height: 24px; }
+      #loading-screen .msg { font-size: 16px; }
+    }
   </style>
 </head>
 <body>
@@ -151,7 +212,28 @@
     <div class="bar-outer"><div class="bar-inner" id="loading-bar"></div></div>
   </div>
 
+  <div id="info-modal">
+    <div id="info-modal-content">
+      <div class="section">
+        <h3>Controls</h3>
+        Drag to orbit / pan<br>
+        Pinch to zoom<br>
+        Tap satellite to select<br>
+        Double-tap to lock view
+      </div>
+      <div class="section">
+        <h3>About</h3>
+        TLE data from <a href="https://celestrak.org" target="_blank">CelesTrak</a><br>
+        Based on <a href="https://github.com/aweeri/TLEscope" target="_blank">TLEscope</a> by aweeri<br>
+        <a href="https://github.com/aweeri/TLEscope/blob/main/LICENSE" target="_blank">AGPL-3.0</a>
+        &middot; <a href="https://github.com/sandrwich/threescope" target="_blank">Source code</a>
+      </div>
+      <button id="info-modal-close">Close</button>
+    </div>
+  </div>
+
   <div id="ui-overlay">
+    <button id="info-btn">?</button>
     <div id="controls-panel"></div>
     <div id="checkbox-panel">
       <label><input type="checkbox" id="cb-hide-unselected"> Hide Unselected</label>
