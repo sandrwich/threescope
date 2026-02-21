@@ -369,6 +369,19 @@ export class App {
     }
   }
 
+  private static readonly THEME_BG: Record<string, string> = {
+    default: '#101010',
+    oled: '#000000',
+  };
+
+  private applyTheme(theme: string) {
+    document.documentElement.setAttribute('data-theme', theme === 'default' ? '' : theme);
+    const bg = App.THEME_BG[theme] || App.THEME_BG.default;
+    this.cfg.bgColor = bg;
+    this.scene3d.background = new THREE.Color(bg);
+    this.scene2d.background = new THREE.Color(bg);
+  }
+
   private setupUI() {
     // TLE picker
     const select = document.getElementById('tle-select') as HTMLSelectElement;
@@ -449,7 +462,18 @@ export class App {
     });
 
 
-    // Info modal (mobile)
+    // Theme switcher
+    const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+    const savedTheme = localStorage.getItem('threescope_theme')
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'oled' : 'default');
+    this.applyTheme(savedTheme);
+    themeSelect.value = savedTheme;
+    themeSelect.addEventListener('change', () => {
+      this.applyTheme(themeSelect.value);
+      localStorage.setItem('threescope_theme', themeSelect.value);
+    });
+
+    // Info modal
     const infoModal = document.getElementById('info-modal')!;
     document.getElementById('info-btn')!.addEventListener('click', () => {
       infoModal.classList.add('visible');
@@ -459,6 +483,18 @@ export class App {
     });
     infoModal.addEventListener('click', (e) => {
       if (e.target === infoModal) infoModal.classList.remove('visible');
+    });
+
+    // Settings modal
+    const settingsModal = document.getElementById('settings-modal')!;
+    document.getElementById('settings-btn')!.addEventListener('click', () => {
+      settingsModal.classList.add('visible');
+    });
+    document.getElementById('settings-modal-close')!.addEventListener('click', () => {
+      settingsModal.classList.remove('visible');
+    });
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) settingsModal.classList.remove('visible');
     });
   }
 

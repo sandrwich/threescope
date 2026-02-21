@@ -8,6 +8,12 @@
   <meta name="theme-color" content="#101010">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" href="/textures/icon-192.png">
+  <script>
+    // Apply theme before first paint to prevent flash
+    var t = localStorage.getItem('threescope_theme');
+    if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'oled' : 'default';
+    if (t !== 'default') document.documentElement.setAttribute('data-theme', t);
+  </script>
   <style>
     @font-face {
       font-family: 'Overpass Mono';
@@ -16,12 +22,49 @@
       font-display: swap;
     }
 
+    :root {
+      --bg: #101010;
+      --ui-bg: #1a1a1a;
+      --border: #555;
+      --border-hover: #aaa;
+      --text: #fff;
+      --text-dim: #ccc;
+      --text-muted: #999;
+      --text-faint: #777;
+      --text-ghost: #555;
+      --card-bg: rgba(0,0,0,0.85);
+      --modal-bg: #1a1a1a;
+      --modal-overlay: rgba(0,0,0,0.7);
+      --kbd-bg: #333;
+      --link: #666;
+      --link-hover: #aaa;
+      --attrib: #555;
+    }
+    [data-theme="oled"] {
+      --bg: #000000;
+      --ui-bg: #0a0a0a;
+      --border: #333;
+      --border-hover: #666;
+      --text: #ddd;
+      --text-dim: #aaa;
+      --text-muted: #777;
+      --text-faint: #555;
+      --text-ghost: #333;
+      --card-bg: rgba(0,0,0,0.95);
+      --modal-bg: #0a0a0a;
+      --modal-overlay: rgba(0,0,0,0.85);
+      --kbd-bg: #1a1a1a;
+      --link: #444;
+      --link-hover: #888;
+      --attrib: #333;
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 100%; height: 100%; overflow: hidden;
-      background: #101010;
+      background: var(--bg);
       font-family: 'Overpass Mono', 'Courier New', monospace;
-      color: #fff;
+      color: var(--text);
       overscroll-behavior: none; touch-action: none;
     }
     canvas { display: block; }
@@ -36,14 +79,14 @@
     #loading-screen {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      background: #101010; z-index: 1000;
+      background: var(--bg); z-index: 1000;
     }
-    #loading-screen .bar-outer { width: 400px; height: 30px; border: 2px solid #fff; }
+    #loading-screen .bar-outer { width: 400px; height: 30px; border: 2px solid var(--text); }
     #loading-screen .bar-inner {
-      height: 100%; width: 0%; background: #d3d3d3; transition: width 0.3s;
+      height: 100%; width: 0%; background: var(--text-dim); transition: width 0.3s;
       margin: 4px; height: calc(100% - 8px);
     }
-    #loading-screen .msg { margin-bottom: 16px; font-size: 18px; color: #fff; }
+    #loading-screen .msg { margin-bottom: 16px; font-size: 18px; color: var(--text); }
 
     /* Top-left panel: status line + toggles */
     #top-panel {
@@ -51,7 +94,7 @@
       display: flex; flex-direction: column; gap: 4px;
     }
     #status-line {
-      font-size: 13px; color: #999; white-space: nowrap;
+      font-size: 13px; color: var(--text-muted); white-space: nowrap;
     }
 
     /* Stats (top-right) */
@@ -60,38 +103,38 @@
       text-align: right;
     }
     #stats-panel .fps { color: #00ff00; font-size: 14px; font-weight: bold; }
-    #stats-panel .sat-count { color: #888; font-size: 12px; margin-top: 1px; }
+    #stats-panel .sat-count { color: var(--text-muted); font-size: 12px; margin-top: 1px; }
 
     #toggle-row {
       display: flex; align-items: center; gap: 10px;
     }
     #toggle-row label {
       display: flex; align-items: center; gap: 6px;
-      font-size: 13px; cursor: pointer; color: #ccc;
+      font-size: 13px; cursor: pointer; color: var(--text-dim);
       line-height: 20px;
     }
-    #toggle-row label:hover { color: #fff; }
+    #toggle-row label:hover { color: var(--text); }
     #toggle-row input[type="checkbox"] {
       appearance: none; -webkit-appearance: none;
       width: 16px; height: 16px;
-      border: 2px solid #aaa; background: transparent;
+      border: 2px solid var(--border-hover); background: transparent;
       cursor: pointer; position: relative; flex-shrink: 0;
     }
-    #toggle-row input[type="checkbox"]:hover { border-color: #fff; }
+    #toggle-row input[type="checkbox"]:hover { border-color: var(--text); }
     #toggle-row input[type="checkbox"]:checked::after {
       content: '';
       position: absolute;
       top: 2px; left: 2px; right: 2px; bottom: 2px;
-      background: #fff;
+      background: var(--text);
     }
 
     /* Help button */
-    #info-btn {
-      background: #1a1a1a; border: 1px solid #555;
-      color: #777; font-size: 13px; font-family: inherit;
+    #info-btn, #settings-btn {
+      background: var(--ui-bg); border: 1px solid var(--border);
+      color: var(--text-faint); font-size: 13px; font-family: inherit;
       padding: 3px 8px; cursor: pointer;
     }
-    #info-btn:hover { border-color: #aaa; color: #ccc; }
+    #info-btn:hover, #settings-btn:hover { border-color: var(--border-hover); color: var(--text-dim); }
 
     /* TLE Picker (bottom-right) */
     #tle-picker {
@@ -102,17 +145,17 @@
       display: flex; align-items: center; gap: 6px;
     }
     #tle-picker select, #tle-picker button, #tle-picker input[type="text"] {
-      background: #1a1a1a; color: #fff; border: 1px solid #555;
+      background: var(--ui-bg); color: var(--text); border: 1px solid var(--border);
       padding: 3px 6px; font-size: 13px; font-family: inherit;
       cursor: pointer;
     }
     #tle-picker select:hover, #tle-picker button:hover, #tle-picker input[type="text"]:hover {
-      border-color: #aaa;
+      border-color: var(--border-hover);
     }
     #tle-custom-row { display: none; gap: 4px; align-items: center; }
     #tle-custom-row.visible { display: flex; }
     #tle-url-input { width: 220px; cursor: text; }
-    #tle-url-input::placeholder { color: #444; }
+    #tle-url-input::placeholder { color: var(--text-ghost); }
     #tle-file-input {
       position: absolute; width: 0; height: 0; overflow: hidden;
       opacity: 0; pointer-events: none;
@@ -121,13 +164,13 @@
     /* Satellite info tooltip */
     #sat-info {
       position: absolute; display: none;
-      background: rgba(0,0,0,0.85); padding: 8px 12px;
+      background: var(--card-bg); padding: 8px 12px;
       font-size: 13px; line-height: 1.4;
       min-width: 200px; pointer-events: none;
-      border-left: 2px solid #555; z-index: 10;
+      border-left: 2px solid var(--border); z-index: 10;
     }
     #sat-info .sat-name { font-size: 14px; margin-bottom: 4px; }
-    #sat-info .sat-detail { color: #ccc; }
+    #sat-info .sat-detail { color: var(--text-dim); }
 
     /* Apsis labels */
     .apsis-label {
@@ -140,28 +183,28 @@
     /* Bottom-left: attribution */
     #bottom-panel {
       position: absolute; bottom: 8px; left: 10px;
-      font-size: 11px; line-height: 1.4; color: #555;
+      font-size: 11px; line-height: 1.4; color: var(--attrib);
     }
-    #bottom-panel a { color: #666; text-decoration: none; pointer-events: auto; }
-    #bottom-panel a:hover { color: #aaa; }
+    #bottom-panel a { color: var(--link); text-decoration: none; pointer-events: auto; }
+    #bottom-panel a:hover { color: var(--link-hover); }
 
     /* Info modal */
     #info-modal {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       z-index: 999; align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.7);
+      background: var(--modal-overlay);
     }
     #info-modal.visible { display: flex; }
     #info-modal-content {
-      background: #1a1a1a; border: 1px solid #555;
+      background: var(--modal-bg); border: 1px solid var(--border);
       padding: 18px 22px; max-width: 420px; width: 90%;
-      font-size: 13px; line-height: 1.6; color: #999;
+      font-size: 13px; line-height: 1.6; color: var(--text-muted);
     }
     #info-modal-content h3 {
-      font-size: 14px; color: #ccc; margin-bottom: 8px; font-weight: normal;
+      font-size: 14px; color: var(--text-dim); margin-bottom: 8px; font-weight: normal;
     }
     #info-modal-content h4 {
-      font-size: 12px; color: #666; margin-bottom: 4px; font-weight: normal;
+      font-size: 12px; color: var(--link); margin-bottom: 4px; font-weight: normal;
       text-transform: uppercase; letter-spacing: 0.5px;
     }
     #info-modal-content .section { margin-bottom: 14px; }
@@ -169,13 +212,13 @@
     #info-modal-content .ctrl-table {
       display: grid; grid-template-columns: auto 1fr; gap: 2px 12px;
     }
-    #info-modal-content .ctrl-key { color: #ccc; text-align: right; white-space: nowrap; }
-    #info-modal-content .ctrl-desc { color: #888; }
-    #info-modal-content a { color: #777; text-decoration: none; }
-    #info-modal-content a:hover { color: #ccc; }
+    #info-modal-content .ctrl-key { color: var(--text-dim); text-align: right; white-space: nowrap; }
+    #info-modal-content .ctrl-desc { color: var(--text-muted); }
+    #info-modal-content a { color: var(--text-faint); text-decoration: none; }
+    #info-modal-content a:hover { color: var(--text-dim); }
     #info-modal-content kbd {
-      background: #333; border: 1px solid #555; padding: 0 4px;
-      font-family: inherit; font-size: 12px; color: #ccc;
+      background: var(--kbd-bg); border: 1px solid var(--border); padding: 0 4px;
+      font-family: inherit; font-size: 12px; color: var(--text-dim);
     }
     .touch-controls { display: none; margin-bottom: 14px; }
     .desktop-controls { display: block; margin-bottom: 14px; }
@@ -184,12 +227,45 @@
       .desktop-controls { display: none; }
     }
     #info-modal-close {
-      background: transparent; border: 1px solid #555;
-      color: #999; font-size: 13px; font-family: inherit;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-muted); font-size: 13px; font-family: inherit;
       padding: 4px 14px; cursor: pointer; margin-top: 10px;
       float: right;
     }
-    #info-modal-close:hover { border-color: #aaa; color: #ccc; }
+    #info-modal-close:hover { border-color: var(--border-hover); color: var(--text-dim); }
+
+    /* Settings modal */
+    #settings-modal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 999; align-items: center; justify-content: center;
+      background: var(--modal-overlay);
+    }
+    #settings-modal.visible { display: flex; }
+    #settings-modal-content {
+      background: var(--modal-bg); border: 1px solid var(--border);
+      padding: 18px 22px; max-width: 320px; width: 90%;
+      font-size: 13px; line-height: 1.6; color: var(--text-muted);
+    }
+    #settings-modal-content h3 {
+      font-size: 14px; color: var(--text-dim); margin-bottom: 12px; font-weight: normal;
+    }
+    .settings-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .settings-row label { color: var(--text-dim); }
+    .settings-row select {
+      background: var(--ui-bg); color: var(--text); border: 1px solid var(--border);
+      padding: 3px 6px; font-size: 13px; font-family: inherit; cursor: pointer;
+    }
+    .settings-row select:hover { border-color: var(--border-hover); }
+    #settings-modal-close {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-muted); font-size: 13px; font-family: inherit;
+      padding: 4px 14px; cursor: pointer; margin-top: 6px;
+      float: right;
+    }
+    #settings-modal-close:hover { border-color: var(--border-hover); color: var(--text-dim); }
 
     /* Mobile */
     @media (max-width: 600px) {
@@ -264,6 +340,20 @@
     </div>
   </div>
 
+  <div id="settings-modal">
+    <div id="settings-modal-content">
+      <h3>Settings</h3>
+      <div class="settings-row">
+        <label>Theme</label>
+        <select id="theme-select">
+          <option value="default">Default</option>
+          <option value="oled">OLED</option>
+        </select>
+      </div>
+      <button id="settings-modal-close">Close</button>
+    </div>
+  </div>
+
   <div id="ui-overlay">
     <div id="top-panel">
       <div id="status-line"></div>
@@ -279,6 +369,7 @@
     </div>
     <div id="tle-picker">
       <div id="tle-main-row">
+        <button id="settings-btn" title="Settings">&#9881;</button>
         <button id="info-btn">?</button>
         <select id="tle-select"></select>
       </div>
