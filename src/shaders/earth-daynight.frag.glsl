@@ -2,6 +2,7 @@ uniform sampler2D dayTexture;
 uniform sampler2D nightTexture;
 uniform vec3 sunDir;
 uniform float showNight;
+uniform float nightEmission;
 
 varying vec2 vUv;
 
@@ -19,5 +20,8 @@ void main() {
     vec3 normal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));
     float intensity = dot(normal, sunDir);
     float blend = smoothstep(-0.15, 0.15, intensity);
-    gl_FragColor = mix(night, day, blend);
+
+    // Boost night emission for bloom (HDR values > 1.0)
+    vec4 boostedNight = vec4(night.rgb * nightEmission, night.a);
+    gl_FragColor = mix(boostedNight, day, blend);
 }

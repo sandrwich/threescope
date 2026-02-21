@@ -12,6 +12,8 @@ import { SatelliteManager } from './scene/satellite-manager';
 import { OrbitRenderer } from './scene/orbit-renderer';
 import { FootprintRenderer } from './scene/footprint-renderer';
 import { MarkerManager } from './scene/marker-manager';
+import { PostProcessing } from './scene/post-processing';
+import { Atmosphere } from './scene/atmosphere';
 import { computeApsis } from './astro/apsis';
 import { getMapCoordinates } from './astro/coordinates';
 import { calculatePosition } from './astro/propagator';
@@ -44,6 +46,9 @@ export class App {
   private orbitRenderer!: OrbitRenderer;
   private footprintRenderer!: FootprintRenderer;
   private markerManager!: MarkerManager;
+  private postProcessing!: PostProcessing;
+  private atmosphere!: Atmosphere;
+  private bloomEnabled = true;
 
   private satellites: Satellite[] = [];
   private hoveredSat: Satellite | null = null;
@@ -117,12 +122,19 @@ export class App {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.autoClear = false;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     document.getElementById('ui-overlay')!.before(this.renderer.domElement);
 
     // Cameras
     this.camera3d = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10000);
     this.scene3d = new THREE.Scene();
     this.scene3d.background = new THREE.Color(this.cfg.bgColor);
+
+    // Post-processing (bloom + tone mapping)
+    this.postProcessing = new PostProcessing(this.renderer, this.scene3d, this.camera3d);
+    this.postProcessing.setPixelRatio(window.devicePixelRatio);
 
     const aspect = window.innerWidth / window.innerHeight;
     const halfH = MAP_H / 2;
@@ -187,6 +199,10 @@ export class App {
     // Earth
     this.earth = new Earth(dayTex, nightTex);
     this.scene3d.add(this.earth.mesh);
+
+    // Atmosphere (Fresnel rim glow, rendered before clouds)
+    this.atmosphere = new Atmosphere();
+    this.scene3d.add(this.atmosphere.mesh);
 
     // Clouds
     this.cloudLayer = new CloudLayer(cloudTex);
@@ -294,6 +310,15 @@ export class App {
 
   async loadTLEGroup(group: string, forceRetry = false) {
     this.currentGroup = group;
+    if (group === 'none') {
+      this.satellites = [];
+      this.selectedSat = null;
+      this.hoveredSat = null;
+      this.orbitRenderer.precomputeOrbits([], this.timeSystem.currentEpoch);
+      this.satStatusText = '0 sats';
+      this.hideActionLink();
+      return;
+    }
     try {
       const result = await fetchTLEData(group, (msg) => {
         this.satStatusText = msg;
@@ -462,6 +487,19 @@ export class App {
       this.cfg.showNightLights = (e.target as HTMLInputElement).checked;
     });
 
+    // RTX (bloom + atmosphere)
+    const rtxCb = document.getElementById('cb-rtx') as HTMLInputElement;
+    const savedRtx = localStorage.getItem('threescope_bloom') !== 'false';
+    rtxCb.checked = savedRtx;
+    this.bloomEnabled = savedRtx;
+    this.earth.setNightEmission(savedRtx ? 1.5 : 1.0);
+    this.sunScene.setBloomEnabled(savedRtx);
+    rtxCb.addEventListener('change', () => {
+      this.bloomEnabled = rtxCb.checked;
+      this.earth.setNightEmission(rtxCb.checked ? 1.5 : 1.0);
+      this.sunScene.setBloomEnabled(rtxCb.checked);
+      localStorage.setItem('threescope_bloom', String(rtxCb.checked));
+    });
 
     // Theme switcher
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
@@ -526,6 +564,7 @@ export class App {
       this.renderer.setSize(w, h);
       this.camera3d.aspect = w / h;
       this.camera3d.updateProjectionMatrix();
+      this.postProcessing.setSize(w, h);
       const aspect = w / h;
       const halfH = MAP_H / 2 / this.cam2dZoom;
       const halfW = halfH * aspect;
@@ -894,11 +933,16 @@ export class App {
       this.moonScene.update(epoch);
       this.sunScene.update(epoch);
 
+      // Atmosphere rim glow (uses sun direction in ECI space)
+      const sunEciAtmo = calculateSunPosition(epoch).normalize();
+      this.atmosphere.update(sunEciAtmo);
+      this.atmosphere.setVisible(this.bloomEnabled);
+
       this.satManager.update(
         this.satellites, epoch, this.camera3d.position,
         this.hoveredSat, this.selectedSat, this.unselectedFade, this.hideUnselected,
         { normal: this.cfg.satNormal, highlighted: this.cfg.satHighlighted, selected: this.cfg.satSelected },
-        this.timeSystem.timeMultiplier, dt, this.maxBatch
+        this.timeSystem.timeMultiplier, dt, this.maxBatch, this.bloomEnabled
       );
 
       this.orbitRenderer.update(
@@ -915,8 +959,14 @@ export class App {
 
       this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camDistance);
 
-      this.renderer.clear();
-      this.renderer.render(this.scene3d, this.camera3d);
+      if (this.bloomEnabled) {
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.postProcessing.render();
+      } else {
+        this.renderer.toneMapping = THREE.NoToneMapping;
+        this.renderer.clear();
+        this.renderer.render(this.scene3d, this.camera3d);
+      }
     } else {
       // Update 2D map
       this.update2DMap(epoch, gmstDeg);
@@ -924,8 +974,12 @@ export class App {
       this.orbitRenderer.clear();
       this.footprintRenderer.clear();
 
+      // Disable tone mapping for 2D direct render
+      const prevToneMapping = this.renderer.toneMapping;
+      this.renderer.toneMapping = THREE.NoToneMapping;
       this.renderer.clear();
       this.renderer.render(this.scene2d, this.camera2d);
+      this.renderer.toneMapping = prevToneMapping;
     }
 
     this.updateUI(activeSat, gmstDeg);

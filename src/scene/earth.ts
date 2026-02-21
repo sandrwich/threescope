@@ -19,6 +19,7 @@ export class Earth {
         nightTexture: { value: nightTex },
         sunDir: { value: new THREE.Vector3(1, 0, 0) },
         showNight: { value: 1.0 },
+        nightEmission: { value: 1.0 },
       },
       vertexShader: earthVertSrc,
       fragmentShader: earthFragSrc,
@@ -88,5 +89,9 @@ export class Earth {
     const earthRotRad = (gmstDeg + earthOffset) * DEG2RAD;
     const sunEcef = sunEci.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
     this.material.uniforms.sunDir.value.copy(sunEcef);
+  }
+
+  setNightEmission(value: number) {
+    this.material.uniforms.nightEmission.value = value;
   }
 }

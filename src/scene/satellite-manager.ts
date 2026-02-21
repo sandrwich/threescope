@@ -74,12 +74,14 @@ export class SatelliteManager {
     colorConfig: { normal: string; highlighted: string; selected: string },
     timeMultiplier = 1.0,
     dt = 1 / 60,
-    maxBatch = 16
+    maxBatch = 16,
+    bloomEnabled = false
   ) {
     const earthRadius = EARTH_RADIUS_KM / DRAW_SCALE;
     const cNormal = parseHexColor(colorConfig.normal);
     const cHighlight = parseHexColor(colorConfig.highlighted);
     const cSelected = parseHexColor(colorConfig.selected);
+    const bloomBoost = bloomEnabled ? 2.0 : 1.0;
 
     const count = Math.min(satellites.length, this.maxSats);
     const drawRange = this.points.geometry.drawRange;
@@ -115,14 +117,15 @@ export class SatelliteManager {
       this.posAttr.array[i * 3 + 1] = dy;
       this.posAttr.array[i * 3 + 2] = dz;
 
-      // Determine color
+      // Determine color (boost highlighted/selected for bloom)
       let c = cNormal;
-      if (sat === selectedSat) c = cSelected;
-      else if (sat === hoveredSat) c = cHighlight;
+      let boost = 1.0;
+      if (sat === selectedSat) { c = cSelected; boost = bloomBoost; }
+      else if (sat === hoveredSat) { c = cHighlight; boost = bloomBoost; }
 
-      this.colorAttr.array[i * 3] = c.r;
-      this.colorAttr.array[i * 3 + 1] = c.g;
-      this.colorAttr.array[i * 3 + 2] = c.b;
+      this.colorAttr.array[i * 3] = c.r * boost;
+      this.colorAttr.array[i * 3 + 1] = c.g * boost;
+      this.colorAttr.array[i * 3 + 2] = c.b * boost;
 
       // Alpha: handle occlusion + fade
       const isUnselected = selectedSat !== null && sat !== selectedSat;

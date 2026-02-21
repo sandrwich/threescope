@@ -36,6 +36,10 @@ export class SunScene {
     this.corona.position.copy(pos);
   }
 
+  setBloomEnabled(enabled: boolean) {
+    (this.disc.material as THREE.SpriteMaterial).color.setScalar(enabled ? 2.0 : 1.0);
+  }
+
   private makeDiscTexture(size: number): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
     canvas.width = size;

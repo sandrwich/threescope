@@ -7,7 +7,7 @@ export const defaultConfig: AppConfig = {
   showNightLights: true,
   bgColor: '#101010',
   orbitNormal: '#D3D3D326',
-  orbitHighlighted: '#FFFFFFFF',
+  orbitHighlighted: '#CCCCCCFF',
   satNormal: '#EEEEEE66',
   satHighlighted: '#FFFF00FF',
   satSelected: '#00FF00FF',

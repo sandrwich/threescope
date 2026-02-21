@@ -4,6 +4,7 @@ export interface TLESource {
 }
 
 export const TLE_SOURCES: TLESource[] = [
+  { name: 'None (Globe only)', group: 'none' },
   { name: "Last 30 Days' Launches", group: 'last-30-days' },
   { name: 'Space Stations', group: 'stations' },
   { name: '100 Brightest', group: 'visual' },
