@@ -4,16 +4,38 @@ import { getCelestrakUrl } from './tle-sources';
 
 const CACHE_KEY_PREFIX = 'tlescope_tle_';
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+const RATELIMIT_KEY = 'tlescope_ratelimited';
+const RATELIMIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
 export interface FetchResult {
   satellites: Satellite[];
   source: 'cache' | 'network' | 'stale-cache';
   cacheAge?: number; // ms since cache was saved
+  rateLimited?: boolean;
+}
+
+export function isRateLimited(): boolean {
+  try {
+    const ts = localStorage.getItem(RATELIMIT_KEY);
+    if (!ts) return false;
+    return Date.now() - Number(ts) < RATELIMIT_COOLDOWN_MS;
+  } catch {
+    return false;
+  }
+}
+
+export function clearRateLimit() {
+  try { localStorage.removeItem(RATELIMIT_KEY); } catch {}
+}
+
+function setRateLimited() {
+  try { localStorage.setItem(RATELIMIT_KEY, String(Date.now())); } catch {}
 }
 
 export async function fetchTLEData(
   group: string,
-  onStatus?: (msg: string) => void
+  onStatus?: (msg: string) => void,
+  forceRetry = false,
 ): Promise<FetchResult> {
   // Try localStorage cache first
   const cacheAge = getCacheAge(group);
@@ -23,6 +45,17 @@ export async function fetchTLEData(
     return { satellites: parseTLEText(cached), source: 'cache', cacheAge };
   }
 
+  // Skip network if rate limited (unless manual retry)
+  if (!forceRetry && isRateLimited()) {
+    const stale = loadFromCache(group, true);
+    if (stale) {
+      const age = getCacheAge(group);
+      onStatus?.('Rate limited, using cached data');
+      return { satellites: parseTLEText(stale), source: 'stale-cache', cacheAge: age ?? undefined, rateLimited: true };
+    }
+    throw Object.assign(new Error('Rate limited by CelesTrak'), { rateLimited: true });
+  }
+
   onStatus?.('Fetching from CelesTrak...');
   const url = getCelestrakUrl(group);
   try {
@@ -30,8 +63,13 @@ export async function fetchTLEData(
     const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
     const resp = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
+    if (resp.status === 403) {
+      setRateLimited();
+      throw Object.assign(new Error('HTTP 403 — rate limited'), { rateLimited: true });
+    }
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const text = await resp.text();
+    clearRateLimit();
     saveToCache(group, text);
     return { satellites: parseTLEText(text), source: 'network' };
   } catch (e) {
@@ -41,10 +79,13 @@ export async function fetchTLEData(
       const age = getCacheAge(group);
       onStatus?.('CelesTrak unavailable, using cached data');
       console.warn(`CelesTrak fetch failed, using stale cache for "${group}"`);
-      return { satellites: parseTLEText(stale), source: 'stale-cache', cacheAge: age ?? undefined };
+      return {
+        satellites: parseTLEText(stale), source: 'stale-cache', cacheAge: age ?? undefined,
+        rateLimited: (e as any)?.rateLimited === true,
+      };
     }
     onStatus?.('CelesTrak unavailable, no cached data');
-    throw new Error(`Failed to fetch TLE data: ${e}`);
+    throw e;
   }
 }
 

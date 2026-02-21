@@ -16,7 +16,7 @@ import { getMapCoordinates } from './astro/coordinates';
 import { calculatePosition } from './astro/propagator';
 import { epochToGmst } from './astro/epoch';
 import { calculateSunPosition } from './astro/sun';
-import { fetchTLEData, parseTLEText, type FetchResult } from './data/tle-loader';
+import { fetchTLEData, parseTLEText, clearRateLimit, type FetchResult } from './data/tle-loader';
 import { TLE_SOURCES, DEFAULT_GROUP } from './data/tle-sources';
 
 function formatAge(ms: number): string {
@@ -281,12 +281,15 @@ export class App {
     this.scene2d.add(this.hlTrack2d);
   }
 
-  async loadTLEGroup(group: string) {
+  private currentGroup = DEFAULT_GROUP;
+
+  async loadTLEGroup(group: string, forceRetry = false) {
+    this.currentGroup = group;
     const statusEl = document.getElementById('sat-count-display')!;
     try {
       const result = await fetchTLEData(group, (msg) => {
         statusEl.textContent = msg;
-      });
+      }, forceRetry);
       this.satellites = result.satellites;
       this.selectedSat = null;
       this.hoveredSat = null;
@@ -299,10 +302,36 @@ export class App {
       } else if (result.source === 'stale-cache' && result.cacheAge != null) {
         info += ` (offline, ${formatAge(result.cacheAge)} old)`;
       }
+      if (result.rateLimited) {
+        info += ' — rate limited';
+      }
       statusEl.textContent = info;
+      this.showRetryLink(result.rateLimited === true);
     } catch (e) {
       console.error('Failed to load TLE data:', e);
-      statusEl.textContent = 'Load failed';
+      const rl = (e as any)?.rateLimited === true;
+      statusEl.textContent = rl ? 'Rate limited' : 'Load failed';
+      this.showRetryLink(rl);
+    }
+  }
+
+  private showRetryLink(show: boolean) {
+    let link = document.getElementById('retry-link');
+    if (show) {
+      if (!link) {
+        link = document.createElement('div');
+        link.id = 'retry-link';
+        link.style.cssText = 'color:#888;font-size:13px;cursor:pointer;text-decoration:underline;margin-top:2px;';
+        link.textContent = 'Retry';
+        link.addEventListener('click', () => {
+          clearRateLimit();
+          this.loadTLEGroup(this.currentGroup, true);
+        });
+        document.getElementById('stats-panel')!.appendChild(link);
+      }
+      link.style.display = 'block';
+    } else if (link) {
+      link.style.display = 'none';
     }
   }
 
