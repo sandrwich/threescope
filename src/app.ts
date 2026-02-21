@@ -687,7 +687,17 @@ export class App {
       this.fpsDisplay = Math.round(this.fpsFrames / this.fpsTime);
       this.fpsFrames = 0;
       this.fpsTime = 0;
-      document.getElementById('fps-display')!.textContent = `${this.fpsDisplay} FPS`;
+      const fpsEl = document.getElementById('fps-display')!;
+      fpsEl.textContent = `${this.fpsDisplay} FPS`;
+      if (this.fpsDisplay >= 30) {
+        fpsEl.style.color = '#00ff00';
+      } else {
+        // Lerp green→red as FPS goes from 30→0
+        const t = Math.max(0, this.fpsDisplay / 30);
+        const r = Math.round(255);
+        const g = Math.round(255 * t);
+        fpsEl.style.color = `rgb(${r},${g},0)`;
+      }
     }
 
     const epoch = this.timeSystem.currentEpoch;
