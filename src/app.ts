@@ -477,14 +477,31 @@ export class App {
     urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') urlLoad(); });
 
     // Checkboxes
-    document.getElementById('cb-hide-unselected')!.addEventListener('change', (e) => {
-      this.hideUnselected = (e.target as HTMLInputElement).checked;
+    const spotlightCb = document.getElementById('cb-hide-unselected') as HTMLInputElement;
+    const savedSpotlight = localStorage.getItem('threescope_spotlight') === 'true';
+    spotlightCb.checked = savedSpotlight;
+    this.hideUnselected = savedSpotlight;
+    spotlightCb.addEventListener('change', () => {
+      this.hideUnselected = spotlightCb.checked;
+      localStorage.setItem('threescope_spotlight', String(spotlightCb.checked));
     });
-    document.getElementById('cb-clouds')!.addEventListener('change', (e) => {
-      this.cfg.showClouds = (e.target as HTMLInputElement).checked;
+
+    const cloudsCb = document.getElementById('cb-clouds') as HTMLInputElement;
+    const savedClouds = localStorage.getItem('threescope_clouds') === 'true';
+    cloudsCb.checked = savedClouds;
+    this.cfg.showClouds = savedClouds;
+    cloudsCb.addEventListener('change', () => {
+      this.cfg.showClouds = cloudsCb.checked;
+      localStorage.setItem('threescope_clouds', String(cloudsCb.checked));
     });
-    document.getElementById('cb-night-lights')!.addEventListener('change', (e) => {
-      this.cfg.showNightLights = (e.target as HTMLInputElement).checked;
+
+    const nightCb = document.getElementById('cb-night-lights') as HTMLInputElement;
+    const savedNight = localStorage.getItem('threescope_night') !== 'false';
+    nightCb.checked = savedNight;
+    this.cfg.showNightLights = savedNight;
+    nightCb.addEventListener('change', () => {
+      this.cfg.showNightLights = nightCb.checked;
+      localStorage.setItem('threescope_night', String(nightCb.checked));
     });
 
     // RTX (bloom + atmosphere)
