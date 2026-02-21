@@ -1,7 +1,6 @@
 import type { AppConfig } from './types';
 
 export const defaultConfig: AppConfig = {
-  uiScale: 1.0,
   earthRotationOffset: 0.0,
   orbitsToDraw: 3.0,
   showClouds: false,

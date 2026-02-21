@@ -24,7 +24,6 @@ export interface Marker {
 }
 
 export interface AppConfig {
-  uiScale: number;
   earthRotationOffset: number;
   orbitsToDraw: number;
   showClouds: boolean;

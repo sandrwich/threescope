@@ -282,35 +282,32 @@ export class App {
   }
 
   private currentGroup = DEFAULT_GROUP;
+  private satStatusText = '';
 
   async loadTLEGroup(group: string, forceRetry = false) {
     this.currentGroup = group;
-    const statusEl = document.getElementById('sat-count-display')!;
     try {
       const result = await fetchTLEData(group, (msg) => {
-        statusEl.textContent = msg;
+        this.satStatusText = msg;
       }, forceRetry);
       this.satellites = result.satellites;
       this.selectedSat = null;
       this.hoveredSat = null;
       this.orbitRenderer.precomputeOrbits(this.satellites);
 
-      // Show source info
-      let info = `${this.satellites.length} Sats`;
+      let info = `${this.satellites.length} sats`;
       if (result.source === 'cache' && result.cacheAge != null) {
-        info += ` (cached ${formatAge(result.cacheAge)})`;
+        info += ` (${formatAge(result.cacheAge)})`;
       } else if (result.source === 'stale-cache' && result.cacheAge != null) {
-        info += ` (offline, ${formatAge(result.cacheAge)} old)`;
+        info += ` (offline, ${formatAge(result.cacheAge)})`;
       }
-      if (result.rateLimited) {
-        info += ' — rate limited';
-      }
-      statusEl.textContent = info;
+      if (result.rateLimited) info += ' — rate limited';
+      this.satStatusText = info;
       this.showRetryLink(result.rateLimited === true);
     } catch (e) {
       console.error('Failed to load TLE data:', e);
       const rl = (e as any)?.rateLimited === true;
-      statusEl.textContent = rl ? 'Rate limited' : 'Load failed';
+      this.satStatusText = rl ? 'Rate limited' : 'Load failed';
       this.showRetryLink(rl);
     }
   }
@@ -571,13 +568,6 @@ export class App {
         case 'M':
           this.viewMode = this.viewMode === ViewMode.VIEW_3D ? ViewMode.VIEW_2D : ViewMode.VIEW_3D;
           break;
-        case '=':
-        case '+':
-          this.cfg.uiScale = Math.min(4.0, this.cfg.uiScale + 0.1);
-          break;
-        case '-':
-          this.cfg.uiScale = Math.max(0.5, this.cfg.uiScale - 0.1);
-          break;
       }
     });
 
@@ -721,12 +711,10 @@ export class App {
       if (this.fpsDisplay >= 30) {
         fpsEl.style.color = '#00ff00';
       } else {
-        // Lerp green→red as FPS goes from 30→0
         const t = Math.max(0, this.fpsDisplay / 30);
-        const r = Math.round(255);
-        const g = Math.round(255 * t);
-        fpsEl.style.color = `rgb(${r},${g},0)`;
+        fpsEl.style.color = `rgb(255,${Math.round(255 * t)},0)`;
       }
+      document.getElementById('sat-count-display')!.textContent = this.satStatusText;
     }
 
     const epoch = this.timeSystem.currentEpoch;
@@ -847,7 +835,7 @@ export class App {
       const drawPos = sat.currentPos.clone().divideScalar(DRAW_SCALE);
       const distToCam = this.camera3d.position.distanceTo(drawPos);
       const touchScale = this.touchCount > 0 || ('ontouchstart' in window) ? 3.0 : 1.0;
-      const hitRadius = 0.015 * distToCam * this.cfg.uiScale * touchScale;
+      const hitRadius = 0.015 * distToCam * 1.0 * touchScale;
 
       const sphere = new THREE.Sphere(drawPos, hitRadius);
       if (raycaster.ray.intersectsSphere(sphere)) {
@@ -867,7 +855,7 @@ export class App {
     const mouseWorldY = this.camera2d.top + (this.mousePos.y / window.innerHeight) * (this.camera2d.bottom - this.camera2d.top);
 
     const touchScale = this.touchCount > 0 || ('ontouchstart' in window) ? 3.0 : 1.0;
-    const hitRadius = 12.0 * this.cfg.uiScale * touchScale / this.cam2dZoom;
+    const hitRadius = 12.0 * 1.0 * touchScale / this.cam2dZoom;
     let closestDist = 9999;
 
     for (const sat of this.satellites) {
@@ -962,47 +950,36 @@ export class App {
   }
 
   private updateUI(activeSat: Satellite | null, gmstDeg: number) {
-    // Controls text (top-left)
-    const ctrlPanel = document.getElementById('controls-panel')!;
-    const isTouch = 'ontouchstart' in window;
-    const speedStr = `Speed: ${this.timeSystem.timeMultiplier.toFixed(1)}x${this.timeSystem.paused ? ' [PAUSED]' : ''}`;
+    // When a sat is selected, only show info card for it (not hover)
+    const cardSat = this.selectedSat ? this.selectedSat : activeSat;
 
-    if (isTouch) {
-      ctrlPanel.innerHTML = `
-        <div class="time-line">${this.timeSystem.getDatetimeStr()} | ${speedStr}</div>
-      `;
-    } else {
-      const viewText = this.viewMode === ViewMode.VIEW_2D
-        ? "Controls: RMB to pan, Scroll to zoom. 'M' switches to 3D."
-        : "Controls: RMB to orbit, Shift+RMB to pan. 'M' switches to 2D.";
-      ctrlPanel.innerHTML = `
-        <div>${viewText}</div>
-        <div>Time: '.' (2x), ',' (0.5x), '/' (1x), Shift+'/' (Reset)</div>
-        <div>UI Scale: '-' / '+' (${this.cfg.uiScale.toFixed(1)}x)</div>
-        <div class="time-line">${this.timeSystem.getDatetimeStr()} | ${speedStr}</div>
-      `;
-    }
+    // Status line
+    const statusEl = document.getElementById('status-line')!;
+    const speedVal = this.timeSystem.timeMultiplier;
+    const speedStr = speedVal === 1.0 ? '1x' : `${speedVal.toFixed(speedVal >= 10 ? 0 : 1)}x`;
+    const pauseStr = this.timeSystem.paused ? ' <span style="color:#ff6666">PAUSED</span>' : '';
+    statusEl.innerHTML = `${this.timeSystem.getDatetimeStr()} <span style="color:#555">|</span> Speed: ${speedStr}${pauseStr}`;
 
     // Satellite info popup
     const infoEl = document.getElementById('sat-info')!;
     const periLabel = document.getElementById('peri-label')!;
     const apoLabel = document.getElementById('apo-label')!;
 
-    if (activeSat) {
-      const rKm = activeSat.currentPos.length();
+    if (cardSat) {
+      const rKm = cardSat.currentPos.length();
       const alt = rKm - EARTH_RADIUS_KM;
-      const speed = Math.sqrt(MU * (2.0 / rKm - 1.0 / activeSat.semiMajorAxis));
-      const latDeg = Math.asin(activeSat.currentPos.y / rKm) * RAD2DEG;
-      let lonDeg = (Math.atan2(-activeSat.currentPos.z, activeSat.currentPos.x) - (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD) * RAD2DEG;
+      const speed = Math.sqrt(MU * (2.0 / rKm - 1.0 / cardSat.semiMajorAxis));
+      const latDeg = Math.asin(cardSat.currentPos.y / rKm) * RAD2DEG;
+      let lonDeg = (Math.atan2(-cardSat.currentPos.z, cardSat.currentPos.x) - (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD) * RAD2DEG;
       while (lonDeg > 180) lonDeg -= 360;
       while (lonDeg < -180) lonDeg += 360;
 
-      const nameColor = activeSat === this.hoveredSat ? '#ffff00' : '#00ff00';
-      document.getElementById('sat-info-name')!.innerHTML = `<span style="color:${nameColor}">${activeSat.name}</span>`;
+      const nameColor = cardSat === this.hoveredSat ? '#ffff00' : '#00ff00';
+      document.getElementById('sat-info-name')!.innerHTML = `<span style="color:${nameColor}">${cardSat.name}</span>`;
       document.getElementById('sat-info-detail')!.innerHTML =
-        `Inc: ${(activeSat.inclination * RAD2DEG).toFixed(2)} deg<br>` +
-        `RAAN: ${(activeSat.raan * RAD2DEG).toFixed(2)} deg<br>` +
-        `Ecc: ${activeSat.eccentricity.toFixed(5)}<br>` +
+        `Inc: ${(cardSat.inclination * RAD2DEG).toFixed(2)} deg<br>` +
+        `RAAN: ${(cardSat.raan * RAD2DEG).toFixed(2)} deg<br>` +
+        `Ecc: ${cardSat.eccentricity.toFixed(5)}<br>` +
         `Alt: ${alt.toFixed(2)} km<br>` +
         `Spd: ${speed.toFixed(2)} km/s<br>` +
         `Lat: ${latDeg.toFixed(2)} deg<br>` +
@@ -1011,14 +988,14 @@ export class App {
       // Position the popup near the satellite
       let screenPos: THREE.Vector2;
       if (this.viewMode === ViewMode.VIEW_3D) {
-        const drawPos = activeSat.currentPos.clone().divideScalar(DRAW_SCALE);
+        const drawPos = cardSat.currentPos.clone().divideScalar(DRAW_SCALE);
         const projected = drawPos.project(this.camera3d);
         screenPos = new THREE.Vector2(
           (projected.x * 0.5 + 0.5) * window.innerWidth,
           (-projected.y * 0.5 + 0.5) * window.innerHeight
         );
       } else {
-        const mc = getMapCoordinates(activeSat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
+        const mc = getMapCoordinates(cardSat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
         // Convert map world coords to screen
         const nx = (mc.x - this.camera2d.left) / (this.camera2d.right - this.camera2d.left);
         const ny = (mc.y - this.camera2d.top) / (this.camera2d.bottom - this.camera2d.top);
@@ -1041,7 +1018,7 @@ export class App {
       infoEl.style.top = `${boxY}px`;
 
       // Apsis labels
-      const apsis = computeApsis(activeSat, this.timeSystem.currentEpoch);
+      const apsis = computeApsis(cardSat, this.timeSystem.currentEpoch);
       const periR = apsis.periPos.length();
       const apoR = apsis.apoPos.length();
 

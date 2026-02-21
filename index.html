@@ -22,6 +22,7 @@
       background: #101010;
       font-family: 'Overpass Mono', 'Courier New', monospace;
       color: #fff;
+      overscroll-behavior: none; touch-action: none;
     }
     canvas { display: block; }
 
@@ -37,126 +38,112 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       background: #101010; z-index: 1000;
     }
-    #loading-screen .bar-outer {
-      width: 400px; height: 30px; border: 2px solid #fff;
-    }
+    #loading-screen .bar-outer { width: 400px; height: 30px; border: 2px solid #fff; }
     #loading-screen .bar-inner {
       height: 100%; width: 0%; background: #d3d3d3; transition: width 0.3s;
       margin: 4px; height: calc(100% - 8px);
     }
-    #loading-screen .msg {
-      margin-bottom: 16px; font-size: 20px; color: #fff;
-    }
+    #loading-screen .msg { margin-bottom: 16px; font-size: 18px; color: #fff; }
 
-    /* Top-left controls text */
-    #controls-panel {
-      position: absolute; top: 10px; left: 10px;
-      font-size: 20px; line-height: 24px; color: #d3d3d3;
-      letter-spacing: 0.5px;
-    }
-    #controls-panel .time-line { color: #fff; }
-
-    /* Bottom-left: attribution */
-    #bottom-panel {
-      position: absolute; bottom: 10px; left: 10px;
-      font-size: 14px; line-height: 1.5; color: #666;
-    }
-
-    /* Checkboxes — matching raygui box style */
-    #checkbox-panel {
-      position: absolute; top: 114px; left: 10px;
+    /* Top-left panel: status line + toggles */
+    #top-panel {
+      position: absolute; top: 8px; left: 10px;
       display: flex; flex-direction: column; gap: 4px;
     }
-    #checkbox-panel label {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 16px; cursor: pointer; color: #fff;
-      line-height: 24px;
+    #status-line {
+      font-size: 13px; color: #999; white-space: nowrap;
     }
-    /* Hide native checkbox */
-    #checkbox-panel input[type="checkbox"] {
+
+    /* Stats (top-right) */
+    #stats-panel {
+      position: absolute; top: 8px; right: 10px;
+      text-align: right;
+    }
+    #stats-panel .fps { color: #00ff00; font-size: 14px; font-weight: bold; }
+    #stats-panel .sat-count { color: #888; font-size: 12px; margin-top: 1px; }
+
+    #toggle-row {
+      display: flex; align-items: center; gap: 10px;
+    }
+    #toggle-row label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; cursor: pointer; color: #ccc;
+      line-height: 20px;
+    }
+    #toggle-row label:hover { color: #fff; }
+    #toggle-row input[type="checkbox"] {
       appearance: none; -webkit-appearance: none;
-      width: 20px; height: 20px;
+      width: 16px; height: 16px;
       border: 2px solid #aaa; background: transparent;
       cursor: pointer; position: relative; flex-shrink: 0;
     }
-    #checkbox-panel input[type="checkbox"]:hover {
-      border-color: #fff;
-    }
-    /* Checked: solid inner square (raygui style) */
-    #checkbox-panel input[type="checkbox"]:checked::after {
+    #toggle-row input[type="checkbox"]:hover { border-color: #fff; }
+    #toggle-row input[type="checkbox"]:checked::after {
       content: '';
       position: absolute;
       top: 2px; left: 2px; right: 2px; bottom: 2px;
       background: #fff;
     }
 
-    /* TLE Picker */
+    /* Help button */
+    #info-btn {
+      background: #1a1a1a; border: 1px solid #555;
+      color: #777; font-size: 13px; font-family: inherit;
+      padding: 3px 8px; cursor: pointer;
+    }
+    #info-btn:hover { border-color: #aaa; color: #ccc; }
+
+    /* TLE Picker (bottom-right) */
     #tle-picker {
       position: absolute; bottom: 10px; right: 10px;
       display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
     }
+    #tle-main-row {
+      display: flex; align-items: center; gap: 6px;
+    }
     #tle-picker select, #tle-picker button, #tle-picker input[type="text"] {
-      background: #1a1a1a; color: #fff; border: 1px solid #666;
-      padding: 4px 8px; font-size: 16px; font-family: inherit;
+      background: #1a1a1a; color: #fff; border: 1px solid #555;
+      padding: 3px 6px; font-size: 13px; font-family: inherit;
       cursor: pointer;
     }
     #tle-picker select:hover, #tle-picker button:hover, #tle-picker input[type="text"]:hover {
       border-color: #aaa;
     }
-    #tle-custom-row {
-      display: none; gap: 4px; align-items: center;
-    }
+    #tle-custom-row { display: none; gap: 4px; align-items: center; }
     #tle-custom-row.visible { display: flex; }
-    #tle-url-input {
-      width: 260px; cursor: text;
-    }
-    #tle-url-input::placeholder { color: #555; }
+    #tle-url-input { width: 220px; cursor: text; }
+    #tle-url-input::placeholder { color: #444; }
     #tle-file-input {
       position: absolute; width: 0; height: 0; overflow: hidden;
       opacity: 0; pointer-events: none;
     }
 
-    /* Stats (top-right) */
-    #stats-panel {
-      position: absolute; top: 10px; right: 10px;
-      text-align: right;
-    }
-    #stats-panel .fps { color: #00ff00; font-size: 20px; font-weight: bold; }
-    #stats-panel .sat-count { color: #d3d3d3; font-size: 16px; margin-top: 2px; }
-
     /* Satellite info tooltip */
     #sat-info {
       position: absolute; display: none;
-      background: rgba(0,0,0,0.8); padding: 10px 14px;
-      font-size: 18px; line-height: 1.4;
-      min-width: 260px; pointer-events: none;
+      background: rgba(0,0,0,0.85); padding: 8px 12px;
+      font-size: 13px; line-height: 1.4;
+      min-width: 200px; pointer-events: none;
+      border-left: 2px solid #555; z-index: 10;
     }
-    #sat-info .sat-name { font-size: 20px; margin-bottom: 6px; }
-    #sat-info .sat-detail { color: #fff; }
+    #sat-info .sat-name { font-size: 14px; margin-bottom: 4px; }
+    #sat-info .sat-detail { color: #ccc; }
 
     /* Apsis labels */
     .apsis-label {
-      position: absolute; display: none; font-size: 16px;
+      position: absolute; display: none; font-size: 12px;
       pointer-events: none; white-space: nowrap;
     }
     .apsis-label.peri { color: #87ceeb; }
     .apsis-label.apo { color: #ffa500; }
 
-    #bottom-panel a {
-      color: #888; text-decoration: none; pointer-events: auto;
+    /* Bottom-left: attribution */
+    #bottom-panel {
+      position: absolute; bottom: 8px; left: 10px;
+      font-size: 11px; line-height: 1.4; color: #555;
     }
-    #bottom-panel a:hover { color: #ccc; }
-
-    /* Info button (mobile only) */
-    #info-btn {
-      display: none;
-      position: absolute; bottom: 10px; left: 10px;
-      width: 32px; height: 32px;
-      background: rgba(255,255,255,0.1); border: 1px solid #666;
-      color: #ccc; font-size: 18px; font-family: inherit;
-      cursor: pointer; line-height: 30px; text-align: center;
-    }
-    #info-btn:hover { border-color: #aaa; color: #fff; }
+    #bottom-panel a { color: #666; text-decoration: none; pointer-events: auto; }
+    #bottom-panel a:hover { color: #aaa; }
 
     /* Info modal */
     #info-modal {
@@ -166,46 +153,64 @@
     }
     #info-modal.visible { display: flex; }
     #info-modal-content {
-      background: #1a1a1a; border: 1px solid #666;
-      padding: 20px 24px; max-width: 340px; width: 90%;
-      font-size: 14px; line-height: 1.6; color: #ccc;
+      background: #1a1a1a; border: 1px solid #555;
+      padding: 18px 22px; max-width: 420px; width: 90%;
+      font-size: 13px; line-height: 1.6; color: #999;
     }
     #info-modal-content h3 {
-      font-size: 16px; color: #fff; margin-bottom: 10px; font-weight: normal;
+      font-size: 14px; color: #ccc; margin-bottom: 8px; font-weight: normal;
+    }
+    #info-modal-content h4 {
+      font-size: 12px; color: #666; margin-bottom: 4px; font-weight: normal;
+      text-transform: uppercase; letter-spacing: 0.5px;
     }
     #info-modal-content .section { margin-bottom: 14px; }
     #info-modal-content .section:last-child { margin-bottom: 0; }
-    #info-modal-content a { color: #888; text-decoration: none; }
-    #info-modal-content a:hover { color: #ccc; }
-    #info-modal-close {
-      background: transparent; border: 1px solid #666;
-      color: #ccc; font-size: 14px; font-family: inherit;
-      padding: 6px 16px; cursor: pointer; margin-top: 12px;
+    #info-modal-content .ctrl-table {
+      display: grid; grid-template-columns: auto 1fr; gap: 2px 12px;
     }
-    #info-modal-close:hover { border-color: #aaa; color: #fff; }
+    #info-modal-content .ctrl-key { color: #ccc; text-align: right; white-space: nowrap; }
+    #info-modal-content .ctrl-desc { color: #888; }
+    #info-modal-content a { color: #777; text-decoration: none; }
+    #info-modal-content a:hover { color: #ccc; }
+    #info-modal-content kbd {
+      background: #333; border: 1px solid #555; padding: 0 4px;
+      font-family: inherit; font-size: 12px; color: #ccc;
+    }
+    .touch-controls { display: none; margin-bottom: 14px; }
+    .desktop-controls { display: block; margin-bottom: 14px; }
+    @media (pointer: coarse) {
+      .touch-controls { display: block; }
+      .desktop-controls { display: none; }
+    }
+    #info-modal-close {
+      background: transparent; border: 1px solid #555;
+      color: #999; font-size: 13px; font-family: inherit;
+      padding: 4px 14px; cursor: pointer; margin-top: 10px;
+      float: right;
+    }
+    #info-modal-close:hover { border-color: #aaa; color: #ccc; }
 
-    /* Prevent overscroll/pull-to-refresh on mobile */
-    html, body { overscroll-behavior: none; touch-action: none; }
-
-    /* Mobile responsive */
+    /* Mobile */
     @media (max-width: 600px) {
-      #info-btn { display: block; }
-      #controls-panel { display: none; }
-      #checkbox-panel { top: 10px; left: 10px; }
-      #checkbox-panel label { font-size: 13px; line-height: 20px; }
-      #checkbox-panel input[type="checkbox"] { width: 24px; height: 24px; min-height: 24px; }
-      #stats-panel .fps { font-size: 16px; }
-      #stats-panel .sat-count { font-size: 13px; }
-      #sat-info { font-size: 13px; min-width: 180px; padding: 8px 10px; }
-      #sat-info .sat-name { font-size: 15px; }
+      #status-line { font-size: 11px; }
+      #toggle-row label { font-size: 12px; }
+      #toggle-row input[type="checkbox"] { width: 22px; height: 22px; }
+      #toggle-row { gap: 10px; }
+      #sat-info { font-size: 12px; min-width: 170px; }
+      #sat-info .sat-name { font-size: 13px; }
       #tle-picker select, #tle-picker button, #tle-picker input[type="text"] {
-        font-size: 14px; padding: 6px 8px;
+        font-size: 13px; padding: 5px 8px;
       }
-      #tle-url-input { width: 140px; }
+      #tle-url-input { width: 130px; }
       #tle-custom-row { flex-wrap: wrap; justify-content: flex-end; }
       #bottom-panel { display: none; }
-      #loading-screen .bar-outer { width: 80%; max-width: 300px; height: 24px; }
-      #loading-screen .msg { font-size: 16px; }
+      #info-btn {
+        position: fixed; bottom: 10px; left: 10px;
+        padding: 5px 10px; font-size: 15px;
+      }
+      #loading-screen .bar-outer { width: 80%; max-width: 280px; height: 22px; }
+      #loading-screen .msg { font-size: 15px; }
     }
   </style>
 </head>
@@ -217,12 +222,36 @@
 
   <div id="info-modal">
     <div id="info-modal-content">
-      <div class="section">
-        <h3>Controls</h3>
-        Drag to orbit / pan<br>
-        Pinch to zoom<br>
-        Tap satellite to select<br>
-        Double-tap to lock view
+      <div class="touch-controls">
+        <div class="section">
+          <h3>Touch</h3>
+          <div class="ctrl-table">
+            <span class="ctrl-key">1 finger drag</span><span class="ctrl-desc">Orbit camera</span>
+            <span class="ctrl-key">2 finger drag</span><span class="ctrl-desc">Pan camera</span>
+            <span class="ctrl-key">Pinch</span><span class="ctrl-desc">Zoom in / out</span>
+            <span class="ctrl-key">Tap satellite</span><span class="ctrl-desc">Select / deselect</span>
+          </div>
+        </div>
+      </div>
+      <div class="desktop-controls">
+        <div class="section">
+          <h3>Mouse</h3>
+          <div class="ctrl-table">
+            <span class="ctrl-key"><kbd>RMB</kbd> drag</span><span class="ctrl-desc">Orbit camera</span>
+            <span class="ctrl-key"><kbd>Shift</kbd>+<kbd>RMB</kbd> drag</span><span class="ctrl-desc">Pan camera</span>
+            <span class="ctrl-key"><kbd>Scroll</kbd></span><span class="ctrl-desc">Zoom in / out</span>
+            <span class="ctrl-key">Click satellite</span><span class="ctrl-desc">Select / deselect</span>
+          </div>
+        </div>
+        <div class="section">
+          <h3>Keyboard</h3>
+          <div class="ctrl-table">
+            <span class="ctrl-key"><kbd>Space</kbd></span><span class="ctrl-desc">Pause / resume</span>
+            <span class="ctrl-key"><kbd>.</kbd> <kbd>,</kbd></span><span class="ctrl-desc">Speed up / slow down</span>
+            <span class="ctrl-key"><kbd>/</kbd></span><span class="ctrl-desc">Reset speed</span>
+            <span class="ctrl-key"><kbd>M</kbd></span><span class="ctrl-desc">Toggle 2D / 3D map</span>
+          </div>
+        </div>
       </div>
       <div class="section">
         <h3>About</h3>
@@ -236,25 +265,29 @@
   </div>
 
   <div id="ui-overlay">
-    <button id="info-btn">?</button>
-    <div id="controls-panel"></div>
-    <div id="checkbox-panel">
-      <label><input type="checkbox" id="cb-hide-unselected"> Hide Unselected</label>
-      <label><input type="checkbox" id="cb-clouds"> Show Clouds</label>
-      <label><input type="checkbox" id="cb-night-lights" checked> Night Lights</label>
+    <div id="top-panel">
+      <div id="status-line"></div>
+      <div id="toggle-row">
+        <label title="Hide all satellites except selected"><input type="checkbox" id="cb-hide-unselected"> Spotlight</label>
+        <label title="Show cloud layer on Earth"><input type="checkbox" id="cb-clouds"> Clouds</label>
+        <label title="Show city lights on night side"><input type="checkbox" id="cb-night-lights" checked> Night</label>
+      </div>
+    </div>
+    <div id="stats-panel">
+      <div class="fps" id="fps-display">-- FPS</div>
+      <div class="sat-count" id="sat-count-display"></div>
     </div>
     <div id="tle-picker">
-      <select id="tle-select"></select>
+      <div id="tle-main-row">
+        <button id="info-btn">?</button>
+        <select id="tle-select"></select>
+      </div>
       <div id="tle-custom-row">
         <input type="text" id="tle-url-input" placeholder="TLE URL...">
         <button id="tle-url-btn">Load</button>
         <button id="tle-file-btn">File</button>
         <input type="file" id="tle-file-input" accept=".tle,.txt,.3le">
       </div>
-    </div>
-    <div id="stats-panel">
-      <div class="fps" id="fps-display">-- FPS</div>
-      <div class="sat-count" id="sat-count-display">0 Sats</div>
     </div>
     <div id="sat-info">
       <div class="sat-name" id="sat-info-name"></div>
