@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const host = process.env.TAURI_DEV_HOST;
@@ -12,6 +13,7 @@ export default defineConfig({
     watch: { ignored: ['**/src-tauri/**'] },
   },
   plugins: [
+    svelte(),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {

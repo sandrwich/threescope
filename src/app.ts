@@ -25,6 +25,9 @@ import { epochToGmst } from './astro/epoch';
 import { calculateSunPosition } from './astro/sun';
 import { fetchTLEData, parseTLEText, clearRateLimit, type FetchResult } from './data/tle-loader';
 import { TLE_SOURCES, DEFAULT_GROUP } from './data/tle-sources';
+import { timeStore } from './stores/time.svelte';
+import { uiStore } from './stores/ui.svelte';
+import { settingsStore } from './stores/settings.svelte';
 
 function formatAge(ms: number): string {
   const mins = Math.floor(ms / 60000);
@@ -145,7 +148,7 @@ export class App {
 
     this.setLoading(0.1, 'Creating renderer...');
 
-    // Renderer
+    // Renderer — insert canvas before the Svelte UI overlay
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -153,18 +156,7 @@ export class App {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-    document.getElementById('ui-overlay')!.before(this.renderer.domElement);
-
-    // Mini planet renderer for picker button
-    const miniCanvas = document.getElementById('planet-btn-canvas') as HTMLCanvasElement;
-    this.miniRenderer = new THREE.WebGLRenderer({ canvas: miniCanvas, alpha: true, antialias: true });
-    this.miniRenderer.setSize(56, 56);
-    this.miniRenderer.setPixelRatio(window.devicePixelRatio);
-    const geo = new THREE.SphereGeometry(1, 32, 32);
-    const mat = new THREE.MeshBasicMaterial();
-    this.miniSphere = new THREE.Mesh(geo, mat);
-    this.miniScene.add(this.miniSphere);
-    this.miniCamera.position.z = 3.2;
+    document.getElementById('svelte-ui')!.before(this.renderer.domElement);
 
     // Cameras
     this.camera3d = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10000);
@@ -191,8 +183,8 @@ export class App {
     this.setLoading(0.6, 'Fetching satellite data...');
     await this.loadTLEGroup(savedGroup);
 
-    this.setLoading(0.9, 'Setting up UI...');
-    this.setupUI();
+    this.setLoading(0.9, 'Setting up...');
+    this.wireStores();
     this.setupEvents();
 
     this.setLoading(1.0, 'Ready!');
@@ -272,7 +264,7 @@ export class App {
     this.footprintRenderer = new FootprintRenderer(this.scene3d);
 
     // Markers
-    const overlay = document.getElementById('ui-overlay')!;
+    const overlay = document.getElementById('svelte-ui')!;
     this.markerManager = new MarkerManager(this.scene3d, this.cfg.markers, markerTex, overlay);
 
     // 2D map plane
@@ -352,7 +344,6 @@ export class App {
   }
 
   private currentGroup = DEFAULT_GROUP;
-  private satStatusText = '';
 
   async loadTLEGroup(group: string, forceRetry = false) {
     this.currentGroup = group;
@@ -361,13 +352,12 @@ export class App {
       this.selectedSat = null;
       this.hoveredSat = null;
       this.orbitRenderer.precomputeOrbits([], this.timeSystem.currentEpoch);
-      this.satStatusText = '0 sats';
-      this.hideActionLink();
+      uiStore.satStatusText = '0 sats';
       return;
     }
     try {
       const result = await fetchTLEData(group, (msg) => {
-        this.satStatusText = msg;
+        uiStore.satStatusText = msg;
       }, forceRetry);
       this.satellites = result.satellites;
       this.selectedSat = null;
@@ -381,63 +371,24 @@ export class App {
         info += ` (offline, ${formatAge(result.cacheAge)})`;
       }
       if (result.rateLimited) info += ' — rate limited';
-      this.satStatusText = info;
-      if (result.rateLimited) {
-        this.showActionLink('Retry', () => {
-          clearRateLimit();
-          this.loadTLEGroup(this.currentGroup, true);
-        });
-      } else if (result.source === 'cache' || result.source === 'stale-cache') {
-        this.showActionLink('Refresh', () => {
-          this.loadTLEGroup(this.currentGroup, true);
-        });
-      } else {
-        this.hideActionLink();
-      }
+      uiStore.satStatusText = info;
     } catch (e) {
       console.error('Failed to load TLE data:', e);
       const rl = (e as any)?.rateLimited === true;
-      this.satStatusText = rl ? 'Rate limited' : 'Load failed';
-      if (rl) {
-        this.showActionLink('Retry', () => {
-          clearRateLimit();
-          this.loadTLEGroup(this.currentGroup, true);
-        });
-      } else {
-        this.hideActionLink();
-      }
+      uiStore.satStatusText = rl ? 'Rate limited' : 'Load failed';
     }
-  }
-
-  private showActionLink(label: string, onClick: () => void) {
-    let link = document.getElementById('action-link');
-    if (!link) {
-      link = document.createElement('div');
-      link.id = 'action-link';
-      link.style.cssText = 'color:#888;font-size:12px;cursor:pointer;text-decoration:underline;margin-top:2px;';
-      document.getElementById('stats-panel')!.appendChild(link);
-    }
-    link.textContent = label;
-    link.onclick = onClick;
-    link.style.display = 'block';
-  }
-
-  private hideActionLink() {
-    const link = document.getElementById('action-link');
-    if (link) link.style.display = 'none';
   }
 
   private loadCustomTLE(text: string, label: string) {
-    const statusEl = document.getElementById('sat-count-display')!;
     try {
       this.satellites = parseTLEText(text);
       this.selectedSat = null;
       this.hoveredSat = null;
       this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
-      statusEl.textContent = `${this.satellites.length} Sats (${label})`;
+      uiStore.satStatusText = `${this.satellites.length} Sats (${label})`;
     } catch (e) {
       console.error('Failed to parse TLE data:', e);
-      statusEl.textContent = 'Parse failed';
+      uiStore.satStatusText = 'Parse failed';
     }
   }
 
@@ -484,7 +435,6 @@ export class App {
 
     // Upgrade orrery ball material to sun-lit shader (in place, no new mesh)
     this.promotedPlanet = this.orrery.promoteBody(planet.id);
-    document.getElementById('planet-btn')!.style.display = '';
 
     // Tauri bundles all assets locally — always instant. Also check browser cache.
     const local = '__TAURI__' in window;
@@ -548,10 +498,7 @@ export class App {
         if (old) old.dispose();
       });
     }
-    // Update active state in overlay
-    document.querySelectorAll('.ss-item').forEach(el => {
-      el.classList.toggle('active', el.getAttribute('data-planet') === (this.activePlanet?.id ?? 'earth'));
-    });
+    uiStore.activePlanetId = this.activePlanet?.id ?? null;
   }
 
   private orreryMode = false;
@@ -561,7 +508,7 @@ export class App {
     this.orreryMode = true;
     this.activePlanet = null;
     this.promotedPlanet = null;
-    document.getElementById('planet-btn')!.style.display = 'none';
+    uiStore.orreryMode = true;
 
     // Create orrery (vertical on portrait screens)
     this.orrery = new Orrery(this.camera3d.aspect);
@@ -593,7 +540,7 @@ export class App {
   private exitOrrery() {
     if (!this.orreryMode) return;
     this.orreryMode = false;
-    document.getElementById('planet-btn')!.style.display = '';
+    uiStore.orreryMode = false;
 
     if (this.orrery) {
       this.scene3d.remove(this.orrery.group);
@@ -643,61 +590,78 @@ export class App {
     }
   }
 
-  private setupUI() {
-    // TLE picker
-    const select = document.getElementById('tle-select') as HTMLSelectElement;
-    const customRow = document.getElementById('tle-custom-row')!;
+  /** Wire Svelte stores ↔ App communication */
+  private wireStores() {
+    const earthDrawR = EARTH_RADIUS_KM / DRAW_SCALE;
 
-    const customOpt = document.createElement('option');
-    customOpt.value = '__custom__';
-    customOpt.textContent = 'Custom...';
-    select.appendChild(customOpt);
+    // --- Load persisted settings from localStorage ---
+    settingsStore.load();
+    uiStore.loadToggles();
 
-    for (const src of TLE_SOURCES) {
-      const opt = document.createElement('option');
-      opt.value = src.group;
-      opt.textContent = src.name;
-      select.appendChild(opt);
-    }
+    // Apply initial toggle values
+    this.hideUnselected = uiStore.hideUnselected;
+    this.cfg.showClouds = uiStore.showClouds;
+    this.cfg.showNightLights = uiStore.showNightLights;
+    this.moonScene.setShowNight(uiStore.showNightLights);
+    this.showMarkers = uiStore.showMarkers;
 
-    // Restore saved selection
-    select.value = this.currentGroup;
+    // Apply initial graphics
+    this.applyGraphics(settingsStore.graphics);
 
-    select.addEventListener('change', async () => {
-      if (select.value === '__custom__') {
-        customRow.classList.add('visible');
-        return;
+    // Apply initial simulation
+    this.applySimulation(settingsStore.simulation);
+
+    // Apply initial FPS limit
+    this.fpsLimit = settingsStore.fpsLimit;
+
+    // --- Register callbacks from Svelte → App ---
+
+    // Toggle changes from Svelte checkboxes
+    uiStore.onToggleChange = (key: string, value: boolean) => {
+      switch (key) {
+        case 'hideUnselected': this.hideUnselected = value; break;
+        case 'showClouds': this.cfg.showClouds = value; break;
+        case 'showNightLights':
+          this.cfg.showNightLights = value;
+          this.moonScene.setShowNight(value);
+          break;
+        case 'showMarkers':
+          this.showMarkers = value;
+          if (!value) this.markerManager.hide();
+          break;
       }
-      customRow.classList.remove('visible');
-      localStorage.setItem('threescope_tle_group', select.value);
+    };
+
+    // Graphics settings changed from SettingsWindow
+    settingsStore.onGraphicsChange = (g: GraphicsSettings) => {
+      this.applyGraphics(g);
+    };
+
+    // Simulation settings changed from SettingsWindow
+    settingsStore.onSimulationChange = (s: SimulationSettings) => {
+      this.applySimulation(s);
+    };
+
+    // FPS limit changed from SettingsWindow
+    settingsStore.onFpsLimitChange = (limit: number) => {
+      this.fpsLimit = limit;
+    };
+
+    // TLE group changed from TlePicker
+    uiStore.onTLEGroupChange = async (group: string) => {
       this.setLoading(0.5, 'Loading satellite data...');
       this.loadingScreen.style.display = 'flex';
-      await this.loadTLEGroup(select.value);
+      await this.loadTLEGroup(group);
       this.loadingScreen.style.display = 'none';
-    });
+    };
 
-    // File upload
-    const fileInput = document.getElementById('tle-file-input') as HTMLInputElement;
-    document.getElementById('tle-file-btn')!.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', () => {
-      const file = fileInput.files?.[0];
-      if (!file) return;
-      this.setLoading(0.5, 'Reading file...');
-      this.loadingScreen.style.display = 'flex';
-      const reader = new FileReader();
-      reader.onload = () => {
-        this.loadCustomTLE(reader.result as string, file.name);
-        this.loadingScreen.style.display = 'none';
-      };
-      reader.readAsText(file);
-      fileInput.value = '';
-    });
+    // Custom TLE file loaded
+    uiStore.onCustomTLELoad = (text: string, name: string) => {
+      this.loadCustomTLE(text, name);
+    };
 
-    // URL load
-    const urlInput = document.getElementById('tle-url-input') as HTMLInputElement;
-    const urlLoad = async () => {
-      const url = urlInput.value.trim();
-      if (!url) return;
+    // Custom TLE URL
+    uiStore.onCustomTLEUrl = async (url: string) => {
       this.setLoading(0.5, 'Fetching TLE from URL...');
       this.loadingScreen.style.display = 'flex';
       try {
@@ -707,316 +671,82 @@ export class App {
         this.loadCustomTLE(text, 'URL');
       } catch (e) {
         console.error('Failed to fetch TLE URL:', e);
-        document.getElementById('sat-count-display')!.textContent = 'URL fetch failed';
+        uiStore.satStatusText = 'URL fetch failed';
       }
       this.loadingScreen.style.display = 'none';
     };
-    document.getElementById('tle-url-btn')!.addEventListener('click', urlLoad);
-    urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') urlLoad(); });
 
-    // Planet picker
-    document.getElementById('planet-btn')!.addEventListener('click', () => {
+    // Planet button clicked
+    uiStore.onPlanetButtonClick = () => {
       if (this.promotedPlanet) {
-        // Viewing a planet — go back to orrery picker
         this.unpromoteToOrrery();
       } else if (this.orreryMode) {
-        // Browsing orrery — go back to Earth
         this.exitOrrery();
         this.navigateToEarth();
       } else {
         this.enterOrrery();
       }
-    });
+    };
+
+    // Mini planet renderer — wait for Svelte to mount the canvas
+    this.initMiniRenderer();
+
     this.updatePlanetPickerUI();
+  }
 
-    // Checkbox helper: bind element ↔ localStorage ↔ onChange callback
-    const bindCheckbox = (id: string, key: string, defaultOn: boolean, onChange: (v: boolean) => void) => {
-      const cb = document.getElementById(id) as HTMLInputElement;
-      const saved = localStorage.getItem(key);
-      const initial = saved !== null ? (defaultOn ? saved !== 'false' : saved === 'true') : defaultOn;
-      cb.checked = initial;
-      onChange(initial);
-      cb.addEventListener('change', () => {
-        onChange(cb.checked);
-        localStorage.setItem(key, String(cb.checked));
-      });
+  /** Initialize the mini planet renderer once the Svelte canvas is available */
+  private initMiniRenderer() {
+    const tryInit = () => {
+      const miniCanvas = uiStore.planetCanvasEl;
+      if (!miniCanvas) {
+        requestAnimationFrame(tryInit);
+        return;
+      }
+      this.miniRenderer = new THREE.WebGLRenderer({ canvas: miniCanvas, alpha: true, antialias: true });
+      this.miniRenderer.setSize(56, 56);
+      this.miniRenderer.setPixelRatio(window.devicePixelRatio);
+      const geo = new THREE.SphereGeometry(1, 32, 32);
+      const mat = new THREE.MeshBasicMaterial();
+      this.miniSphere = new THREE.Mesh(geo, mat);
+      this.miniScene.add(this.miniSphere);
+      this.miniCamera.position.z = 3.2;
+      this.updatePlanetPickerUI();
     };
+    tryInit();
+  }
 
-    bindCheckbox('cb-hide-unselected', 'threescope_spotlight', true, v => { this.hideUnselected = v; });
-    bindCheckbox('cb-clouds', 'threescope_clouds', true, v => { this.cfg.showClouds = v; });
-    bindCheckbox('cb-night-lights', 'threescope_night', true, v => {
-      this.cfg.showNightLights = v;
-      this.moonScene.setShowNight(v);
-    });
-    bindCheckbox('cb-markers', 'threescope_markers', false, v => {
-      this.showMarkers = v;
-      if (!v) this.markerManager.hide();
-    });
-    // --- Graphics preset system ---
-    const presetSelect = document.getElementById('gfx-preset-select') as HTMLSelectElement;
-    const cbBloom = document.getElementById('gfx-bloom') as HTMLInputElement;
-    const cbAtmosphere = document.getElementById('gfx-atmosphere') as HTMLInputElement;
-    const cbBump = document.getElementById('gfx-bump') as HTMLInputElement;
-    const cbAO = document.getElementById('gfx-ao') as HTMLInputElement;
-    const sphereDetailSelect = document.getElementById('gfx-sphere-detail') as HTMLSelectElement;
-    const reliefSlider = document.getElementById('relief-slider') as HTMLInputElement;
-    const reliefLabel = document.getElementById('relief-value')!;
-    const customOption = presetSelect.querySelector('option[value="custom"]') as HTMLOptionElement;
-
+  private applyGraphics(s: GraphicsSettings) {
+    this.gfx = s;
+    this.bloomEnabled = s.bloom;
+    this.earth.setNightEmission(s.bloom ? 1.5 : 1.0);
+    this.sunScene.setBloomEnabled(s.bloom);
+    this.atmosphereGlowEnabled = s.atmosphereGlow;
+    this.earth.setBumpEnabled(s.bumpMapping);
+    this.moonScene.setBumpEnabled(s.bumpMapping);
+    this.earth.setAOEnabled(s.curvatureAO);
+    this.moonScene.setAOEnabled(s.curvatureAO);
+    const mult = s.surfaceRelief / 10;
+    this.earth.setDisplacementScale(0.007 * mult);
+    this.moonScene.setDisplacementScale(0.006 * mult);
+    const maxDisp = 0.007 * mult;
     const earthDrawR = EARTH_RADIUS_KM / DRAW_SCALE;
-
-    const applyGraphics = (s: GraphicsSettings) => {
-      this.gfx = s;
-      // Bloom
-      this.bloomEnabled = s.bloom;
-      this.earth.setNightEmission(s.bloom ? 1.5 : 1.0);
-      this.sunScene.setBloomEnabled(s.bloom);
-      // Atmosphere
-      this.atmosphereGlowEnabled = s.atmosphereGlow;
-      // Bump
-      this.earth.setBumpEnabled(s.bumpMapping);
-      this.moonScene.setBumpEnabled(s.bumpMapping);
-      // AO
-      this.earth.setAOEnabled(s.curvatureAO);
-      this.moonScene.setAOEnabled(s.curvatureAO);
-      // Relief
-      const mult = s.surfaceRelief / 10;
-      this.earth.setDisplacementScale(0.007 * mult);
-      this.moonScene.setDisplacementScale(0.006 * mult);
-      const maxDisp = 0.007 * mult;
-      const atmoGap = 80.0 / DRAW_SCALE;
-      const atmoScale = maxDisp > atmoGap ? (earthDrawR + maxDisp) / (earthDrawR + atmoGap) : 1.0;
-      this.atmosphere.setScale(atmoScale);
-      // Sphere detail (rebuild geometry only when changed)
-      if (s.sphereDetail !== this.lastSphereDetail) {
-        this.lastSphereDetail = s.sphereDetail;
-        this.earth.setSphereDetail(s.sphereDetail);
-        this.moonScene.setSphereDetail(s.sphereDetail);
-      }
-
-      localStorage.setItem('threescope_graphics', JSON.stringify(s));
-    };
-
-    const syncUI = (s: GraphicsSettings) => {
-      cbBloom.checked = s.bloom;
-      cbAtmosphere.checked = s.atmosphereGlow;
-      cbBump.checked = s.bumpMapping;
-      cbAO.checked = s.curvatureAO;
-      sphereDetailSelect.value = String(s.sphereDetail);
-      reliefSlider.value = String(s.surfaceRelief);
-      reliefLabel.textContent = (s.surfaceRelief / 10).toFixed(1) + 'x';
-    };
-
-    const rtxCb = document.getElementById('cb-rtx') as HTMLInputElement;
-    const rtxLabel = document.getElementById('rtx-label')!;
-    const settingsModal = document.getElementById('settings-modal')!;
-
-    const updatePresetLabel = () => {
-      const match = findMatchingPreset(this.gfx);
-      if (match) {
-        customOption.hidden = true;
-        presetSelect.value = match;
-        rtxCb.checked = match === 'rtx';
-        rtxCb.disabled = false;
-        rtxLabel.title = match === 'rtx' ? 'Switch to Standard' : 'Switch to RTX';
-        rtxLabel.childNodes[rtxLabel.childNodes.length - 1].textContent = ' RTX';
-      } else {
-        customOption.hidden = false;
-        presetSelect.value = 'custom';
-        rtxCb.disabled = true;
-        rtxCb.checked = false;
-        rtxLabel.childNodes[rtxLabel.childNodes.length - 1].textContent = ' Customized';
-        rtxLabel.title = 'Open graphics settings';
-      }
-    };
-
-    rtxLabel.addEventListener('click', (e) => {
-      if (rtxCb.disabled) {
-        e.preventDefault();
-        settingsModal.classList.add('visible');
-      }
-    });
-    rtxCb.addEventListener('change', () => {
-      const s = getPresetSettings(rtxCb.checked ? 'rtx' : 'standard');
-      syncUI(s);
-      applyGraphics(s);
-      updatePresetLabel();
-    });
-
-    // Load saved or default
-    const savedGfx = localStorage.getItem('threescope_graphics');
-    if (savedGfx) {
-      try {
-        const parsed = JSON.parse(savedGfx) as GraphicsSettings;
-        // Ensure all fields exist (forward compat)
-        this.gfx = { ...getPresetSettings(DEFAULT_PRESET), ...parsed };
-      } catch { /* use default */ }
+    const atmoGap = 80.0 / DRAW_SCALE;
+    const atmoScale = maxDisp > atmoGap ? (earthDrawR + maxDisp) / (earthDrawR + atmoGap) : 1.0;
+    this.atmosphere.setScale(atmoScale);
+    if (s.sphereDetail !== this.lastSphereDetail) {
+      this.lastSphereDetail = s.sphereDetail;
+      this.earth.setSphereDetail(s.sphereDetail);
+      this.moonScene.setSphereDetail(s.sphereDetail);
     }
-    syncUI(this.gfx);
-    applyGraphics(this.gfx);
-    updatePresetLabel();
+  }
 
-    // Preset dropdown
-    presetSelect.addEventListener('change', () => {
-      if (presetSelect.value === 'custom') return;
-      const s = getPresetSettings(presetSelect.value);
-      syncUI(s);
-      applyGraphics(s);
-      updatePresetLabel();
-    });
-
-    // Individual setting changes
-    const onSettingChange = () => {
-      this.gfx.bloom = cbBloom.checked;
-      this.gfx.atmosphereGlow = cbAtmosphere.checked;
-      this.gfx.bumpMapping = cbBump.checked;
-      this.gfx.curvatureAO = cbAO.checked;
-      this.gfx.sphereDetail = Number(sphereDetailSelect.value);
-      applyGraphics(this.gfx);
-      updatePresetLabel();
-    };
-    cbBloom.addEventListener('change', onSettingChange);
-    cbAtmosphere.addEventListener('change', onSettingChange);
-    cbBump.addEventListener('change', onSettingChange);
-    cbAO.addEventListener('change', onSettingChange);
-    sphereDetailSelect.addEventListener('change', onSettingChange);
-    reliefSlider.addEventListener('input', () => {
-      this.gfx.surfaceRelief = Number(reliefSlider.value);
-      reliefLabel.textContent = (this.gfx.surfaceRelief / 10).toFixed(1) + 'x';
-      applyGraphics(this.gfx);
-      updatePresetLabel();
-    });
-
-    // Info modal
-    const infoModal = document.getElementById('info-modal')!;
-    document.getElementById('info-btn')!.addEventListener('click', () => {
-      infoModal.classList.add('visible');
-    });
-    document.getElementById('info-modal-close')!.addEventListener('click', () => {
-      infoModal.classList.remove('visible');
-    });
-    infoModal.addEventListener('click', (e) => {
-      if (e.target === infoModal) infoModal.classList.remove('visible');
-    });
-
-    // --- Simulation preset system ---
-    const simPresetSelect = document.getElementById('sim-preset-select') as HTMLSelectElement;
-    const simOrbitMode = document.getElementById('sim-orbit-mode') as HTMLSelectElement;
-    const simOrbitSegments = document.getElementById('sim-orbit-segments') as HTMLSelectElement;
-    const simJ2 = document.getElementById('sim-j2') as HTMLInputElement;
-    const simDrag = document.getElementById('sim-drag') as HTMLInputElement;
-    const simJ2Row = document.getElementById('sim-j2-row')!;
-    const simDragRow = document.getElementById('sim-drag-row')!;
-    const qualitySelect = document.getElementById('update-quality-select') as HTMLSelectElement;
-    const simCustomOption = simPresetSelect.querySelector('option[value="custom"]') as HTMLOptionElement;
-
-    const applySimulation = (s: SimulationSettings) => {
-      this.sim = s;
-      this.orbitRenderer.setOrbitMode(s.orbitMode);
-      this.orbitRenderer.setOrbitSegments(s.orbitSegments);
-      this.orbitRenderer.setJ2Enabled(s.j2Precession);
-      this.orbitRenderer.setDragEnabled(s.atmosphericDrag);
-      this.maxBatch = s.updateQuality;
-      localStorage.setItem('threescope_simulation', JSON.stringify(s));
-    };
-
-    const syncSimUI = (s: SimulationSettings) => {
-      simOrbitMode.value = s.orbitMode;
-      simOrbitSegments.value = String(s.orbitSegments);
-      simJ2.checked = s.j2Precession;
-      simDrag.checked = s.atmosphericDrag;
-      qualitySelect.value = String(s.updateQuality);
-      // Hide J2/Drag rows in SGP4 mode
-      const analytical = s.orbitMode === 'analytical';
-      simJ2Row.style.display = analytical ? '' : 'none';
-      simDragRow.style.display = analytical ? '' : 'none';
-    };
-
-    const updateSimPresetLabel = () => {
-      const match = findMatchingSimPreset(this.sim);
-      if (match) {
-        simCustomOption.hidden = true;
-        simPresetSelect.value = match;
-      } else {
-        simCustomOption.hidden = false;
-        simPresetSelect.value = 'custom';
-      }
-    };
-
-    // Load saved or default
-    const savedSim = localStorage.getItem('threescope_simulation');
-    if (savedSim) {
-      try {
-        const parsed = JSON.parse(savedSim) as SimulationSettings;
-        this.sim = { ...getSimPresetSettings(DEFAULT_SIM_PRESET), ...parsed };
-      } catch { /* use default */ }
-    }
-    syncSimUI(this.sim);
-    applySimulation(this.sim);
-    updateSimPresetLabel();
-
-    // Preset dropdown
-    simPresetSelect.addEventListener('change', () => {
-      if (simPresetSelect.value === 'custom') return;
-      const s = getSimPresetSettings(simPresetSelect.value);
-      syncSimUI(s);
-      applySimulation(s);
-      updateSimPresetLabel();
-    });
-
-    // Individual setting changes
-    const onSimSettingChange = () => {
-      this.sim.orbitMode = simOrbitMode.value as 'analytical' | 'sgp4';
-      this.sim.orbitSegments = Number(simOrbitSegments.value);
-      this.sim.j2Precession = simJ2.checked;
-      this.sim.atmosphericDrag = simDrag.checked;
-      this.sim.updateQuality = Number(qualitySelect.value);
-      // Hide/show J2/Drag based on orbit mode
-      const analytical = this.sim.orbitMode === 'analytical';
-      simJ2Row.style.display = analytical ? '' : 'none';
-      simDragRow.style.display = analytical ? '' : 'none';
-      applySimulation(this.sim);
-      updateSimPresetLabel();
-    };
-    simOrbitMode.addEventListener('change', onSimSettingChange);
-    simOrbitSegments.addEventListener('change', onSimSettingChange);
-    simJ2.addEventListener('change', onSimSettingChange);
-    simDrag.addEventListener('change', onSimSettingChange);
-    qualitySelect.addEventListener('change', onSimSettingChange);
-
-    // FPS Limit slider: 0 = Vsync (rAF), 1–500 = FPS cap, 501 = Unlocked
-    const fpsSlider = document.getElementById('fps-limit-slider') as HTMLInputElement;
-    const fpsLabel = document.getElementById('fps-limit-value')!;
-    const fpsWarning = document.getElementById('fps-limit-warning')!;
-    const savedFpsLimit = localStorage.getItem('threescope_fps_limit');
-    if (savedFpsLimit !== null) {
-      const v = parseInt(savedFpsLimit, 10);
-      fpsSlider.value = String(v);
-      this.fpsLimit = v === 0 ? -1 : v > 480 ? 0 : v; // -1=vsync, 0=unlocked, else cap
-    }
-    const updateFpsLabel = (v: number) => {
-      if (v === 0) { fpsLabel.textContent = 'Vsync'; fpsWarning.style.display = 'none'; }
-      else if (v > 480) { fpsLabel.textContent = 'Unlocked'; fpsWarning.style.display = ''; }
-      else { fpsLabel.textContent = String(v); fpsWarning.style.display = 'none'; }
-    };
-    updateFpsLabel(parseInt(fpsSlider.value, 10));
-    fpsSlider.addEventListener('input', () => {
-      const v = parseInt(fpsSlider.value, 10);
-      this.fpsLimit = v === 0 ? -1 : v > 480 ? 0 : v;
-      updateFpsLabel(v);
-      localStorage.setItem('threescope_fps_limit', String(v));
-    });
-
-    // Settings modal
-    document.getElementById('settings-btn')!.addEventListener('click', () => {
-      settingsModal.classList.add('visible');
-    });
-    document.getElementById('settings-modal-close')!.addEventListener('click', () => {
-      settingsModal.classList.remove('visible');
-    });
-    settingsModal.addEventListener('click', (e) => {
-      if (e.target === settingsModal) settingsModal.classList.remove('visible');
-    });
+  private applySimulation(s: SimulationSettings) {
+    this.sim = s;
+    this.orbitRenderer.setOrbitMode(s.orbitMode);
+    this.orbitRenderer.setOrbitSegments(s.orbitSegments);
+    this.orbitRenderer.setJ2Enabled(s.j2Precession);
+    this.orbitRenderer.setDragEnabled(s.atmosphericDrag);
+    this.maxBatch = s.updateQuality;
   }
 
   private setupEvents() {
@@ -1130,17 +860,17 @@ export class App {
       switch (e.key) {
         case ' ':
           e.preventDefault();
-          this.timeSystem.paused = !this.timeSystem.paused;
+          timeStore.togglePause();
           break;
         case '.':
-          this.timeSystem.timeMultiplier *= 2.0;
+          timeStore.stepForward();
           break;
         case ',':
-          this.timeSystem.timeMultiplier /= 2.0;
+          timeStore.stepBackward();
           break;
         case '/':
-          if (e.shiftKey) this.timeSystem.resetToNow();
-          else this.timeSystem.timeMultiplier = 1.0;
+          if (e.shiftKey) timeStore.jumpToNow();
+          else timeStore.resetSpeed();
           break;
         case 'm':
         case 'M':
@@ -1306,7 +1036,25 @@ export class App {
     this.scheduleNextFrame();
 
     const dt = this.clock.getDelta();
-    this.timeSystem.update(dt);
+
+    if (timeStore.warping) {
+      // Warp mode: store drives epoch directly, skip normal time system
+      timeStore.tickWarp();
+      this.timeSystem.currentEpoch = timeStore.epoch;
+      this.timeSystem.timeMultiplier = 1;
+      this.timeSystem.paused = false;
+    } else {
+      // Normal mode: pull from store, update, push back
+      this.timeSystem.timeMultiplier = timeStore.multiplier;
+      this.timeSystem.paused = timeStore.paused;
+      this.timeSystem.currentEpoch = timeStore.epoch;
+      this.timeSystem.update(dt);
+      timeStore.syncFromEngine(
+        this.timeSystem.currentEpoch,
+        this.timeSystem.timeMultiplier,
+        this.timeSystem.paused
+      );
+    }
 
     // FPS counter
     this.fpsFrames++;
@@ -1315,15 +1063,10 @@ export class App {
       this.fpsDisplay = Math.round(this.fpsFrames / this.fpsTime);
       this.fpsFrames = 0;
       this.fpsTime = 0;
-      const fpsEl = document.getElementById('fps-display')!;
-      fpsEl.textContent = `${this.fpsDisplay} FPS`;
-      if (this.fpsDisplay >= 30) {
-        fpsEl.style.color = '#00ff00';
-      } else {
-        const t = Math.max(0, this.fpsDisplay / 30);
-        fpsEl.style.color = `rgb(255,${Math.round(255 * t)},0)`;
-      }
-      document.getElementById('sat-count-display')!.textContent = this.satStatusText;
+      uiStore.fpsDisplay = this.fpsDisplay;
+      uiStore.fpsColor = this.fpsDisplay >= 30
+        ? '#00ff00'
+        : `rgb(255,${Math.round(255 * Math.max(0, this.fpsDisplay / 30))},0)`;
     }
 
     const epoch = this.timeSystem.currentEpoch;
@@ -1460,9 +1203,9 @@ export class App {
       }
 
       this.satManager.setVisible(earthMode);
-      document.getElementById('earth-toggles')!.style.display = earthMode ? 'contents' : 'none';
+      uiStore.earthTogglesVisible = earthMode;
       const showNight = earthMode || this.activeLock === TargetLock.MOON || this.activeLock === TargetLock.PLANET;
-      document.getElementById('night-toggle')!.style.display = showNight ? 'contents' : 'none';
+      uiStore.nightToggleVisible = showNight;
       if (earthMode) {
         this.satManager.update(
           this.satellites, epoch, this.camera3d.position,
@@ -1668,19 +1411,10 @@ export class App {
     // When a sat is selected, only show info card for it (not hover)
     const cardSat = this.selectedSat ? this.selectedSat : activeSat;
 
-    // Status line
-    document.getElementById('status-line')!.textContent = this.timeSystem.getDatetimeStr();
-    const speedVal = this.timeSystem.timeMultiplier;
-    const speedStr = speedVal === 1.0 ? '1x' : `${speedVal.toFixed(speedVal >= 10 ? 0 : 1)}x`;
-    const pauseStr = this.timeSystem.paused ? ' PAUSED' : '';
-    const speedEl = document.getElementById('speed-line')!;
-    speedEl.textContent = `Speed: ${speedStr}${pauseStr}`;
-    speedEl.style.color = this.timeSystem.paused ? '#ff6666' : '';
-
-    // Satellite info popup
-    const infoEl = document.getElementById('sat-info')!;
-    const periLabel = document.getElementById('peri-label')!;
-    const apoLabel = document.getElementById('apo-label')!;
+    // Satellite info — content via store, position via direct DOM
+    const infoEl = uiStore.satInfoEl;
+    const periLabel = uiStore.periLabelEl;
+    const apoLabel = uiStore.apoLabelEl;
 
     if (cardSat) {
       const rKm = cardSat.currentPos.length();
@@ -1691,9 +1425,9 @@ export class App {
       while (lonDeg > 180) lonDeg -= 360;
       while (lonDeg < -180) lonDeg += 360;
 
-      const nameColor = cardSat === this.hoveredSat ? '#ffff00' : '#00ff00';
-      document.getElementById('sat-info-name')!.innerHTML = `<span style="color:${nameColor}">${cardSat.name}</span>`;
-      document.getElementById('sat-info-detail')!.innerHTML =
+      uiStore.satInfoNameColor = cardSat === this.hoveredSat ? '#ffff00' : '#00ff00';
+      uiStore.satInfoName = cardSat.name;
+      uiStore.satInfoDetail =
         `Inc: ${(cardSat.inclination * RAD2DEG).toFixed(2)} deg<br>` +
         `RAAN: ${(cardSat.raan * RAD2DEG).toFixed(2)} deg<br>` +
         `Ecc: ${cardSat.eccentricity.toFixed(5)}<br>` +
@@ -1701,38 +1435,38 @@ export class App {
         `Spd: ${speed.toFixed(2)} km/s<br>` +
         `Lat: ${latDeg.toFixed(2)} deg<br>` +
         `Lon: ${lonDeg.toFixed(2)} deg`;
+      uiStore.satInfoVisible = true;
 
-      // Position the popup near the satellite
-      let screenPos: THREE.Vector2;
-      if (this.viewMode === ViewMode.VIEW_3D) {
-        const drawPos = cardSat.currentPos.clone().divideScalar(DRAW_SCALE);
-        const projected = drawPos.project(this.camera3d);
-        screenPos = new THREE.Vector2(
-          (projected.x * 0.5 + 0.5) * window.innerWidth,
-          (-projected.y * 0.5 + 0.5) * window.innerHeight
-        );
-      } else {
-        const mc = getMapCoordinates(cardSat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
-        // Convert map world coords to screen
-        const nx = (mc.x - this.camera2d.left) / (this.camera2d.right - this.camera2d.left);
-        const ny = (mc.y - this.camera2d.top) / (this.camera2d.bottom - this.camera2d.top);
-        screenPos = new THREE.Vector2(nx * window.innerWidth, ny * window.innerHeight);
+      // Position the popup near the satellite (direct DOM for performance)
+      if (infoEl) {
+        let screenPos: THREE.Vector2;
+        if (this.viewMode === ViewMode.VIEW_3D) {
+          const drawPos = cardSat.currentPos.clone().divideScalar(DRAW_SCALE);
+          const projected = drawPos.project(this.camera3d);
+          screenPos = new THREE.Vector2(
+            (projected.x * 0.5 + 0.5) * window.innerWidth,
+            (-projected.y * 0.5 + 0.5) * window.innerHeight
+          );
+        } else {
+          const mc = getMapCoordinates(cardSat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
+          const nx = (mc.x - this.camera2d.left) / (this.camera2d.right - this.camera2d.left);
+          const ny = (mc.y - this.camera2d.top) / (this.camera2d.bottom - this.camera2d.top);
+          screenPos = new THREE.Vector2(nx * window.innerWidth, ny * window.innerHeight);
+        }
+
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const infoW = infoEl.offsetWidth;
+        const infoH = infoEl.offsetHeight;
+
+        let boxX = screenPos.x + 15;
+        let boxY = screenPos.y + 15;
+        if (boxX + infoW > vw - 4) boxX = Math.max(4, screenPos.x - infoW - 15);
+        if (boxY + infoH > vh - 4) boxY = Math.max(4, screenPos.y - infoH - 15);
+
+        infoEl.style.left = `${boxX}px`;
+        infoEl.style.top = `${boxY}px`;
       }
-
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      infoEl.style.display = 'block';
-      const infoW = infoEl.offsetWidth;
-      const infoH = infoEl.offsetHeight;
-
-      // Place to the right/below the satellite, flip if it would overflow
-      let boxX = screenPos.x + 15;
-      let boxY = screenPos.y + 15;
-      if (boxX + infoW > vw - 4) boxX = Math.max(4, screenPos.x - infoW - 15);
-      if (boxY + infoH > vh - 4) boxY = Math.max(4, screenPos.y - infoH - 15);
-
-      infoEl.style.left = `${boxX}px`;
-      infoEl.style.top = `${boxY}px`;
 
       // Apsis labels
       const apsis = computeApsis(cardSat, this.timeSystem.currentEpoch);
@@ -1744,37 +1478,42 @@ export class App {
         const aDraw = apsis.apoPos.clone().divideScalar(DRAW_SCALE);
         const pp = pDraw.project(this.camera3d);
         const ap = aDraw.project(this.camera3d);
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
 
-        // Only show if in front of camera and on screen
         const ppX = (pp.x * 0.5 + 0.5) * vw;
         const ppY = (-pp.y * 0.5 + 0.5) * vh;
         if (pp.z < 1 && ppX > -50 && ppX < vw + 50 && ppY > -20 && ppY < vh + 20) {
-          periLabel.textContent = `Peri: ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
-          periLabel.style.display = 'block';
-          periLabel.style.left = `${ppX + 20}px`;
-          periLabel.style.top = `${ppY - 8}px`;
+          uiStore.periText = `Peri: ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
+          uiStore.periVisible = true;
+          if (periLabel) {
+            periLabel.style.left = `${ppX + 20}px`;
+            periLabel.style.top = `${ppY - 8}px`;
+          }
         } else {
-          periLabel.style.display = 'none';
+          uiStore.periVisible = false;
         }
 
         const apX = (ap.x * 0.5 + 0.5) * vw;
         const apY = (-ap.y * 0.5 + 0.5) * vh;
         if (ap.z < 1 && apX > -50 && apX < vw + 50 && apY > -20 && apY < vh + 20) {
-          apoLabel.textContent = `Apo: ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
-          apoLabel.style.display = 'block';
-          apoLabel.style.left = `${apX + 20}px`;
-          apoLabel.style.top = `${apY - 8}px`;
+          uiStore.apoText = `Apo: ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
+          uiStore.apoVisible = true;
+          if (apoLabel) {
+            apoLabel.style.left = `${apX + 20}px`;
+            apoLabel.style.top = `${apY - 8}px`;
+          }
         } else {
-          apoLabel.style.display = 'none';
+          uiStore.apoVisible = false;
         }
       } else {
-        periLabel.style.display = 'none';
-        apoLabel.style.display = 'none';
+        uiStore.periVisible = false;
+        uiStore.apoVisible = false;
       }
     } else {
-      infoEl.style.display = 'none';
-      periLabel.style.display = 'none';
-      apoLabel.style.display = 'none';
+      uiStore.satInfoVisible = false;
+      uiStore.periVisible = false;
+      uiStore.apoVisible = false;
     }
   }
 }

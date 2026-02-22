@@ -56,6 +56,15 @@ export function epochToDate(epoch: number): Date {
   return new Date(epochToUnix(epoch) * 1000);
 }
 
+export function unixToEpoch(unixSeconds: number): number {
+  const date = new Date(unixSeconds * 1000);
+  const year = date.getUTCFullYear();
+  const yy = year % 100;
+  const startOfYear = Date.UTC(year, 0, 1);
+  const dayOfYear = (date.getTime() - startOfYear) / 86400000 + 1;
+  return yy * 1000.0 + dayOfYear;
+}
+
 export function epochToJulianDate(epoch: number): number {
   const unix = epochToUnix(epoch);
   return unix / 86400.0 + 2440587.5;

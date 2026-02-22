@@ -1,0 +1,36 @@
+@font-face {
+  font-family: 'Overpass Mono';
+  src: url('/textures/ui/overpass-mono.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+  --bg: #000000;
+  --ui-bg: #0a0a0a;
+  --border: #555;
+  --border-hover: #aaa;
+  --text: #fff;
+  --text-dim: #ccc;
+  --text-muted: #999;
+  --text-faint: #777;
+  --text-ghost: #555;
+  --card-bg: rgba(0,0,0,0.85);
+  --modal-bg: #0a0a0a;
+  --modal-overlay: rgba(0,0,0,0.8);
+  --kbd-bg: #222;
+  --link: #666;
+  --link-hover: #aaa;
+  --attrib: #555;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg);
+  font-family: 'Overpass Mono', 'Courier New', monospace;
+  color: var(--text);
+  overscroll-behavior: none; touch-action: none;
+}
+canvas { display: block; }
