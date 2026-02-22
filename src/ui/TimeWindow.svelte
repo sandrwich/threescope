@@ -137,6 +137,7 @@
       {@render nudgeGroup('hour', hour, 'hr')}
       {@render nudgeGroup('min', min, 'mn')}
       {@render nudgeGroup('sec', sec, 'sc')}
+      <span class="utc-label">UTC</span>
     </div>
 
     {#if timeStore.tleWarning}
@@ -208,6 +209,7 @@
     gap: 3px;
   }
   .sep { width: 10px; }
+  .utc-label { color: var(--text-ghost); font-size: 10px; margin-left: 2px; padding-top: 26px; }
   .ng {
     display: flex;
     flex-direction: column;
