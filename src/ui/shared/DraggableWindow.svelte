@@ -44,8 +44,9 @@
 
   function onMouseMove(e: MouseEvent) {
     if (!dragging) return;
-    x = Math.max(0, Math.min(window.innerWidth - 80, e.clientX - dragOffX));
-    y = Math.max(0, Math.min(window.innerHeight - 30, e.clientY - dragOffY));
+    const w = windowEl?.offsetWidth ?? 200;
+    x = Math.max(10, Math.min(window.innerWidth - w - 10, e.clientX - dragOffX));
+    y = Math.max(10, Math.min(window.innerHeight - 30, e.clientY - dragOffY));
   }
 
   function onMouseUp() {
