@@ -5,7 +5,7 @@ import { parseHexColor } from '../config';
 import { calculatePosition } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
 
-// Segment counts for orbit visualization
+// Default segment counts for orbit visualization
 const SEGMENTS_NORMAL = 90;
 const SEGMENTS_LARGE = 30;
 
@@ -46,6 +46,13 @@ export class OrbitRenderer {
   private satellites: Satellite[] = [];
   private currentSegments = 0;
 
+  // Configurable simulation parameters
+  private configuredSegments = SEGMENTS_LARGE;
+  private j2Enabled = true;
+  private dragEnabled = true;
+  private orbitMode: 'analytical' | 'sgp4' = 'analytical';
+  private lastConfigEpoch = 0; // track epoch for rebuild after config change
+
   // Assembly state — only rebuild GPU buffer when visibility changes
   private lastActiveSat: Satellite | null | undefined = undefined; // undefined = never assembled
   private lastSelectedSat: Satellite | null | undefined = undefined;
@@ -78,8 +85,8 @@ export class OrbitRenderer {
     this.nadirLine.visible = false;
     scene.add(this.nadirLine);
 
-    // Pre-allocate normal orbits buffer — sized for up to 15000 sats * 30 segments * 2 verts
-    this.maxNormalVerts = 15000 * SEGMENTS_LARGE * 2;
+    // Pre-allocate normal orbits buffer — sized for configured segments
+    this.maxNormalVerts = 15000 * this.configuredSegments * 2;
     const normGeo = new THREE.BufferGeometry();
     this.normalBuffer = new THREE.BufferAttribute(new Float32Array(this.maxNormalVerts * 3), 3);
     this.normalBuffer.setUsage(THREE.DynamicDrawUsage);
@@ -99,7 +106,7 @@ export class OrbitRenderer {
    */
   precomputeOrbits(satellites: Satellite[], currentEpoch: number) {
     const satCount = satellites.length;
-    const segs = satCount > 500 ? SEGMENTS_LARGE : SEGMENTS_NORMAL;
+    const segs = this.configuredSegments;
     const floatsPerOrbit = segs * 6; // segs line segments × 2 verts × 3 components
     const periVertsPerOrbit = segs + 1;
     const periFloatsPerOrbit = periVertsPerOrbit * 2;
@@ -124,12 +131,17 @@ export class OrbitRenderer {
       );
     }
 
-    // Phase 2: Rotate perifocal → ECI using J2-corrected elements
-    this.recomputeECI(currentEpoch);
+    // Phase 2: Compute ECI positions
+    if (this.orbitMode === 'sgp4') {
+      this.computeSGP4Orbits(currentEpoch);
+    } else {
+      this.recomputeECI(currentEpoch);
+    }
 
     this.lastRecomputeEpoch = currentEpoch;
     this.lastRecomputeWallMs = performance.now();
     this.lastPeriCheckEpoch = currentEpoch;
+    this.lastConfigEpoch = currentEpoch;
     this.lastActiveSat = undefined; // force reassembly
   }
 
@@ -173,9 +185,9 @@ export class OrbitRenderer {
       // Time delta from TLE epoch (seconds)
       const deltaS = currentUnix - epochToUnix(sat.epochDays);
 
-      // J2-corrected orientation angles
-      const raan = sat.raan + sat.raanRate * deltaS;
-      const w = sat.argPerigee + sat.argPerigeeRate * deltaS;
+      // Orientation angles (with or without J2 secular correction)
+      const raan = this.j2Enabled ? sat.raan + sat.raanRate * deltaS : sat.raan;
+      const w = this.j2Enabled ? sat.argPerigee + sat.argPerigeeRate * deltaS : sat.argPerigee;
       const inc = sat.inclination; // no secular J2 change
 
       // Build rotation matrix R = Rz(-Ω) · Rx(-i) · Rz(-ω)
@@ -230,7 +242,7 @@ export class OrbitRenderer {
    * Only checked every 6 hours of sim-time since drag is slow.
    */
   private checkPeifocalRebuild(currentEpoch: number) {
-    if (!this.perifocalAll) return;
+    if (!this.perifocalAll || !this.dragEnabled) return;
 
     const currentUnix = epochToUnix(currentEpoch);
     const lastCheckUnix = epochToUnix(this.lastPeriCheckEpoch);
@@ -283,8 +295,8 @@ export class OrbitRenderer {
     orbitsToDraw: number,
     colorConfig: { orbitNormal: string; orbitHighlighted: string }
   ) {
-    // --- J2 periodic recomputation ---
-    if (this.precomputedAll && this.perifocalAll) {
+    // --- Periodic recomputation ---
+    if (this.precomputedAll) {
       const now = performance.now();
       // Wall-clock guard: max ~30 Hz recompute rate
       if (now - this.lastRecomputeWallMs > 33) {
@@ -292,13 +304,20 @@ export class OrbitRenderer {
           epochToUnix(currentEpoch) - epochToUnix(this.lastRecomputeEpoch)
         );
         if (deltaSim > ORBIT_RECOMPUTE_INTERVAL_S) {
-          this.recomputeECI(currentEpoch);
+          if (this.orbitMode === 'sgp4') {
+            this.computeSGP4Orbits(currentEpoch);
+          } else {
+            this.recomputeECI(currentEpoch);
+          }
           this.lastRecomputeEpoch = currentEpoch;
           this.lastRecomputeWallMs = now;
+          this.lastConfigEpoch = currentEpoch;
         }
       }
-      // ndot perifocal rebuild (rare)
-      this.checkPeifocalRebuild(currentEpoch);
+      // ndot perifocal rebuild (rare, analytical mode only)
+      if (this.orbitMode === 'analytical') {
+        this.checkPeifocalRebuild(currentEpoch);
+      }
     }
 
     const activeSat = hoveredSat ?? selectedSat;
@@ -341,7 +360,7 @@ export class OrbitRenderer {
     }
 
     // --- Normal orbits: assembled from precomputed analytical data ---
-    if ((selectedSat !== null && unselectedFade <= 0.01) || !this.precomputedAll || this.precomputedSatCount !== satellites.length) {
+    if (!this.precomputedAll || this.precomputedSatCount !== satellites.length || (selectedSat !== null && unselectedFade <= 0.01)) {
       this.normalLines.visible = false;
       return;
     }
@@ -392,6 +411,85 @@ export class OrbitRenderer {
     this.normalMat.color.setRGB(cNorm.r, cNorm.g, cNorm.b);
     this.normalMat.opacity = alpha;
     this.normalLines.visible = this.assembledVertFloats > 0;
+  }
+
+  /**
+   * Compute all background orbits using full SGP4 propagation.
+   * Accurate but expensive — O(satCount × segments) SGP4 calls.
+   */
+  private computeSGP4Orbits(currentEpoch: number) {
+    if (!this.precomputedAll) return;
+
+    const sats = this.satellites;
+    const segs = this.currentSegments;
+    const eciFloatsPerOrbit = this.precomputedFloatsPerOrbit;
+
+    for (let s = 0; s < sats.length; s++) {
+      const sat = sats[s];
+      const periodDays = TWO_PI / sat.meanMotion / 86400.0;
+      const timeStep = periodDays / segs;
+      let eciIdx = s * eciFloatsPerOrbit;
+      let px = 0, py = 0, pz = 0;
+
+      for (let i = 0; i <= segs; i++) {
+        const t = currentEpoch + i * timeStep;
+        const pos = calculatePosition(sat, t);
+        const cx = pos.x / DRAW_SCALE;
+        const cy = pos.y / DRAW_SCALE;
+        const cz = pos.z / DRAW_SCALE;
+
+        if (i > 0) {
+          this.precomputedAll![eciIdx++] = px;
+          this.precomputedAll![eciIdx++] = py;
+          this.precomputedAll![eciIdx++] = pz;
+          this.precomputedAll![eciIdx++] = cx;
+          this.precomputedAll![eciIdx++] = cy;
+          this.precomputedAll![eciIdx++] = cz;
+        }
+        px = cx; py = cy; pz = cz;
+      }
+    }
+
+    this.lastActiveSat = undefined; // force GPU buffer reassembly
+  }
+
+  setOrbitSegments(n: number) {
+    if (n === this.configuredSegments) return;
+    this.configuredSegments = n;
+
+    // Reallocate GPU buffer if new segment count needs more space
+    const needed = 15000 * n * 2;
+    if (needed > this.maxNormalVerts) {
+      this.maxNormalVerts = needed;
+      const newBuf = new THREE.BufferAttribute(new Float32Array(needed * 3), 3);
+      newBuf.setUsage(THREE.DynamicDrawUsage);
+      this.normalLines.geometry.setAttribute('position', newBuf);
+      this.normalBuffer = newBuf;
+    }
+
+    if (this.satellites.length > 0) {
+      this.precomputeOrbits(this.satellites, this.lastConfigEpoch);
+    }
+  }
+
+  setJ2Enabled(v: boolean) {
+    if (v === this.j2Enabled) return;
+    this.j2Enabled = v;
+    if (this.orbitMode === 'analytical' && this.perifocalAll) {
+      this.recomputeECI(this.lastConfigEpoch);
+    }
+  }
+
+  setDragEnabled(v: boolean) {
+    this.dragEnabled = v;
+  }
+
+  setOrbitMode(mode: 'analytical' | 'sgp4') {
+    if (mode === this.orbitMode) return;
+    this.orbitMode = mode;
+    if (this.satellites.length > 0) {
+      this.precomputeOrbits(this.satellites, this.lastConfigEpoch);
+    }
   }
 
   clear() {

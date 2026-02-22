@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Threescope</title>
-  <link rel="icon" type="image/png" href="/textures/sat_icon.png">
+  <link rel="icon" type="image/png" href="/textures/ui/sat_icon.png">
   <meta name="theme-color" content="#101010">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <link rel="apple-touch-icon" href="/textures/icon-192.png">
+  <link rel="apple-touch-icon" href="/textures/icons/icon-192.png">
 <style>
     @font-face {
       font-family: 'Overpass Mono';
-      src: url('/textures/overpass-mono.ttf') format('truetype');
+      src: url('/textures/ui/overpass-mono.ttf') format('truetype');
       font-weight: 400;
       font-display: swap;
     }
@@ -108,6 +108,10 @@
       top: 2px; left: 2px; right: 2px; bottom: 2px;
       background: var(--text);
     }
+    #toggle-row input[type="checkbox"]:disabled {
+      border-color: var(--text-dim); opacity: 0.4; cursor: default;
+    }
+    #toggle-row label:has(input:disabled) { color: var(--text-dim); opacity: 0.6; cursor: default; }
 
     /* Help button */
     #info-btn, #settings-btn {
@@ -242,6 +246,13 @@
     #settings-modal-content h3 {
       font-size: 14px; color: var(--text-dim); margin-bottom: 12px; font-weight: normal;
     }
+    .settings-section {
+      font-size: 11px; color: var(--text-ghost); font-weight: normal;
+      text-transform: uppercase; letter-spacing: 1px;
+      margin: 12px 0 8px; padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .settings-section:first-of-type { margin-top: 0; }
     .settings-row {
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 10px;
@@ -263,6 +274,56 @@
       content: ''; position: absolute;
       top: 2px; left: 2px; right: 2px; bottom: 2px;
       background: var(--text);
+    }
+    .settings-row-slider { flex-direction: column; align-items: stretch; gap: 4px; }
+    .settings-row-slider label { display: flex; justify-content: space-between; }
+    .settings-slider {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px; background: var(--border);
+      outline: none; cursor: pointer;
+    }
+    .settings-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 14px; height: 14px; background: var(--text-dim);
+      border: none; cursor: pointer;
+    }
+    .settings-slider::-moz-range-thumb {
+      width: 14px; height: 14px; background: var(--text-dim);
+      border: none; cursor: pointer;
+    }
+    .settings-slider:hover::-webkit-slider-thumb { background: var(--text); }
+    .settings-slider:hover::-moz-range-thumb { background: var(--text); }
+    .settings-warning {
+      font-size: 11px; color: #cc6633; margin: -6px 0 8px;
+    }
+    .info-tip {
+      cursor: help; color: var(--text-ghost); font-size: 11px; position: relative;
+      margin-left: 4px;
+    }
+    .info-tip:hover { color: var(--text-dim); }
+    .info-tip-content {
+      display: none;
+      position: absolute; bottom: calc(100% + 6px); right: -12px;
+      background: #111; border: 1px solid var(--border);
+      color: var(--text-dim); font-size: 11px;
+      padding: 10px 12px;
+      width: 320px; pointer-events: none; z-index: 10;
+      line-height: 1.6; font-weight: normal;
+      border-radius: 3px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .info-tip:hover .info-tip-content { display: block; }
+    .info-tip-content b { color: var(--text); font-weight: 600; }
+    .info-tip-content .tip-options {
+      margin-top: 6px; padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+    .info-tip-content .tip-options div {
+      padding: 2px 0;
+    }
+    .info-tip-content .tip-options + * {
+      margin-top: 6px; padding-top: 6px;
+      border-top: 1px solid var(--border);
     }
     #settings-modal-close {
       background: transparent; border: 1px solid var(--border);
@@ -348,19 +409,234 @@
   <div id="settings-modal">
     <div id="settings-modal-content">
       <h3>Settings</h3>
+      <h4 class="settings-section">Graphics</h4>
       <div class="settings-row">
-        <label>Update quality</label>
+        <label>Preset</label>
+        <select id="gfx-preset-select">
+          <option value="standard">Standard</option>
+          <option value="rtx" selected>RTX</option>
+          <option value="custom" disabled hidden>Custom</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label>
+          Bloom
+          <span class="info-tip">ⓘ
+            <span class="info-tip-content">
+              UnrealBloomPass post-processing. Samples bright fragments and
+              applies a Gaussian blur to simulate light bleeding — visible on
+              the sun disc, city lights, and atmosphere rim.
+            </span>
+          </span>
+        </label>
+        <input type="checkbox" id="gfx-bloom" class="settings-checkbox" checked>
+      </div>
+      <div class="settings-row">
+        <label>
+          Atmosphere Glow
+          <span class="info-tip">ⓘ
+            <span class="info-tip-content">
+              Additive rim-glow shell around Earth. Uses a Fresnel-based
+              fragment shader on a slightly oversized sphere — fragments facing
+              the camera get more glow. Only visible when bloom is enabled.
+            </span>
+          </span>
+        </label>
+        <input type="checkbox" id="gfx-atmosphere" class="settings-checkbox" checked>
+      </div>
+      <div class="settings-row">
+        <label>
+          Bump Mapping
+          <span class="info-tip">ⓘ
+            <span class="info-tip-content">
+              Perturbs surface normals in the fragment shader using a height
+              map. Adds visible terrain detail (mountains, craters) to Earth,
+              Moon, and planets without increasing vertex count. Uses 4
+              neighboring texel samples to estimate the local gradient.
+            </span>
+          </span>
+        </label>
+        <input type="checkbox" id="gfx-bump" class="settings-checkbox" checked>
+      </div>
+      <div class="settings-row">
+        <label>
+          Curvature AO
+          <span class="info-tip">ⓘ
+            <span class="info-tip-content">
+              Curvature-based ambient occlusion. Computes a Laplacian from 4
+              height map neighbors vs. the center texel — concave areas (crater
+              floors, valleys) get darkened, adding depth without a separate AO
+              pass.
+            </span>
+          </span>
+        </label>
+        <input type="checkbox" id="gfx-ao" class="settings-checkbox" checked>
+      </div>
+      <div class="settings-row">
+        <label>
+          Sphere Detail
+          <span class="info-tip">ⓘ
+            <span class="info-tip-content">
+              Latitude × longitude subdivisions for planet sphere meshes.
+              Higher counts give vertex displacement maps more geometry to
+              deform.
+              <div class="tip-options">
+                <div><b>Low</b> (32×32) — 2k tris, fast</div>
+                <div><b>Medium</b> (64×64) — 8k tris</div>
+                <div><b>High</b> (128×128) — 33k tris</div>
+                <div><b>Very High</b> (256×256) — 131k tris</div>
+                <div><b>Ultra</b> (512×512) — 524k tris, sharpest relief</div>
+              </div>
+            </span>
+          </span>
+        </label>
+        <select id="gfx-sphere-detail">
+          <option value="32">Low</option>
+          <option value="64">Medium</option>
+          <option value="128">High</option>
+          <option value="256">Very High</option>
+          <option value="512" selected>Ultra</option>
+        </select>
+      </div>
+      <div class="settings-row settings-row-slider">
+        <label>Surface Relief <span id="relief-value">4.0x</span></label>
+        <input type="range" id="relief-slider" min="0" max="100" value="40" class="settings-slider">
+      </div>
+
+      <h4 class="settings-section">Simulation</h4>
+      <div class="settings-row">
+        <label>Preset</label>
+        <select id="sim-preset-select">
+          <option value="approximate">Approximate</option>
+          <option value="accurate" selected>Accurate</option>
+          <option value="custom" disabled hidden>Custom</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label>
+          Orbit Mode
+          <span class="info-tip">ⓘ
+            <span class="info-tip-content">
+              How background orbit paths are computed.
+              <div class="tip-options">
+                <div>
+                  <b>Analytical</b> — Keplerian ellipse from TLE orbital
+                  elements (a, e, i, Ω, ω). Shape computed once at load;
+                  orientation updated with optional J2 secular corrections.
+                  Fast even with 10k+ satellites.
+                </div>
+                <div>
+                  <b>SGP4</b> — full SGP4/SDP4 numerical propagation for
+                  every satellite. Includes J2–J4, drag, lunar/solar
+                  perturbations. Most accurate but O(n × segments)
+                  propagation calls on every recompute.
+                </div>
+              </div>
+            </span>
+          </span>
+        </label>
+        <select id="sim-orbit-mode">
+          <option value="analytical">Analytical</option>
+          <option value="sgp4" selected>SGP4</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label>
+          Orbit Segments
+          <span class="info-tip">ⓘ
+            <span class="info-tip-content">
+              Number of line segments per orbit ellipse. Each segment is a
+              pair of vertices connected by GL_LINES.
+              <div class="tip-options">
+                <div><b>Low</b> (16) — visibly polygonal, lightest</div>
+                <div><b>Medium</b> (30) — good balance for large datasets</div>
+                <div><b>High</b> (60) — smooth curves</div>
+                <div><b>Ultra</b> (90) — near-continuous, heaviest</div>
+              </div>
+            </span>
+          </span>
+        </label>
+        <select id="sim-orbit-segments">
+          <option value="16">Low</option>
+          <option value="30">Medium</option>
+          <option value="60">High</option>
+          <option value="90" selected>Ultra</option>
+        </select>
+      </div>
+      <div class="settings-row" id="sim-j2-row">
+        <label>
+          J2 Precession
+          <span class="info-tip">ⓘ
+            <span class="info-tip-content">
+              Applies J2 secular perturbation to orbit orientation. Earth's
+              oblateness causes RAAN to regress and argument of perigee to
+              advance — about 5°/day for typical LEO orbits.
+              <div class="tip-options">
+                <div><b>On</b> — Ω(t) = Ω₀ + Ω̇·Δt, ω(t) = ω₀ + ω̇·Δt</div>
+                <div><b>Off</b> — orbits stay frozen at TLE epoch angles</div>
+              </div>
+            </span>
+          </span>
+        </label>
+        <input type="checkbox" id="sim-j2" class="settings-checkbox" checked>
+      </div>
+      <div class="settings-row" id="sim-drag-row">
+        <label>
+          Atmospheric Drag
+          <span class="info-tip">ⓘ
+            <span class="info-tip-content">
+              Uses the TLE first derivative of mean motion (ṅ, ndot) to model
+              orbital decay. Every 6 hours of sim-time, semi-major axis is
+              recomputed: a(t) = (μ / n(t)²)^⅓ where n(t) = n₀ + ṅ·Δt.
+              Perifocal vertices are rebuilt if any satellite's a drifts
+              &gt;0.1 km.
+              <div class="tip-options">
+                <div><b>On</b> — LEO orbits gradually shrink</div>
+                <div><b>Off</b> — orbits keep their original size</div>
+              </div>
+            </span>
+          </span>
+        </label>
+        <input type="checkbox" id="sim-drag" class="settings-checkbox" checked>
+      </div>
+      <div class="settings-row">
+        <label>
+          Update Quality
+          <span class="info-tip">ⓘ
+            <span class="info-tip-content">
+              Satellites are divided into N batches. Each frame, one batch
+              gets a full SGP4 position update. N adapts to time warp: at
+              high warp, more batches run per frame automatically.
+              <div class="tip-options">
+                <div><b>Ultra</b> — every satellite updated every frame, zero staleness</div>
+                <div><b>High</b> — LEO ≈ 1 km max error</div>
+                <div><b>Balanced</b> — LEO ≈ 2 km max error</div>
+                <div><b>Low</b> — LEO ≈ 4 km max error</div>
+                <div><b>Lowest</b> — LEO ≈ 8 km max error</div>
+              </div>
+              <div>
+                Errors for LEO at ~550 km altitude (~7.6 km/s), 1× speed,
+                60 FPS. Scales linearly with frame rate — at 30 FPS errors
+                double. Higher orbits are slower and have proportionally
+                less error.
+              </div>
+            </span>
+          </span>
+        </label>
         <select id="update-quality-select">
-          <option value="8">High</option>
-          <option value="16" selected>Balanced</option>
+          <option value="1">Ultra</option>
+          <option value="8" selected>High</option>
+          <option value="16">Balanced</option>
           <option value="32">Low</option>
           <option value="64">Lowest</option>
         </select>
       </div>
-      <div class="settings-row">
-        <label>Unlock FPS</label>
-        <input type="checkbox" id="cb-unlock-fps" class="settings-checkbox">
+      <h4 class="settings-section">General</h4>
+      <div class="settings-row settings-row-slider">
+        <label>FPS Limit <span id="fps-limit-value">Vsync</span></label>
+        <input type="range" id="fps-limit-slider" min="0" max="482" value="0" class="settings-slider">
       </div>
+      <div id="fps-limit-warning" class="settings-warning" style="display:none">May reduce UI responsiveness</div>
       <button id="settings-modal-close">Close</button>
     </div>
   </div>
@@ -370,7 +646,7 @@
       <div id="status-line"></div>
       <div id="speed-line"></div>
       <div id="toggle-row">
-        <label title="HDR bloom and atmosphere glow"><input type="checkbox" id="cb-rtx" checked> RTX</label>
+        <label id="rtx-label" title="Toggle RTX graphics preset"><input type="checkbox" id="cb-rtx" checked> RTX</label>
         <span id="earth-toggles" style="display:contents">
           <label title="Hide all satellites except selected"><input type="checkbox" id="cb-hide-unselected" checked> Spotlight</label>
           <label title="Show cloud layer on Earth"><input type="checkbox" id="cb-clouds"> Clouds</label>

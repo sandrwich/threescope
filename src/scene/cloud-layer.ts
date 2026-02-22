@@ -36,6 +36,10 @@ export class CloudLayer {
     this.mesh.visible = false;
   }
 
+  setScale(s: number) {
+    this.mesh.scale.setScalar(s);
+  }
+
   update(currentEpoch: number, gmstDeg: number, earthOffset: number, showClouds: boolean, showNightLights: boolean) {
     this.mesh.visible = showClouds;
     if (!showClouds) return;

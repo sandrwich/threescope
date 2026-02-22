@@ -8,24 +8,52 @@ import earthFragSrc from '../shaders/earth-daynight.frag.glsl?raw';
 export class Earth {
   mesh: THREE.Mesh;
   private material: THREE.ShaderMaterial;
+  private normalMapLoaded = false;
+  private bumpEnabled = true;
+  private aoEnabledState = true;
 
   constructor(dayTex: THREE.Texture, nightTex: THREE.Texture) {
     const radius = EARTH_RADIUS_KM / DRAW_SCALE;
-    const geometry = this.genEarthGeometry(radius, 64, 64);
+    const geometry = this.genEarthGeometry(radius, 256, 256);
 
     this.material = new THREE.ShaderMaterial({
       uniforms: {
         dayTexture: { value: dayTex },
         nightTexture: { value: nightTex },
+        normalMap: { value: null },
+        displacementMap: { value: null },
         sunDir: { value: new THREE.Vector3(1, 0, 0) },
         showNight: { value: 1.0 },
         nightEmission: { value: 1.0 },
+        hasNormalMap: { value: 0.0 },
+        aoEnabled: { value: 1.0 },
+        displacementScale: { value: 0.007 },
+        hasDisplacement: { value: 0.0 },
       },
       vertexShader: earthVertSrc,
       fragmentShader: earthFragSrc,
     });
 
     this.mesh = new THREE.Mesh(geometry, this.material);
+
+    const loader = new THREE.TextureLoader();
+
+    // Load normal map asynchronously
+    loader.load('/textures/earth/normal.webp', (tex) => {
+      tex.flipY = false;
+      tex.colorSpace = THREE.NoColorSpace;
+      this.material.uniforms.normalMap.value = tex;
+      this.normalMapLoaded = true;
+      if (this.bumpEnabled) this.material.uniforms.hasNormalMap.value = 1.0;
+    });
+
+    // Load displacement map asynchronously
+    loader.load('/textures/earth/displacement.webp', (tex) => {
+      tex.flipY = false;
+      tex.colorSpace = THREE.NoColorSpace;
+      this.material.uniforms.displacementMap.value = tex;
+      this.material.uniforms.hasDisplacement.value = 1.0;
+    });
   }
 
   /**
@@ -93,5 +121,26 @@ export class Earth {
 
   setNightEmission(value: number) {
     this.material.uniforms.nightEmission.value = value;
+  }
+
+  setDisplacementScale(value: number) {
+    this.material.uniforms.displacementScale.value = value;
+  }
+
+  setBumpEnabled(on: boolean) {
+    this.bumpEnabled = on;
+    this.material.uniforms.hasNormalMap.value = (on && this.normalMapLoaded) ? 1.0 : 0.0;
+  }
+
+  setAOEnabled(on: boolean) {
+    this.aoEnabledState = on;
+    this.material.uniforms.aoEnabled.value = on ? 1.0 : 0.0;
+  }
+
+  setSphereDetail(segments: number) {
+    const radius = EARTH_RADIUS_KM / DRAW_SCALE;
+    const oldGeo = this.mesh.geometry;
+    this.mesh.geometry = this.genEarthGeometry(radius, segments, segments);
+    oldGeo.dispose();
   }
 }

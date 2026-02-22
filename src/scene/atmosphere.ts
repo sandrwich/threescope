@@ -70,4 +70,8 @@ export class Atmosphere {
   setVisible(visible: boolean) {
     this.mesh.visible = visible;
   }
+
+  setScale(s: number) {
+    this.mesh.scale.setScalar(s);
+  }
 }

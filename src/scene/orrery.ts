@@ -2,20 +2,80 @@ import * as THREE from 'three';
 import { PLANETS, type PlanetDef } from '../bodies';
 
 const PLANET_VERT = `
+uniform sampler2D displacementMap;
+uniform float displacementScale;
+uniform float hasDisplacement;
+
 varying vec2 vUv;
+varying vec3 vWorldNormal;
 
 void main() {
   vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+
+  vec3 pos = position;
+  if (hasDisplacement > 0.5) {
+    float height = texture2D(displacementMap, uv).r;
+    pos += normal * height * displacementScale;
+  }
+
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
 }
 `;
 
 const PLANET_FRAG = `
 uniform sampler2D map;
+uniform sampler2D displacementMap;
+uniform vec3 sunDir;
+uniform float bumpStrength;
+uniform float aoEnabled;
+uniform float showNight;
+uniform float hasDisplacement;
+
 varying vec2 vUv;
+varying vec3 vWorldNormal;
+
+const float TEX_STEP = 1.0 / 2048.0;
+const float AO_STRENGTH = 8.0;
 
 void main() {
-  gl_FragColor = vec4(texture2D(map, vUv).rgb, 1.0);
+  vec3 tex = texture2D(map, vUv).rgb;
+  vec3 N = normalize(vWorldNormal);
+  float ao = 1.0;
+
+  if (hasDisplacement > 0.5) {
+    float hC = texture2D(displacementMap, vUv).r;
+    float hL = texture2D(displacementMap, vUv + vec2(-TEX_STEP, 0.0)).r;
+    float hR = texture2D(displacementMap, vUv + vec2( TEX_STEP, 0.0)).r;
+    float hD = texture2D(displacementMap, vUv + vec2(0.0, -TEX_STEP)).r;
+    float hU = texture2D(displacementMap, vUv + vec2(0.0,  TEX_STEP)).r;
+
+    // Bump normal
+    if (bumpStrength > 0.01) {
+      float len = length(N.xz);
+      vec3 T = len > 0.001 ? vec3(-N.z, 0.0, N.x) / len : vec3(1.0, 0.0, 0.0);
+      vec3 B = cross(N, T);
+      N = normalize(N + bumpStrength * ((hR - hL) * T + (hU - hD) * B));
+    }
+
+    // Curvature AO: concave areas (crater floors) darken
+    if (aoEnabled > 0.5) {
+      float laplacian = (hL + hR + hD + hU) * 0.25 - hC;
+      ao = clamp(1.0 - laplacian * AO_STRENGTH, 0.5, 1.0);
+    }
+  }
+
+  // Diffuse sun lighting (only when night mode is on)
+  float NdotL = dot(N, sunDir);
+  float diffuse = smoothstep(-0.02, 0.15, NdotL);
+  diffuse = mix(1.0, diffuse, showNight);
+
+  vec3 color = tex * diffuse * ao;
+
+  // Ambient fill on dark side
+  color += tex * 0.03 * showNight;
+
+  gl_FragColor = vec4(color, 1.0);
 }
 `;
 
@@ -55,16 +115,16 @@ export class Orrery {
     const loader = new THREE.TextureLoader();
 
     const allBodies: { id: string; name: string; thumb: string; color: number; planetDef?: PlanetDef }[] = [
-      { id: 'sun', name: 'Sun', thumb: '/textures/planets/thumb/sun.webp', color: 0xffdd55, planetDef: PLANETS.find(p => p.id === 'sun') },
-      { id: 'mercury', name: 'Mercury', thumb: '/textures/planets/thumb/mercury.webp', color: 0x999999, planetDef: PLANETS.find(p => p.id === 'mercury') },
-      { id: 'venus', name: 'Venus', thumb: '/textures/planets/thumb/venus.webp', color: 0xddaa55, planetDef: PLANETS.find(p => p.id === 'venus') },
-      { id: 'earth', name: 'Earth', thumb: '/textures/planets/thumb/earth.webp', color: 0x4488cc },
-      { id: 'moon', name: 'Moon', thumb: '/textures/planets/thumb/moon.webp', color: 0xaaaaaa },
-      { id: 'mars', name: 'Mars', thumb: '/textures/planets/thumb/mars.webp', color: 0xcc5533, planetDef: PLANETS.find(p => p.id === 'mars') },
-      { id: 'jupiter', name: 'Jupiter', thumb: '/textures/planets/thumb/jupiter.webp', color: 0xccaa77, planetDef: PLANETS.find(p => p.id === 'jupiter') },
-      { id: 'saturn', name: 'Saturn', thumb: '/textures/planets/thumb/saturn.webp', color: 0xddcc88, planetDef: PLANETS.find(p => p.id === 'saturn') },
-      { id: 'uranus', name: 'Uranus', thumb: '/textures/planets/thumb/uranus.webp', color: 0x88ccdd, planetDef: PLANETS.find(p => p.id === 'uranus') },
-      { id: 'neptune', name: 'Neptune', thumb: '/textures/planets/thumb/neptune.webp', color: 0x4466cc, planetDef: PLANETS.find(p => p.id === 'neptune') },
+      { id: 'sun', name: 'Sun', thumb: '/textures/sun/thumb.webp', color: 0xffdd55, planetDef: PLANETS.find(p => p.id === 'sun') },
+      { id: 'mercury', name: 'Mercury', thumb: '/textures/mercury/thumb.webp', color: 0x999999, planetDef: PLANETS.find(p => p.id === 'mercury') },
+      { id: 'venus', name: 'Venus', thumb: '/textures/venus/thumb.webp', color: 0xddaa55, planetDef: PLANETS.find(p => p.id === 'venus') },
+      { id: 'earth', name: 'Earth', thumb: '/textures/earth/thumb.webp', color: 0x4488cc },
+      { id: 'moon', name: 'Moon', thumb: '/textures/moon/thumb.webp', color: 0xaaaaaa },
+      { id: 'mars', name: 'Mars', thumb: '/textures/mars/thumb.webp', color: 0xcc5533, planetDef: PLANETS.find(p => p.id === 'mars') },
+      { id: 'jupiter', name: 'Jupiter', thumb: '/textures/jupiter/thumb.webp', color: 0xccaa77, planetDef: PLANETS.find(p => p.id === 'jupiter') },
+      { id: 'saturn', name: 'Saturn', thumb: '/textures/saturn/thumb.webp', color: 0xddcc88, planetDef: PLANETS.find(p => p.id === 'saturn') },
+      { id: 'uranus', name: 'Uranus', thumb: '/textures/uranus/thumb.webp', color: 0x88ccdd, planetDef: PLANETS.find(p => p.id === 'uranus') },
+      { id: 'neptune', name: 'Neptune', thumb: '/textures/neptune/thumb.webp', color: 0x4466cc, planetDef: PLANETS.find(p => p.id === 'neptune') },
     ];
 
     const step = BODY_RADIUS * 2 + GAP;
@@ -181,15 +241,40 @@ export class Orrery {
     const oldMat = body.mesh.material as THREE.MeshBasicMaterial;
     const tex = oldMat.map;
 
-    // Just show the full texture — no sun shading needed for a standalone planet view
+    // Upgrade geometry for displacement (256x256 segments for smooth displaced surface)
+    const hasDisplacement = body.planetDef.displacementScale > 0;
+    if (hasDisplacement) {
+      const oldGeo = body.mesh.geometry;
+      body.mesh.geometry = new THREE.SphereGeometry(BODY_RADIUS, 256, 256);
+      oldGeo.dispose();
+    }
+
     const material = new THREE.ShaderMaterial({
-      uniforms: { map: { value: tex } },
+      uniforms: {
+        map: { value: tex },
+        displacementMap: { value: null },
+        sunDir: { value: new THREE.Vector3(1, 0, 0) },
+        bumpStrength: { value: body.planetDef.bumpStrength },
+        aoEnabled: { value: 1.0 },
+        showNight: { value: 1.0 },
+        displacementScale: { value: body.planetDef.displacementScale },
+        hasDisplacement: { value: 0.0 },
+      },
       vertexShader: PLANET_VERT,
       fragmentShader: PLANET_FRAG,
     });
 
     oldMat.dispose();
     body.mesh.material = material;
+
+    // Load displacement map asynchronously
+    if (hasDisplacement && body.planetDef.displacementMapUrl) {
+      new THREE.TextureLoader().load(body.planetDef.displacementMapUrl, (dispTex) => {
+        dispTex.colorSpace = THREE.NoColorSpace;
+        material.uniforms.displacementMap.value = dispTex;
+        material.uniforms.hasDisplacement.value = 1.0;
+      });
+    }
 
     const rotationSpeed = (2 * Math.PI) / (body.planetDef.rotationPeriodH * 3600);
     this.promoted = { body, material, rotationSpeed };

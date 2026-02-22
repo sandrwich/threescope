@@ -14,6 +14,8 @@ import { FootprintRenderer } from './scene/footprint-renderer';
 import { MarkerManager } from './scene/marker-manager';
 import { PostProcessing } from './scene/post-processing';
 import { getMinZoom, BODIES, PLANETS, type PlanetDef } from './bodies';
+import { type GraphicsSettings, PRESETS, DEFAULT_PRESET, findMatchingPreset, getPresetSettings } from './graphics';
+import { type SimulationSettings, DEFAULT_SIM_PRESET, findMatchingSimPreset, getSimPresetSettings } from './simulation';
 import { Orrery, type PromotedPlanet } from './scene/orrery';
 import { Atmosphere } from './scene/atmosphere';
 import { computeApsis } from './astro/apsis';
@@ -50,7 +52,11 @@ export class App {
   private markerManager!: MarkerManager;
   private postProcessing!: PostProcessing;
   private atmosphere!: Atmosphere;
+  private gfx: GraphicsSettings = getPresetSettings(DEFAULT_PRESET);
+  private sim: SimulationSettings = getSimPresetSettings(DEFAULT_SIM_PRESET);
   private bloomEnabled = true;
+  private atmosphereGlowEnabled = true;
+  private lastSphereDetail = 0;
   private starTex!: THREE.Texture;
   private activePlanet: PlanetDef | null = null;
   private promotedPlanet: PromotedPlanet | null = null;
@@ -209,12 +215,12 @@ export class App {
     });
 
     const [dayTex, nightTex, cloudTex, moonTex, satTex, markerTex, starTex] = await Promise.all([
-      load('/textures/earth.webp'),
-      load('/textures/earth_night.webp'),
-      load('/textures/clouds.webp'),
-      load('/textures/moon.webp'),
-      load('/textures/sat_icon.png'),
-      load('/textures/marker_icon.png'),
+      load('/textures/earth/color.webp'),
+      load('/textures/earth/night.webp'),
+      load('/textures/earth/clouds.webp'),
+      load('/textures/moon/color.webp'),
+      load('/textures/ui/sat_icon.png'),
+      load('/textures/ui/marker_icon.png'),
       load('/textures/stars.webp'),
     ]);
 
@@ -531,7 +537,7 @@ export class App {
   }
 
   private updatePlanetPickerUI() {
-    const thumbUrl = this.activePlanet?.thumbnailUrl ?? '/textures/planets/thumb/earth.webp';
+    const thumbUrl = this.activePlanet?.thumbnailUrl ?? '/textures/earth/thumb.webp';
     if (this.miniTextureId !== thumbUrl) {
       this.miniTextureId = thumbUrl;
       new THREE.TextureLoader().load(thumbUrl, (tex) => {
@@ -746,12 +752,140 @@ export class App {
       this.showMarkers = v;
       if (!v) this.markerManager.hide();
     });
-    bindCheckbox('cb-rtx', 'threescope_bloom', true, v => {
-      this.bloomEnabled = v;
-      this.earth.setNightEmission(v ? 1.5 : 1.0);
-      this.sunScene.setBloomEnabled(v);
+    // --- Graphics preset system ---
+    const presetSelect = document.getElementById('gfx-preset-select') as HTMLSelectElement;
+    const cbBloom = document.getElementById('gfx-bloom') as HTMLInputElement;
+    const cbAtmosphere = document.getElementById('gfx-atmosphere') as HTMLInputElement;
+    const cbBump = document.getElementById('gfx-bump') as HTMLInputElement;
+    const cbAO = document.getElementById('gfx-ao') as HTMLInputElement;
+    const sphereDetailSelect = document.getElementById('gfx-sphere-detail') as HTMLSelectElement;
+    const reliefSlider = document.getElementById('relief-slider') as HTMLInputElement;
+    const reliefLabel = document.getElementById('relief-value')!;
+    const customOption = presetSelect.querySelector('option[value="custom"]') as HTMLOptionElement;
+
+    const earthDrawR = EARTH_RADIUS_KM / DRAW_SCALE;
+
+    const applyGraphics = (s: GraphicsSettings) => {
+      this.gfx = s;
+      // Bloom
+      this.bloomEnabled = s.bloom;
+      this.earth.setNightEmission(s.bloom ? 1.5 : 1.0);
+      this.sunScene.setBloomEnabled(s.bloom);
+      // Atmosphere
+      this.atmosphereGlowEnabled = s.atmosphereGlow;
+      // Bump
+      this.earth.setBumpEnabled(s.bumpMapping);
+      this.moonScene.setBumpEnabled(s.bumpMapping);
+      // AO
+      this.earth.setAOEnabled(s.curvatureAO);
+      this.moonScene.setAOEnabled(s.curvatureAO);
+      // Relief
+      const mult = s.surfaceRelief / 10;
+      this.earth.setDisplacementScale(0.007 * mult);
+      this.moonScene.setDisplacementScale(0.006 * mult);
+      const maxDisp = 0.007 * mult;
+      const atmoGap = 80.0 / DRAW_SCALE;
+      const atmoScale = maxDisp > atmoGap ? (earthDrawR + maxDisp) / (earthDrawR + atmoGap) : 1.0;
+      this.atmosphere.setScale(atmoScale);
+      // Sphere detail (rebuild geometry only when changed)
+      if (s.sphereDetail !== this.lastSphereDetail) {
+        this.lastSphereDetail = s.sphereDetail;
+        this.earth.setSphereDetail(s.sphereDetail);
+        this.moonScene.setSphereDetail(s.sphereDetail);
+      }
+
+      localStorage.setItem('threescope_graphics', JSON.stringify(s));
+    };
+
+    const syncUI = (s: GraphicsSettings) => {
+      cbBloom.checked = s.bloom;
+      cbAtmosphere.checked = s.atmosphereGlow;
+      cbBump.checked = s.bumpMapping;
+      cbAO.checked = s.curvatureAO;
+      sphereDetailSelect.value = String(s.sphereDetail);
+      reliefSlider.value = String(s.surfaceRelief);
+      reliefLabel.textContent = (s.surfaceRelief / 10).toFixed(1) + 'x';
+    };
+
+    const rtxCb = document.getElementById('cb-rtx') as HTMLInputElement;
+    const rtxLabel = document.getElementById('rtx-label')!;
+    const settingsModal = document.getElementById('settings-modal')!;
+
+    const updatePresetLabel = () => {
+      const match = findMatchingPreset(this.gfx);
+      if (match) {
+        customOption.hidden = true;
+        presetSelect.value = match;
+        rtxCb.checked = match === 'rtx';
+        rtxCb.disabled = false;
+        rtxLabel.title = match === 'rtx' ? 'Switch to Standard' : 'Switch to RTX';
+        rtxLabel.childNodes[rtxLabel.childNodes.length - 1].textContent = ' RTX';
+      } else {
+        customOption.hidden = false;
+        presetSelect.value = 'custom';
+        rtxCb.disabled = true;
+        rtxCb.checked = false;
+        rtxLabel.childNodes[rtxLabel.childNodes.length - 1].textContent = ' Customized';
+        rtxLabel.title = 'Open graphics settings';
+      }
+    };
+
+    rtxLabel.addEventListener('click', (e) => {
+      if (rtxCb.disabled) {
+        e.preventDefault();
+        settingsModal.classList.add('visible');
+      }
+    });
+    rtxCb.addEventListener('change', () => {
+      const s = getPresetSettings(rtxCb.checked ? 'rtx' : 'standard');
+      syncUI(s);
+      applyGraphics(s);
+      updatePresetLabel();
     });
 
+    // Load saved or default
+    const savedGfx = localStorage.getItem('threescope_graphics');
+    if (savedGfx) {
+      try {
+        const parsed = JSON.parse(savedGfx) as GraphicsSettings;
+        // Ensure all fields exist (forward compat)
+        this.gfx = { ...getPresetSettings(DEFAULT_PRESET), ...parsed };
+      } catch { /* use default */ }
+    }
+    syncUI(this.gfx);
+    applyGraphics(this.gfx);
+    updatePresetLabel();
+
+    // Preset dropdown
+    presetSelect.addEventListener('change', () => {
+      if (presetSelect.value === 'custom') return;
+      const s = getPresetSettings(presetSelect.value);
+      syncUI(s);
+      applyGraphics(s);
+      updatePresetLabel();
+    });
+
+    // Individual setting changes
+    const onSettingChange = () => {
+      this.gfx.bloom = cbBloom.checked;
+      this.gfx.atmosphereGlow = cbAtmosphere.checked;
+      this.gfx.bumpMapping = cbBump.checked;
+      this.gfx.curvatureAO = cbAO.checked;
+      this.gfx.sphereDetail = Number(sphereDetailSelect.value);
+      applyGraphics(this.gfx);
+      updatePresetLabel();
+    };
+    cbBloom.addEventListener('change', onSettingChange);
+    cbAtmosphere.addEventListener('change', onSettingChange);
+    cbBump.addEventListener('change', onSettingChange);
+    cbAO.addEventListener('change', onSettingChange);
+    sphereDetailSelect.addEventListener('change', onSettingChange);
+    reliefSlider.addEventListener('input', () => {
+      this.gfx.surfaceRelief = Number(reliefSlider.value);
+      reliefLabel.textContent = (this.gfx.surfaceRelief / 10).toFixed(1) + 'x';
+      applyGraphics(this.gfx);
+      updatePresetLabel();
+    });
 
     // Info modal
     const infoModal = document.getElementById('info-modal')!;
@@ -765,28 +899,115 @@ export class App {
       if (e.target === infoModal) infoModal.classList.remove('visible');
     });
 
-    // Update quality (SGP4 batch cap)
+    // --- Simulation preset system ---
+    const simPresetSelect = document.getElementById('sim-preset-select') as HTMLSelectElement;
+    const simOrbitMode = document.getElementById('sim-orbit-mode') as HTMLSelectElement;
+    const simOrbitSegments = document.getElementById('sim-orbit-segments') as HTMLSelectElement;
+    const simJ2 = document.getElementById('sim-j2') as HTMLInputElement;
+    const simDrag = document.getElementById('sim-drag') as HTMLInputElement;
+    const simJ2Row = document.getElementById('sim-j2-row')!;
+    const simDragRow = document.getElementById('sim-drag-row')!;
     const qualitySelect = document.getElementById('update-quality-select') as HTMLSelectElement;
-    const savedQuality = localStorage.getItem('threescope_update_quality') || '16';
-    qualitySelect.value = savedQuality;
-    this.maxBatch = Number(savedQuality);
-    qualitySelect.addEventListener('change', () => {
-      this.maxBatch = Number(qualitySelect.value);
-      localStorage.setItem('threescope_update_quality', qualitySelect.value);
+    const simCustomOption = simPresetSelect.querySelector('option[value="custom"]') as HTMLOptionElement;
+
+    const applySimulation = (s: SimulationSettings) => {
+      this.sim = s;
+      this.orbitRenderer.setOrbitMode(s.orbitMode);
+      this.orbitRenderer.setOrbitSegments(s.orbitSegments);
+      this.orbitRenderer.setJ2Enabled(s.j2Precession);
+      this.orbitRenderer.setDragEnabled(s.atmosphericDrag);
+      this.maxBatch = s.updateQuality;
+      localStorage.setItem('threescope_simulation', JSON.stringify(s));
+    };
+
+    const syncSimUI = (s: SimulationSettings) => {
+      simOrbitMode.value = s.orbitMode;
+      simOrbitSegments.value = String(s.orbitSegments);
+      simJ2.checked = s.j2Precession;
+      simDrag.checked = s.atmosphericDrag;
+      qualitySelect.value = String(s.updateQuality);
+      // Hide J2/Drag rows in SGP4 mode
+      const analytical = s.orbitMode === 'analytical';
+      simJ2Row.style.display = analytical ? '' : 'none';
+      simDragRow.style.display = analytical ? '' : 'none';
+    };
+
+    const updateSimPresetLabel = () => {
+      const match = findMatchingSimPreset(this.sim);
+      if (match) {
+        simCustomOption.hidden = true;
+        simPresetSelect.value = match;
+      } else {
+        simCustomOption.hidden = false;
+        simPresetSelect.value = 'custom';
+      }
+    };
+
+    // Load saved or default
+    const savedSim = localStorage.getItem('threescope_simulation');
+    if (savedSim) {
+      try {
+        const parsed = JSON.parse(savedSim) as SimulationSettings;
+        this.sim = { ...getSimPresetSettings(DEFAULT_SIM_PRESET), ...parsed };
+      } catch { /* use default */ }
+    }
+    syncSimUI(this.sim);
+    applySimulation(this.sim);
+    updateSimPresetLabel();
+
+    // Preset dropdown
+    simPresetSelect.addEventListener('change', () => {
+      if (simPresetSelect.value === 'custom') return;
+      const s = getSimPresetSettings(simPresetSelect.value);
+      syncSimUI(s);
+      applySimulation(s);
+      updateSimPresetLabel();
     });
 
-    // Unlock FPS
-    const unlockCb = document.getElementById('cb-unlock-fps') as HTMLInputElement;
-    const savedUnlock = localStorage.getItem('threescope_unlock_fps') === 'true';
-    unlockCb.checked = savedUnlock;
-    this.unlockFps = savedUnlock;
-    unlockCb.addEventListener('change', () => {
-      this.unlockFps = unlockCb.checked;
-      localStorage.setItem('threescope_unlock_fps', String(unlockCb.checked));
+    // Individual setting changes
+    const onSimSettingChange = () => {
+      this.sim.orbitMode = simOrbitMode.value as 'analytical' | 'sgp4';
+      this.sim.orbitSegments = Number(simOrbitSegments.value);
+      this.sim.j2Precession = simJ2.checked;
+      this.sim.atmosphericDrag = simDrag.checked;
+      this.sim.updateQuality = Number(qualitySelect.value);
+      // Hide/show J2/Drag based on orbit mode
+      const analytical = this.sim.orbitMode === 'analytical';
+      simJ2Row.style.display = analytical ? '' : 'none';
+      simDragRow.style.display = analytical ? '' : 'none';
+      applySimulation(this.sim);
+      updateSimPresetLabel();
+    };
+    simOrbitMode.addEventListener('change', onSimSettingChange);
+    simOrbitSegments.addEventListener('change', onSimSettingChange);
+    simJ2.addEventListener('change', onSimSettingChange);
+    simDrag.addEventListener('change', onSimSettingChange);
+    qualitySelect.addEventListener('change', onSimSettingChange);
+
+    // FPS Limit slider: 0 = Vsync (rAF), 1–500 = FPS cap, 501 = Unlocked
+    const fpsSlider = document.getElementById('fps-limit-slider') as HTMLInputElement;
+    const fpsLabel = document.getElementById('fps-limit-value')!;
+    const fpsWarning = document.getElementById('fps-limit-warning')!;
+    const savedFpsLimit = localStorage.getItem('threescope_fps_limit');
+    if (savedFpsLimit !== null) {
+      const v = parseInt(savedFpsLimit, 10);
+      fpsSlider.value = String(v);
+      this.fpsLimit = v === 0 ? -1 : v > 480 ? 0 : v; // -1=vsync, 0=unlocked, else cap
+    }
+    const updateFpsLabel = (v: number) => {
+      if (v === 0) { fpsLabel.textContent = 'Vsync'; fpsWarning.style.display = 'none'; }
+      else if (v > 480) { fpsLabel.textContent = 'Unlocked'; fpsWarning.style.display = ''; }
+      else { fpsLabel.textContent = String(v); fpsWarning.style.display = 'none'; }
+    };
+    updateFpsLabel(parseInt(fpsSlider.value, 10));
+    fpsSlider.addEventListener('input', () => {
+      const v = parseInt(fpsSlider.value, 10);
+      this.fpsLimit = v === 0 ? -1 : v > 480 ? 0 : v;
+      updateFpsLabel(v);
+      localStorage.setItem('threescope_fps_limit', String(v));
     });
 
     // Settings modal
-    const settingsModal = document.getElementById('settings-modal')!;
     document.getElementById('settings-btn')!.addEventListener('click', () => {
       settingsModal.classList.add('visible');
     });
@@ -1046,20 +1267,43 @@ export class App {
     }, { passive: false });
   }
 
-  private unlockFps = false;
+  private fpsLimit = -1; // -1 = vsync (rAF), 0 = unlocked, >0 = FPS cap
   private maxBatch = 16;
   private mcChannel = new MessageChannel();
+  private lastFrameTime = 0;
 
-  private scheduleUnlocked() {
-    this.mcChannel.port2.postMessage(null);
+  private scheduleNextFrame() {
+    if (this.fpsLimit === 0) {
+      this.mcChannel.port2.postMessage(null);
+    } else if (this.fpsLimit < 0) {
+      requestAnimationFrame(() => this.animate());
+    } else {
+      const remaining = this.lastFrameTime + (1000 / this.fpsLimit) - performance.now();
+      if (remaining > 4) {
+        setTimeout(() => this.animate(), remaining - 1);
+      } else {
+        // ≤4ms: MessageChannel for sub-setTimeout precision
+        this.mcChannel.port2.postMessage(null);
+      }
+    }
   }
 
   private animate() {
-    if (this.unlockFps) {
-      this.scheduleUnlocked();
+    // Gate: skip if fired too early (MessageChannel precision phase)
+    if (this.fpsLimit > 0) {
+      const target = this.lastFrameTime + (1000 / this.fpsLimit);
+      if (performance.now() < target) {
+        this.scheduleNextFrame();
+        return;
+      }
+      // Fixed-interval pacing: advance by target interval, reset if too far behind
+      const interval = 1000 / this.fpsLimit;
+      this.lastFrameTime += interval;
+      if (performance.now() - this.lastFrameTime > interval) this.lastFrameTime = performance.now();
     } else {
-      requestAnimationFrame(() => this.animate());
+      this.lastFrameTime = performance.now();
     }
+    this.scheduleNextFrame();
 
     const dt = this.clock.getDelta();
     this.timeSystem.update(dt);
@@ -1187,12 +1431,22 @@ export class App {
       const sunEciDir = calculateSunPosition(epoch).normalize();
       this.atmosphere.update(sunEciDir);
       this.moonScene.updateSunDir(sunEciDir);
-      this.atmosphere.setVisible(this.bloomEnabled && this.activeLock !== TargetLock.PLANET && !this.orreryMode);
+      this.atmosphere.setVisible(this.atmosphereGlowEnabled && this.activeLock !== TargetLock.PLANET && !this.orreryMode);
 
       // Orrery mode (includes promoted planet if any)
       if (this.orrery) {
         this.orrery.update();
         if (this.promotedPlanet) {
+          this.promotedPlanet.material.uniforms.sunDir.value.copy(sunEciDir);
+          this.promotedPlanet.material.uniforms.showNight.value = this.cfg.showNightLights ? 1.0 : 0.0;
+          this.promotedPlanet.material.uniforms.aoEnabled.value = this.gfx.curvatureAO ? 1.0 : 0.0;
+          if (this.promotedPlanet.body.planetDef) {
+            const mult = this.gfx.surfaceRelief / 10;
+            this.promotedPlanet.material.uniforms.displacementScale.value =
+              this.promotedPlanet.body.planetDef.displacementScale * mult;
+            this.promotedPlanet.material.uniforms.bumpStrength.value =
+              this.gfx.bumpMapping ? this.promotedPlanet.body.planetDef.bumpStrength : 0.0;
+          }
           this.promotedPlanet.body.mesh.rotation.y += this.promotedPlanet.rotationSpeed * dt * this.timeSystem.timeMultiplier;
           // Swap hi-res texture only after camera zoom has fully settled
           if (this.pendingHiTex) {
@@ -1207,7 +1461,7 @@ export class App {
 
       this.satManager.setVisible(earthMode);
       document.getElementById('earth-toggles')!.style.display = earthMode ? 'contents' : 'none';
-      const showNight = earthMode || this.activeLock === TargetLock.MOON;
+      const showNight = earthMode || this.activeLock === TargetLock.MOON || this.activeLock === TargetLock.PLANET;
       document.getElementById('night-toggle')!.style.display = showNight ? 'contents' : 'none';
       if (earthMode) {
         this.satManager.update(
