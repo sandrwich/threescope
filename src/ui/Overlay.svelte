@@ -11,6 +11,8 @@
   import ViewWindow from './ViewWindow.svelte';
   import SelectionWindow from './SelectionWindow.svelte';
   import CommandPalette from './CommandPalette.svelte';
+  import PassesWindow from './PassesWindow.svelte';
+  import PolarPlot from './PolarPlot.svelte';
 </script>
 
 <div id="ui-overlay">
@@ -25,6 +27,8 @@
   <TimeWindow />
   <ViewWindow />
   <SelectionWindow />
+  <PassesWindow />
+  <PolarPlot />
   <CommandPalette />
 </div>
 

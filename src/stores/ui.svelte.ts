@@ -1,4 +1,5 @@
 import type { Satellite, SelectedSatInfo } from '../types';
+import type { SatellitePass } from '../passes/pass-types';
 import { ViewMode } from '../types';
 
 class UIStore {
@@ -38,6 +39,16 @@ class UIStore {
   // Selection window
   selectionWindowOpen = $state(true);
   selectedSatData = $state<SelectedSatInfo[]>([]);
+
+  // Pass predictor
+  selectedSatCount = $state(0);
+  passesWindowOpen = $state(false);
+  polarPlotOpen = $state(false);
+  passes = $state<SatellitePass[]>([]);
+  passesComputing = $state(false);
+  passesProgress = $state(0);
+  selectedPassIdx = $state(-1);
+  livePassAzEl = $state<{ az: number; el: number } | null>(null);
 
   // Hover tooltip — content set via store, position set via direct DOM
   satInfoVisible = $state(false);
@@ -80,6 +91,7 @@ class UIStore {
   getSelectedSatelliteNames: (() => string[]) | null = null;
   onSelectSatelliteByName: ((name: string) => void) | null = null;
   onRefreshTLE: (() => void) | null = null;
+  onRequestPasses: (() => void) | null = null;
 
   loadToggles() {
     const load = (key: string, defaultVal: boolean): boolean => {

@@ -103,6 +103,8 @@
     actions.push({ id: 'win-view', category: 'Window', label: 'Toggle View', execute: () => { uiStore.viewWindowOpen = !uiStore.viewWindowOpen; close(); } });
     actions.push({ id: 'win-settings', category: 'Window', label: 'Toggle Settings', execute: () => { uiStore.settingsOpen = !uiStore.settingsOpen; close(); } });
     actions.push({ id: 'win-selection', category: 'Window', label: 'Toggle Selection', keywords: 'selected satellites panel', execute: () => { uiStore.selectionWindowOpen = !uiStore.selectionWindowOpen; close(); } });
+    actions.push({ id: 'win-passes', category: 'Window', label: 'Toggle Passes', shortcut: 'P', keywords: 'pass predictor observer satellite', execute: () => { uiStore.passesWindowOpen = !uiStore.passesWindowOpen; close(); } });
+    actions.push({ id: 'win-polar', category: 'Window', label: 'Toggle Polar Plot', keywords: 'azimuth elevation tracking', execute: () => { uiStore.polarPlotOpen = !uiStore.polarPlotOpen; close(); } });
     actions.push({ id: 'win-help', category: 'Window', label: 'Show Help', keywords: 'info controls keyboard', execute: () => { uiStore.infoModalOpen = true; close(); } });
 
     return actions;

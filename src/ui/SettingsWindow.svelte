@@ -5,8 +5,10 @@
   import { uiStore } from '../stores/ui.svelte';
   import { ICON_SETTINGS } from './shared/icons';
   import { settingsStore } from '../stores/settings.svelte';
+  import { observerStore } from '../stores/observer.svelte';
   import { getPresetSettings } from '../graphics';
   import { getSimPresetSettings } from '../simulation';
+  import { getElevation, isElevationLoaded } from '../astro/elevation';
 
   // --- Graphics ---
   function onGfxPresetChange(e: Event) {
@@ -54,6 +56,50 @@
     settingsStore.simulation.updateQuality = Number((e.target as HTMLSelectElement).value);
     onSimChange();
   }
+
+  // --- Observer ---
+  let obsLat = $state(String(observerStore.location.lat));
+  let obsLon = $state(String(observerStore.location.lon));
+  let obsAlt = $state(String(observerStore.location.alt));
+  let obsName = $state(observerStore.location.name);
+
+  function applyObserver() {
+    const lat = Math.max(-90, Math.min(90, Number(obsLat) || 0));
+    const lon = Math.max(-180, Math.min(180, Number(obsLon) || 0));
+    const alt = Math.max(0, Number(obsAlt) || 0);
+    observerStore.setLocation({ name: obsName, lat, lon, alt });
+  }
+
+  function lookupAlt() {
+    if (!isElevationLoaded()) return;
+    const lat = Number(obsLat) || 0;
+    const lon = Number(obsLon) || 0;
+    obsAlt = String(getElevation(lat, lon));
+    applyObserver();
+  }
+
+  function useMyLocation() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        obsLat = pos.coords.latitude.toFixed(4);
+        obsLon = pos.coords.longitude.toFixed(4);
+        obsAlt = String(Math.round(pos.coords.altitude ?? 0));
+        obsName = '';
+        applyObserver();
+      },
+      () => { /* user denied or error — do nothing */ },
+      { enableHighAccuracy: true },
+    );
+  }
+
+  // Sync back when store changes externally
+  $effect(() => {
+    obsLat = String(observerStore.location.lat);
+    obsLon = String(observerStore.location.lon);
+    obsAlt = String(observerStore.location.alt);
+    obsName = observerStore.location.name;
+  });
 
   // --- FPS ---
   function onFpsInput(e: Event) {
@@ -212,6 +258,27 @@
   {#if showFpsWarning}
     <div class="warning">May reduce UI responsiveness</div>
   {/if}
+
+  <h4 class="section-header">Observer</h4>
+  <div class="obs-name-row">
+    <label>Name</label>
+    <input class="obs-input" type="text" bind:value={obsName} onblur={applyObserver} placeholder="Home" />
+  </div>
+  <div class="obs-coord-row">
+    <div class="obs-field">
+      <label>Lat</label>
+      <input class="obs-input" type="number" min="-90" max="90" step="0.01" bind:value={obsLat} onblur={applyObserver} />
+    </div>
+    <div class="obs-field">
+      <label>Lon</label>
+      <input class="obs-input" type="number" min="-180" max="180" step="0.01" bind:value={obsLon} onblur={applyObserver} />
+    </div>
+    <div class="obs-field">
+      <label class="alt-label">Alt (m) <button class="alt-auto" onclick={lookupAlt} title="Auto-detect from coordinates">&#8635;</button></label>
+      <input class="obs-input" type="number" min="0" step="1" bind:value={obsAlt} onblur={applyObserver} />
+    </div>
+  </div>
+  <button class="geo-btn" onclick={useMyLocation}>Use My Location</button>
 </DraggableWindow>
 
 <style>
@@ -279,4 +346,70 @@
     color: #cc6633;
     margin: -6px 0 8px;
   }
+
+  .obs-coord-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .obs-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+  }
+  .obs-field label {
+    font-size: 10px;
+    color: var(--text-ghost);
+  }
+  .alt-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .alt-auto {
+    background: none;
+    border: none;
+    color: var(--text-ghost);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0;
+    line-height: 1;
+  }
+  .alt-auto:hover { color: var(--text-dim); }
+  .obs-input {
+    background: var(--ui-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 3px 6px;
+    font-size: 12px;
+    font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .obs-input:hover { border-color: var(--border-hover); }
+  .obs-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .obs-name-row label {
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .obs-name-row .obs-input {
+    flex: 1;
+  }
+  .geo-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: inherit;
+    padding: 4px 12px;
+    cursor: pointer;
+    width: 100%;
+  }
+  .geo-btn:hover { border-color: var(--border-hover); color: var(--text); }
 </style>

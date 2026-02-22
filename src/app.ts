@@ -21,15 +21,19 @@ import { MapRenderer } from './scene/map-renderer';
 import { CameraController } from './interaction/camera-controller';
 import { InputHandler } from './interaction/input-handler';
 import { OrreryController } from './scene/orrery-controller';
-import { getMapCoordinates } from './astro/coordinates';
+import { getMapCoordinates, latLonToSurface } from './astro/coordinates';
 import { calculateSunPosition } from './astro/sun';
 import { fetchTLEData, parseTLEText, type FetchResult } from './data/tle-loader';
 import { DEFAULT_GROUP } from './data/tle-sources';
 import { timeStore } from './stores/time.svelte';
 import { uiStore } from './stores/ui.svelte';
 import { settingsStore } from './stores/settings.svelte';
+import { observerStore } from './stores/observer.svelte';
 import { UIUpdater } from './ui/ui-updater';
 import { GeoOverlay } from './scene/geo-overlay';
+import { PassPredictor } from './passes/pass-predictor';
+import { getAzEl, renderToEci } from './astro/az-el';
+import { loadElevation, getElevation, isElevationLoaded } from './astro/elevation';
 
 function formatAge(ms: number): string {
   const mins = Math.floor(ms / 60000);
@@ -77,6 +81,9 @@ export class App {
   private fadingInSats = new Set<Satellite>();
   private prevSelectedSats = new Set<Satellite>();
   private cfg = { ...defaultConfig };
+  private passPredictor = new PassPredictor();
+  private lastPassSatsVersion = -1;
+  private overlayEl!: HTMLElement;
 
   // Reusable temp objects (avoid per-frame allocations)
   private raycaster = new THREE.Raycaster();
@@ -188,6 +195,8 @@ export class App {
         }
       },
       onResize: () => {},
+      tryStartObserverDrag: () => this.tryStartObserverDrag(),
+      onObserverDrag: () => this.handleObserverDrag(),
     });
 
     this.setLoading(1.0, 'Ready!');
@@ -263,7 +272,7 @@ export class App {
     this.footprintRenderer = new FootprintRenderer(this.scene3d);
 
     // Markers
-    const overlay = document.getElementById('svelte-ui')!;
+    const overlay = this.overlayEl = document.getElementById('svelte-ui')!;
     this.markerManager = new MarkerManager(this.scene3d, this.cfg.markerGroups, markerTex, overlay);
 
     // Geographic overlays (country outlines + lat/lon grid)
@@ -539,6 +548,25 @@ export class App {
     // TLE refresh/retry
     uiStore.onRefreshTLE = () => this.loadTLEGroup(this.currentGroup, true);
 
+    // Pass predictor
+    observerStore.load();
+    this.passPredictor.onResult = (passes) => {
+      uiStore.passes = passes;
+      uiStore.passesComputing = false;
+      uiStore.passesProgress = 0;
+    };
+    this.passPredictor.onProgress = (pct) => {
+      uiStore.passesProgress = pct;
+    };
+    uiStore.onRequestPasses = () => this.requestPasses();
+    observerStore.onLocationChange = () => {
+      if (uiStore.passesWindowOpen) this.requestPasses();
+      this.updateObserverMarker();
+    };
+    // Load elevation grid in background
+    loadElevation();
+    this.updateObserverMarker();
+
     // Mini planet renderer — wait for Svelte to mount the canvas
     this.orreryCtrl.initMiniRenderer();
 
@@ -577,6 +605,84 @@ export class App {
     this.orbitRenderer.setJ2Enabled(s.j2Precession);
     this.orbitRenderer.setDragEnabled(s.atmosphericDrag);
     this.maxBatch = s.updateQuality;
+  }
+
+  private requestPasses() {
+    if (!observerStore.isSet || this.selectedSats.size === 0) {
+      uiStore.passes = [];
+      uiStore.passesComputing = false;
+      return;
+    }
+    const sats: { name: string; line1: string; line2: string; colorIndex: number }[] = [];
+    let idx = 0;
+    for (const sat of this.selectedSats) {
+      sats.push({ name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx });
+      idx++;
+    }
+    uiStore.passesComputing = true;
+    uiStore.passesProgress = 0;
+    this.passPredictor.compute({
+      type: 'compute',
+      satellites: sats,
+      observerLat: observerStore.location.lat,
+      observerLon: observerStore.location.lon,
+      observerAlt: observerStore.location.alt,
+      startEpoch: timeStore.epoch,
+      durationDays: 3,
+      minElevation: 0,
+    });
+    this.lastPassSatsVersion = this.selectedSatsVersion;
+  }
+
+  private updateObserverMarker() {
+    if (!observerStore.isSet) {
+      this.markerManager.updateGroupMarkers('observer', []);
+      this.mapRenderer.updateGroupMarkers('observer', [], '#ff8800', this.overlayEl);
+      return;
+    }
+    const loc = observerStore.location;
+    const name = observerStore.displayName;
+    const markers = [{ name, lat: loc.lat, lon: loc.lon }];
+    this.markerManager.updateGroupMarkers('observer', markers);
+    this.mapRenderer.updateGroupMarkers('observer', markers, '#ff8800', this.overlayEl);
+  }
+
+  private getObserverScreenPos(): { x: number; y: number } | null {
+    if (!observerStore.isSet || !(uiStore.markerVisibility['observer'] ?? false)) return null;
+    const loc = observerStore.location;
+    if (this.viewMode === ViewMode.VIEW_3D) {
+      const gmstDeg = this.timeSystem.getGmstDeg();
+      const pos = latLonToSurface(loc.lat, loc.lon, gmstDeg, this.cfg.earthRotationOffset);
+      const projected = pos.project(this.camera3d);
+      return {
+        x: (projected.x * 0.5 + 0.5) * window.innerWidth,
+        y: (-projected.y * 0.5 + 0.5) * window.innerHeight,
+      };
+    } else {
+      const mapX = (loc.lon / 360.0) * MAP_W;
+      const mapY = -(loc.lat / 180.0) * MAP_H;
+      const cam = this.camera2d;
+      return {
+        x: ((mapX - cam.left) / (cam.right - cam.left)) * window.innerWidth,
+        y: ((mapY - cam.top) / (cam.bottom - cam.top)) * window.innerHeight,
+      };
+    }
+  }
+
+  private tryStartObserverDrag(): boolean {
+    const sp = this.getObserverScreenPos();
+    if (!sp) return false;
+    const mx = this.input.mousePos.x, my = this.input.mousePos.y;
+    const dist = Math.sqrt((mx - sp.x) ** 2 + (my - sp.y) ** 2);
+    return dist < 20;
+  }
+
+  private handleObserverDrag() {
+    const ll = uiStore.cursorLatLon;
+    if (!ll) return;
+    const elev = isElevationLoaded() ? getElevation(ll.lat, ll.lon) : 0;
+    observerStore.setFromLatLon(ll.lat, ll.lon, elev);
+    this.updateObserverMarker();
   }
 
   /** Handle click/tap satellite selection */
@@ -718,6 +824,17 @@ export class App {
       }
     }
 
+    // Observer drag cursor
+    if (this.input.isDraggingObserver) {
+      this.renderer.domElement.style.cursor = 'grabbing';
+    } else if (!this.hoveredSat && !this.orreryCtrl.isOrreryMode) {
+      const sp = this.getObserverScreenPos();
+      if (sp) {
+        const dist = Math.sqrt((this.input.mousePos.x - sp.x) ** 2 + (this.input.mousePos.y - sp.y) ** 2);
+        this.renderer.domElement.style.cursor = dist < 20 ? 'grab' : '';
+      }
+    }
+
     // activeSat = hovered, or first selected if nothing hovered
     const firstSelected = this.selectedSats.size > 0 ? this.selectedSats.values().next().value! : null;
     const activeSat = this.hoveredSat ?? firstSelected;
@@ -827,6 +944,33 @@ export class App {
         this.footprintRenderer.update(fpEntries);
 
         this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camera.distance);
+      }
+
+      // Keep reactive sat count in sync for UI components
+      uiStore.selectedSatCount = this.selectedSats.size;
+
+      // Pass predictor: auto-trigger when selection changes and window is open
+      if (uiStore.passesWindowOpen && this.lastPassSatsVersion !== this.selectedSatsVersion && !this.passPredictor.isComputing()) {
+        this.requestPasses();
+      }
+
+      // Pass predictor: compute live az/el for polar plot
+      if (uiStore.polarPlotOpen && uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.passes.length) {
+        const pass = uiStore.passes[uiStore.selectedPassIdx];
+        if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch) {
+          // Find the satellite by name
+          const sat = this.satellites.find(s => s.name === pass.satName);
+          if (sat) {
+            const eci = renderToEci(sat.currentPos.x, sat.currentPos.y, sat.currentPos.z);
+            const gmstRad = gmstDeg * DEG2RAD;
+            const obs = observerStore.location;
+            uiStore.livePassAzEl = getAzEl(eci.x, eci.y, eci.z, gmstRad, obs.lat, obs.lon, obs.alt);
+          } else {
+            uiStore.livePassAzEl = null;
+          }
+        } else {
+          uiStore.livePassAzEl = null;
+        }
       }
 
       const activePlanet = this.orreryCtrl.currentActivePlanet;

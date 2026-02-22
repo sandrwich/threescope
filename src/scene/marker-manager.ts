@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MarkerGroup } from '../types';
+import type { Marker, MarkerGroup } from '../types';
 import { latLonToSurface } from '../astro/coordinates';
 
 interface GroupEntry {
@@ -39,6 +39,32 @@ export class MarkerManager {
       }
 
       this.groups.push(entry);
+    }
+  }
+
+  updateGroupMarkers(groupId: string, markers: Marker[]) {
+    const entry = this.groups.find(g => g.group.id === groupId);
+    if (!entry) return;
+    // Remove old sprites and labels
+    for (const s of entry.sprites) this.scene.remove(s);
+    for (const l of entry.labels) l.remove();
+    entry.sprites = [];
+    entry.labels = [];
+    entry.group.markers = markers;
+    // Create new ones
+    const color = new THREE.Color(entry.group.color);
+    for (const m of markers) {
+      const mat = new THREE.SpriteMaterial({ map: this.markerTex, color, depthTest: false, transparent: true });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(0.04, 0.04, 1);
+      this.scene.add(sprite);
+      entry.sprites.push(sprite);
+
+      const label = document.createElement('div');
+      label.style.cssText = `position:absolute;font-size:11px;color:${entry.group.color};pointer-events:none;white-space:nowrap;display:none;`;
+      label.textContent = m.name;
+      this.overlay.appendChild(label);
+      entry.labels.push(label);
     }
   }
 

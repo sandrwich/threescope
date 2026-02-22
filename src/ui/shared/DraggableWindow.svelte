@@ -63,28 +63,38 @@
     if (y > maxY) y = Math.max(10, maxY);
   }
 
-  onMount(() => {
+  let ro: ResizeObserver | null = null;
+
+  // Clamp + attach observers when the window element appears (open becomes true)
+  $effect(() => {
+    const el = windowEl;
+    if (!el) return;
+
     if (!initialized) {
       x = initialX;
       y = initialY;
       initialized = true;
-      requestAnimationFrame(clampToViewport);
     }
     bringToFront();
+    requestAnimationFrame(clampToViewport);
 
-    // Re-clamp whenever the window resizes (content changes, viewport resize)
-    const ro = new ResizeObserver(clampToViewport);
-    if (windowEl) ro.observe(windowEl);
+    ro?.disconnect();
+    ro = new ResizeObserver(clampToViewport);
+    ro.observe(el);
+    el.addEventListener('mousedown', bringToFront, true);
+
+    return () => {
+      ro?.disconnect();
+      el.removeEventListener('mousedown', bringToFront, true);
+    };
+  });
+
+  onMount(() => {
     window.addEventListener('resize', clampToViewport);
-
-    // Capture phase so clicks on inputs/selects/buttons still bring window to front
-    windowEl?.addEventListener('mousedown', bringToFront, true);
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     return () => {
-      ro.disconnect();
       window.removeEventListener('resize', clampToViewport);
-      windowEl?.removeEventListener('mousedown', bringToFront, true);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };

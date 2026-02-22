@@ -1,5 +1,6 @@
 <script lang="ts">
   import { uiStore } from '../stores/ui.svelte';
+  import { getElevation, isElevationLoaded } from '../astro/elevation';
 
   function formatCoord(val: number, pos: string, neg: string): string {
     const dir = val >= 0 ? pos : neg;
@@ -8,6 +9,11 @@
 
   let showButton = $derived(uiStore.tleLoadState === 'cached' || uiStore.tleLoadState === 'stale' || uiStore.tleLoadState === 'failed');
   let buttonTitle = $derived(uiStore.tleLoadState === 'failed' ? 'Retry TLE fetch' : 'Refresh TLE data');
+  let cursorElev = $derived(
+    uiStore.cursorLatLon && isElevationLoaded()
+      ? getElevation(uiStore.cursorLatLon.lat, uiStore.cursorLatLon.lon)
+      : null
+  );
 </script>
 
 <div class="stats-panel">
@@ -21,7 +27,7 @@
   </div>
   <div class="coords" class:visible={uiStore.cursorLatLon !== null}>
     {#if uiStore.cursorLatLon}
-      {formatCoord(uiStore.cursorLatLon.lat, 'N', 'S')}, {formatCoord(uiStore.cursorLatLon.lon, 'E', 'W')}
+      {formatCoord(uiStore.cursorLatLon.lat, 'N', 'S')}, {formatCoord(uiStore.cursorLatLon.lon, 'E', 'W')}{#if cursorElev !== null}, {cursorElev}m{/if}
     {:else}
       &nbsp;
     {/if}

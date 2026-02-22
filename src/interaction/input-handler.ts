@@ -17,6 +17,8 @@ export interface InputCallbacks {
   onOrreryClick(): void;
   onToggleViewMode(): void;
   onResize(w: number, h: number): void;
+  tryStartObserverDrag(): boolean;
+  onObserverDrag(): void;
 }
 
 /**
@@ -37,6 +39,11 @@ export class InputHandler {
   private _lastTwoTouchCenter = new THREE.Vector2();
   private _touchMoved = false;
 
+  // Observer marker drag
+  private _isDraggingObserver = false;
+  private _leftDownPos = new THREE.Vector2();
+  private _leftDown = false;
+
   constructor(
     canvas: HTMLCanvasElement,
     private renderer: THREE.WebGLRenderer,
@@ -54,6 +61,7 @@ export class InputHandler {
   get mouseNDC(): THREE.Vector2 { return this._mouseNDC; }
   get isTouchActive(): boolean { return this._touchCount > 0 || ('ontouchstart' in window); }
   get touchCount(): number { return this._touchCount; }
+  get isDraggingObserver(): boolean { return this._isDraggingObserver; }
 
   // ====================== Event setup ======================
 
@@ -79,6 +87,20 @@ export class InputHandler {
         -(e.clientY / window.innerHeight) * 2 + 1,
       );
 
+      // Observer marker drag
+      if (this._leftDown && !this._isDraggingObserver) {
+        const dist = this._leftDownPos.distanceTo(this._mousePos);
+        if (dist > 4) {
+          // Moved enough to start drag — check if we should drag the observer
+          this._isDraggingObserver = this.cb.tryStartObserverDrag();
+          this._leftDown = false; // don't re-check
+        }
+      }
+      if (this._isDraggingObserver) {
+        this.cb.onObserverDrag();
+        return; // don't orbit/pan while dragging observer
+      }
+
       if (this._isRightDragging || this._isMiddleDragging) {
         if (this.cb.getViewMode() === ViewMode.VIEW_2D) {
           // Pan 2D
@@ -97,10 +119,20 @@ export class InputHandler {
     });
 
     window.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        this._leftDown = true;
+        this._leftDownPos.set(e.clientX, e.clientY);
+      }
       if (e.button === 2) this._isRightDragging = true;
       if (e.button === 1) this._isMiddleDragging = true;
     });
     window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) {
+        this._leftDown = false;
+        if (this._isDraggingObserver) {
+          this._isDraggingObserver = false;
+        }
+      }
       if (e.button === 2) this._isRightDragging = false;
       if (e.button === 1) this._isMiddleDragging = false;
     });
@@ -122,6 +154,11 @@ export class InputHandler {
 
     // Click selection
     canvas.addEventListener('click', (e) => {
+      // Suppress click if we just finished dragging the observer
+      if (this._isDraggingObserver) return;
+      // Check if left button was released after a drag (distance > threshold)
+      if (this._leftDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY)) > 4) return;
+
       // Ignore clicks on UI area
       if (e.clientX < 220 && e.clientY > 110 && e.clientY < 210) return;
 
@@ -179,6 +216,10 @@ export class InputHandler {
           break;
         case '?':
           uiStore.infoModalOpen = true;
+          break;
+        case 'p':
+        case 'P':
+          uiStore.passesWindowOpen = !uiStore.passesWindowOpen;
           break;
       }
     });

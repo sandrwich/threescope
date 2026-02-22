@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Satellite } from '../types';
+import type { Satellite, Marker } from '../types';
 import type { AppConfig, MarkerGroup } from '../types';
 import { parseHexColor } from '../config';
 import { MAP_W, MAP_H, TWO_PI, FP_RINGS, FP_PTS, DEG2RAD } from '../constants';
@@ -236,7 +236,7 @@ export class MapRenderer {
     }
     this.markerData2d = allMarkers;
 
-    const maxMarkerVerts = allMarkers.length * 3; // 3 offsets per marker
+    const maxMarkerVerts = (allMarkers.length + 4) * 3; // 3 offsets per marker + headroom
     const mGeo2d = new THREE.BufferGeometry();
     this.markerPosBuffer2d = new THREE.BufferAttribute(new Float32Array(maxMarkerVerts * 3), 3);
     this.markerPosBuffer2d.setUsage(THREE.DynamicDrawUsage);
@@ -270,6 +270,43 @@ export class MapRenderer {
 
   hideMarkerLabels() {
     for (const ml of this.markerLabels2d) ml.div.style.display = 'none';
+  }
+
+  updateGroupMarkers(groupId: string, markers: Marker[], color: string, overlay: HTMLElement) {
+    // Remove old entries for this group
+    for (let i = this.markerLabels2d.length - 1; i >= 0; i--) {
+      if (this.markerLabels2d[i].groupId === groupId) {
+        this.markerLabels2d[i].div.remove();
+        this.markerLabels2d.splice(i, 1);
+      }
+    }
+    this.markerData2d = this.markerData2d.filter(d => d.groupId !== groupId);
+
+    // Add new entries
+    const c = new THREE.Color(color);
+    for (const m of markers) {
+      const mapX = (m.lon / 360.0) * MAP_W;
+      const mapY = -(m.lat / 180.0) * MAP_H;
+      this.markerData2d.push({ groupId, mapX, mapY, color: c });
+
+      const label = document.createElement('div');
+      label.style.cssText = `position:absolute;font-size:11px;color:${color};pointer-events:none;white-space:nowrap;display:none;`;
+      label.textContent = m.name;
+      overlay.appendChild(label);
+      this.markerLabels2d.push({ div: label, groupId, mapX, mapY });
+    }
+
+    // Reallocate buffers if needed
+    const needed = this.markerData2d.length * 3 * 3;
+    if (needed > (this.markerPosBuffer2d.array as Float32Array).length) {
+      const geo = this.markerPoints2d.geometry;
+      this.markerPosBuffer2d = new THREE.BufferAttribute(new Float32Array(needed + 12), 3);
+      this.markerPosBuffer2d.setUsage(THREE.DynamicDrawUsage);
+      this.markerColorBuffer2d = new THREE.BufferAttribute(new Float32Array(needed + 12), 3);
+      this.markerColorBuffer2d.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('position', this.markerPosBuffer2d);
+      geo.setAttribute('color', this.markerColorBuffer2d);
+    }
   }
 
   detectHover(

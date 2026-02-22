@@ -15,6 +15,13 @@ export const defaultConfig: AppConfig = {
   footprintBorder: '#FFFFFF88',
   markerGroups: [
     {
+      id: 'observer',
+      label: 'Observer',
+      color: '#ff8800',
+      defaultVisible: true,
+      markers: [],
+    },
+    {
       id: 'launch-sites',
       label: 'Launch Sites',
       color: '#ffffff',

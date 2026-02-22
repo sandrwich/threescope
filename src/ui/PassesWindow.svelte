@@ -1,0 +1,350 @@
+<script lang="ts">
+  import DraggableWindow from './shared/DraggableWindow.svelte';
+  import { uiStore } from '../stores/ui.svelte';
+  import { observerStore } from '../stores/observer.svelte';
+  import { timeStore } from '../stores/time.svelte';
+  import { ICON_PASSES } from './shared/icons';
+  import { epochToDate } from '../astro/epoch';
+  import type { SatellitePass } from '../passes/pass-types';
+
+  const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function dayKey(epoch: number): string {
+    const d = epochToDate(epoch);
+    return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+  }
+
+  function dayLabel(epoch: number): string {
+    const d = epochToDate(epoch);
+    const now = epochToDate(timeStore.epoch);
+    const todayKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
+    const tomorrow = new Date(now.getTime() + 86400000);
+    const tomorrowKey = `${tomorrow.getUTCFullYear()}-${tomorrow.getUTCMonth()}-${tomorrow.getUTCDate()}`;
+    const key = dayKey(epoch);
+    const weekday = WEEKDAYS[d.getUTCDay()];
+    const dateStr = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+    if (key === todayKey) return `Today \u2014 ${weekday} ${dateStr}`;
+    if (key === tomorrowKey) return `Tomorrow \u2014 ${weekday} ${dateStr}`;
+    return `${weekday} ${dateStr}`;
+  }
+
+  function formatTime(epoch: number): string {
+    const dayFrac = epoch % 1000.0;
+    const frac = dayFrac - Math.floor(dayFrac);
+    const hours = frac * 24;
+    const h = Math.floor(hours);
+    const minutes = (hours - h) * 60;
+    const m = Math.floor(minutes);
+    const s = Math.round((minutes - m) * 60);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
+
+  function formatDuration(sec: number): string {
+    const m = Math.floor(sec / 60);
+    const s = Math.round(sec % 60);
+    return `${m}m${String(s).padStart(2, '0')}s`;
+  }
+
+  function elClass(maxEl: number): string {
+    if (maxEl < 10) return 'el-low';
+    if (maxEl < 30) return 'el-mid';
+    return 'el-high';
+  }
+
+  function isActive(pass: SatellitePass): boolean {
+    return timeStore.epoch >= pass.aosEpoch && timeStore.epoch <= pass.losEpoch;
+  }
+
+  function progress(pass: SatellitePass): number {
+    if (timeStore.epoch < pass.aosEpoch) return 0;
+    if (timeStore.epoch > pass.losEpoch) return 1;
+    return (timeStore.epoch - pass.aosEpoch) / (pass.losEpoch - pass.aosEpoch);
+  }
+
+  function openPolar(pass: SatellitePass, idx: number) {
+    uiStore.selectedPassIdx = idx;
+    uiStore.polarPlotOpen = true;
+  }
+
+  function skipTo(pass: SatellitePass, idx: number) {
+    const target = pass.aosEpoch - (30 / 86400);
+    timeStore.warpToEpoch(target);
+    uiStore.selectedPassIdx = idx;
+    uiStore.polarPlotOpen = true;
+  }
+
+  function openSettings() {
+    uiStore.settingsOpen = true;
+  }
+
+  function satColor(colorIndex: number): string {
+    const COLORS = [
+      [228, 3, 3], [255, 140, 0], [255, 237, 0], [0, 128, 38],
+      [37, 77, 197], [115, 42, 130], [191, 191, 191], [91, 206, 250], [245, 169, 184],
+    ];
+    const c = COLORS[colorIndex % COLORS.length];
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  }
+
+  let hasSelectedSats = $derived(uiStore.selectedSatCount > 0);
+  let passCount = $derived(uiStore.passes.length);
+  let headerEl: HTMLDivElement | undefined = $state();
+  let headerH = $derived(headerEl?.offsetHeight ?? 0);
+</script>
+
+{#snippet passesIcon()}<span class="title-icon">{@html ICON_PASSES}</span>{/snippet}
+<DraggableWindow title="Passes" icon={passesIcon} bind:open={uiStore.passesWindowOpen} initialX={9999} initialY={450}>
+  <div class="pw">
+    {#if !observerStore.isSet}
+      <div class="prompt">
+        <p>Set your observer location to predict satellite passes.</p>
+        <button class="action-btn" onclick={openSettings}>Open Settings</button>
+      </div>
+    {:else if !hasSelectedSats}
+      <div class="prompt">
+        <p>Select satellites to predict passes.</p>
+      </div>
+    {:else if uiStore.passesComputing}
+      <div class="computing">
+        <div class="progress-track">
+          <div class="progress-fill" style="width:{uiStore.passesProgress}%"></div>
+        </div>
+        <span class="computing-label">Computing passes...</span>
+      </div>
+    {:else if passCount === 0}
+      <div class="prompt">
+        <p>No passes in the next 3 days.</p>
+      </div>
+    {:else}
+      <div class="top-bar">
+        <span class="observer-loc">
+          {observerStore.displayName}{#if observerStore.location.alt > 0}, {observerStore.location.alt}m{/if}
+          <button class="edit-btn" onclick={openSettings} title="Edit observer">&#9998;</button>
+        </span>
+        <span class="pass-count">{passCount} pass{passCount !== 1 ? 'es' : ''}</span>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header" bind:this={headerEl}>
+          <span class="th th-sat">Satellite</span>
+          <span class="th th-time">Time</span>
+          <span class="th th-dur">Dur</span>
+          <span class="th th-el">Max El</span>
+          <span class="th th-skip"></span>
+        </div>
+        {#each uiStore.passes as pass, i}
+          {#if i === 0 || dayKey(pass.aosEpoch) !== dayKey(uiStore.passes[i - 1].aosEpoch)}
+            <div class="day-header" style="top:{headerH}px">{dayLabel(pass.aosEpoch)}</div>
+          {/if}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
+          <div class="pass-row" class:active={isActive(pass)} onclick={() => openPolar(pass, i)}>
+            <span class="td td-sat">
+              <span class="color-dot" style="background:{satColor(pass.satColorIndex)}"></span>
+              <span class="sat-name" title={pass.satName}>{pass.satName}</span>
+            </span>
+            <span class="td td-time">{formatTime(pass.aosEpoch)} <span class="arrow">&rarr;</span> {formatTime(pass.losEpoch)}</span>
+            <span class="td td-dur">{formatDuration(pass.durationSec)}</span>
+            <span class="td td-el {elClass(pass.maxEl)}">{pass.maxEl.toFixed(1)}&deg;</span>
+            <span class="td td-skip">
+              <button class="skip-btn" onclick={(e) => { e.stopPropagation(); skipTo(pass, i); }} title="Skip to pass">&#9654;</button>
+            </span>
+            {#if isActive(pass)}
+              <div class="pass-progress" style="width:{progress(pass) * 100}%"></div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+</DraggableWindow>
+
+<style>
+  .pw {
+    min-width: 400px;
+    max-width: 520px;
+  }
+
+  /* Empty-state prompts */
+  .prompt {
+    color: var(--text-ghost);
+    font-size: 12px;
+    text-align: center;
+    padding: 12px 8px;
+  }
+  .prompt p { margin: 0 0 10px 0; }
+  .action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: inherit;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+  .action-btn:hover { border-color: var(--border-hover); color: var(--text); }
+
+  /* Computing progress */
+  .computing {
+    padding: 12px 0;
+    text-align: center;
+  }
+  .computing-label {
+    font-size: 11px;
+    color: var(--text-ghost);
+    margin-top: 6px;
+    display: block;
+  }
+  .progress-track {
+    height: 3px;
+    background: var(--ui-bg);
+    width: 100%;
+    margin-bottom: 4px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--text-ghost);
+    transition: width 0.15s;
+  }
+
+  /* Top bar: observer + count */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .observer-loc {
+    font-size: 11px;
+    color: var(--text-ghost);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .edit-btn {
+    background: none;
+    border: none;
+    color: var(--text-ghost);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 2px;
+  }
+  .edit-btn:hover { color: var(--text-dim); }
+  .pass-count {
+    font-size: 10px;
+    color: var(--text-ghost);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Table layout */
+  .table-wrap {
+    border: 1px solid var(--border);
+    max-height: 370px;
+    overflow-y: auto;
+  }
+  .table-header {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+    background: var(--ui-bg);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .th {
+    font-size: 10px;
+    color: var(--text-ghost);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  /* Day group headers */
+  .day-header {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 5px 8px 4px;
+    background: var(--ui-bg);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    z-index: 1;
+  }
+
+  /* Column widths — shared between header and body */
+  .th-sat, .td-sat { flex: 1; min-width: 0; }
+  .th-time, .td-time { width: 140px; text-align: center; flex-shrink: 0; }
+  .th-dur, .td-dur { width: 52px; text-align: right; flex-shrink: 0; }
+  .th-el,  .td-el  { width: 48px; text-align: right; flex-shrink: 0; }
+  .th-skip, .td-skip { width: 22px; text-align: center; flex-shrink: 0; }
+
+  .arrow {
+    color: var(--text-ghost);
+    font-size: 10px;
+    margin: 0 1px;
+  }
+
+  /* Rows */
+  .pass-row {
+    display: flex;
+    align-items: center;
+    padding: 5px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    position: relative;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  }
+  .pass-row:last-child { border-bottom: none; }
+  .pass-row:hover { background: rgba(255, 255, 255, 0.03); }
+  .pass-row.active { background: rgba(255, 255, 255, 0.05); }
+
+  .td {
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .td-sat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .color-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .sat-name {
+    color: var(--text-dim);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .el-low { color: #ff4444; }
+  .el-mid { color: #ffaa00; }
+  .el-high { color: #44ff44; }
+
+  .skip-btn {
+    background: none;
+    border: none;
+    color: var(--text-ghost);
+    cursor: pointer;
+    font-size: 9px;
+    padding: 2px 4px;
+  }
+  .skip-btn:hover { color: var(--text-dim); }
+
+  .pass-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: #44ff44;
+    pointer-events: none;
+  }
+</style>

@@ -18,3 +18,7 @@ export const ICON_HELP = '<svg viewBox="0 0 16 16" fill="none" stroke="currentCo
 export const ICON_3D = '<svg viewBox="0 0 16 16" fill="currentColor" stroke="none"><text x="8" y="12" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">3D</text></svg>';
 
 export const ICON_2D = '<svg viewBox="0 0 16 16" fill="currentColor" stroke="none"><text x="8" y="12" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">2D</text></svg>';
+
+export const ICON_PASSES = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 14V8"/><path d="M4 12l4-4 4 4"/><path d="M3 4.5a7 7 0 0 1 10 0"/><path d="M5.5 6.5a4 4 0 0 1 5 0"/></svg>';
+
+export const ICON_POLAR = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3"/><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>';

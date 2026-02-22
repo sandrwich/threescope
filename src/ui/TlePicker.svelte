@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { TLE_SOURCES } from '../data/tle-sources';
-  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_HELP, ICON_2D, ICON_3D } from './shared/icons';
+  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_HELP, ICON_2D, ICON_3D, ICON_PASSES } from './shared/icons';
   import { ViewMode } from '../types';
 
   let customVisible = $state(false);
@@ -89,6 +89,9 @@
     <div class="btn-group">
       <button class="icon-btn" title="Selection" onclick={() => uiStore.selectionWindowOpen = !uiStore.selectionWindowOpen}>
         {@html ICON_SELECTION}
+      </button>
+      <button class="icon-btn" title="Passes (P)" onclick={() => uiStore.passesWindowOpen = !uiStore.passesWindowOpen}>
+        {@html ICON_PASSES}
       </button>
       <button class="icon-btn" title="View" onclick={() => uiStore.viewWindowOpen = !uiStore.viewWindowOpen}>
         {@html ICON_VIEW}
