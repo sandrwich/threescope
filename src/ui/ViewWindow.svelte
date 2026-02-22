@@ -34,6 +34,13 @@
         <input type="checkbox" checked={rtxChecked} disabled={isCustomized} onchange={toggleRtx}>
         {isCustomized ? 'Customized' : 'RTX'}
       </label>
+      {#if uiStore.nightToggleVisible}
+        <label class="toggle-label" title="Show city lights on dark side">
+          <input type="checkbox" bind:checked={uiStore.showNightLights}
+            onchange={() => uiStore.setToggle('showNightLights', uiStore.showNightLights)}>
+          Dark Side
+        </label>
+      {/if}
     </div>
 
     {#if uiStore.earthTogglesVisible}
@@ -44,13 +51,6 @@
             onchange={() => uiStore.setToggle('showClouds', uiStore.showClouds)}>
           Clouds
         </label>
-        {#if uiStore.nightToggleVisible}
-          <label class="toggle-label" title="Show city lights on dark side">
-            <input type="checkbox" bind:checked={uiStore.showNightLights}
-              onchange={() => uiStore.setToggle('showNightLights', uiStore.showNightLights)}>
-            Dark Side
-          </label>
-        {/if}
       </div>
     {/if}
 
