@@ -52,6 +52,13 @@
     </button>
   </div>
   <div class="main-row">
+    <button class="picker-btn" title="Search Satellite (Ctrl+F)" onclick={() => { uiStore.commandPaletteSatMode = true; uiStore.commandPaletteOpen = true; }}>
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4.5"/><line x1="10" y1="10" x2="14" y2="14"/></svg>
+    </button>
+    <button class="picker-btn" title="Command Palette (Ctrl+K)" onclick={() => uiStore.commandPaletteOpen = true}>
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5l4 3-4 3"/><line x1="9" y1="11" x2="13" y2="11"/></svg>
+    </button>
+    <div class="btn-separator"></div>
     <button class="picker-btn" title="View" onclick={() => uiStore.viewWindowOpen = !uiStore.viewWindowOpen}>
       <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>
     </button>
@@ -134,6 +141,7 @@
   }
   .picker-btn { color: var(--text-faint); display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; padding: 0; }
   .picker-btn:hover { color: var(--text-dim); }
+  .btn-separator { width: 6px; }
   .custom-row {
     display: flex;
     gap: 4px;

@@ -9,6 +9,7 @@
   import SettingsWindow from './SettingsWindow.svelte';
   import TimeWindow from './TimeWindow.svelte';
   import ViewWindow from './ViewWindow.svelte';
+  import CommandPalette from './CommandPalette.svelte';
 </script>
 
 <div id="ui-overlay">
@@ -22,6 +23,7 @@
   <SettingsWindow />
   <TimeWindow />
   <ViewWindow />
+  <CommandPalette />
 </div>
 
 <style>

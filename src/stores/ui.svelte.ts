@@ -28,6 +28,8 @@ class UIStore {
   settingsOpen = $state(false);
   timeWindowOpen = $state(true);
   viewWindowOpen = $state(true);
+  commandPaletteOpen = $state(false);
+  commandPaletteSatMode = $state(false);
 
   // Sat info tooltip — content set via store, position set via direct DOM
   satInfoVisible = $state(false);
@@ -58,6 +60,11 @@ class UIStore {
   onCustomTLELoad: ((text: string, name: string) => void) | null = null;
   onCustomTLEUrl: ((url: string) => Promise<void>) | null = null;
   onPlanetButtonClick: (() => void) | null = null;
+  onNavigateTo: ((id: string) => void) | null = null;
+  onDeselectSatellite: (() => void) | null = null;
+  onToggleViewMode: (() => void) | null = null;
+  getSatelliteNames: (() => string[]) | null = null;
+  onSelectSatelliteByName: ((name: string) => void) | null = null;
 
   loadToggles() {
     const load = (key: string, defaultVal: boolean): boolean => {

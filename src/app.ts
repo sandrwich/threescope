@@ -695,6 +695,47 @@ export class App {
       }
     };
 
+    // Command palette: navigate to body by id
+    uiStore.onNavigateTo = (id: string) => {
+      if (id === 'earth') {
+        if (this.orreryMode) this.navigateToEarth();
+        else { this.activeLock = TargetLock.EARTH; this.targetTarget3d.set(0, 0, 0); }
+      } else if (id === 'moon') {
+        if (this.orreryMode) this.navigateToEarth();
+        this.activeLock = TargetLock.MOON;
+      } else if (id === 'solar-system') {
+        if (!this.orreryMode) this.enterOrrery();
+      } else {
+        // Planet — enter orrery if not in it, then promote
+        const planet = PLANETS.find(p => p.id === id);
+        if (!planet) return;
+        if (!this.orreryMode) this.enterOrrery();
+        // Wait a frame for orrery to initialize
+        requestAnimationFrame(() => this.promoteToPlanetView(planet));
+      }
+    };
+
+    // Command palette: deselect satellite
+    uiStore.onDeselectSatellite = () => {
+      this.selectedSat = null;
+    };
+
+    // Command palette: toggle 2D/3D
+    uiStore.onToggleViewMode = () => {
+      this.viewMode = this.viewMode === ViewMode.VIEW_3D ? ViewMode.VIEW_2D : ViewMode.VIEW_3D;
+    };
+
+    // Command palette: get satellite names for search
+    uiStore.getSatelliteNames = () => {
+      return this.satellites.map(s => s.name);
+    };
+
+    // Command palette: select satellite by name
+    uiStore.onSelectSatelliteByName = (name: string) => {
+      const sat = this.satellites.find(s => s.name === name);
+      if (sat) this.selectedSat = sat;
+    };
+
     // Mini planet renderer — wait for Svelte to mount the canvas
     this.initMiniRenderer();
 
@@ -861,6 +902,14 @@ export class App {
 
     // Keyboard
     window.addEventListener('keydown', (e) => {
+      // Ctrl+K: open command palette, Ctrl+F: open satellite search
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'f')) {
+        e.preventDefault();
+        uiStore.commandPaletteSatMode = e.key === 'f';
+        uiStore.commandPaletteOpen = true;
+        return;
+      }
+
       // Ignore if typing in input/select elements
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
