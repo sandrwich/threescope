@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { DRAW_SCALE, FP_RINGS, FP_PTS } from '../constants';
-import { parseHexColor } from '../config';
 import { computeFootprintGrid } from '../astro/footprint';
+
+export interface FootprintEntry {
+  position: THREE.Vector3;
+  color: [number, number, number]; // RGB 0-1
+}
 
 export class FootprintRenderer {
   private scene: THREE.Scene;
@@ -12,16 +16,15 @@ export class FootprintRenderer {
     this.scene = scene;
   }
 
-  update(positions: THREE.Vector3[], colorConfig: { footprintBg: string; footprintBorder: string }) {
+  update(entries: FootprintEntry[], baseOpacity = 0.13, borderOpacity = 0.53) {
     this.clear();
-    if (positions.length === 0) return;
+    if (entries.length === 0) return;
 
-    const cFill = parseHexColor(colorConfig.footprintBg);
-    const cBorder = parseHexColor(colorConfig.footprintBorder);
-
-    for (const satPos of positions) {
-      const grid = computeFootprintGrid(satPos);
+    for (const entry of entries) {
+      const grid = computeFootprintGrid(entry.position);
       if (!grid) continue;
+
+      const [cr, cg, cb] = entry.color;
 
       // Build triangle mesh
       const vertices: number[] = [];
@@ -45,9 +48,9 @@ export class FootprintRenderer {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
       const mat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(cFill.r, cFill.g, cFill.b),
+        color: new THREE.Color(cr, cg, cb),
         transparent: true,
-        opacity: cFill.a,
+        opacity: baseOpacity,
         side: THREE.DoubleSide,
         depthWrite: false,
       });
@@ -60,9 +63,9 @@ export class FootprintRenderer {
       const borderPts = outerRing.map(p => new THREE.Vector3(p.x * 1.01 / DRAW_SCALE, p.y * 1.01 / DRAW_SCALE, p.z * 1.01 / DRAW_SCALE));
       const borderGeo = new THREE.BufferGeometry().setFromPoints(borderPts);
       const borderMat = new THREE.LineBasicMaterial({
-        color: new THREE.Color(cBorder.r, cBorder.g, cBorder.b),
+        color: new THREE.Color(cr, cg, cb),
         transparent: true,
-        opacity: cBorder.a,
+        opacity: borderOpacity,
       });
       const line = new THREE.LineLoop(borderGeo, borderMat);
       this.scene.add(line);

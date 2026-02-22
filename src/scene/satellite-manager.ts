@@ -168,9 +168,9 @@ export class SatelliteManager {
         // Unselected hover: use next rainbow color at lower brightness
         const nextIdx = selectedSats.size;
         const rc = ORBIT_COLORS[nextIdx % ORBIT_COLORS.length];
-        this.colorAttr.array[i * 3] = rc[0] * 0.6;
-        this.colorAttr.array[i * 3 + 1] = rc[1] * 0.6;
-        this.colorAttr.array[i * 3 + 2] = rc[2] * 0.6;
+        this.colorAttr.array[i * 3] = rc[0] * 0.9;
+        this.colorAttr.array[i * 3 + 1] = rc[1] * 0.9;
+        this.colorAttr.array[i * 3 + 2] = rc[2] * 0.9;
       } else {
         this.colorAttr.array[i * 3] = cNormal.r;
         this.colorAttr.array[i * 3 + 1] = cNormal.g;

@@ -10,7 +10,7 @@ import { MoonScene } from './scene/moon-scene';
 import { SunScene } from './scene/sun-scene';
 import { SatelliteManager } from './scene/satellite-manager';
 import { OrbitRenderer, ORBIT_COLORS } from './scene/orbit-renderer';
-import { FootprintRenderer } from './scene/footprint-renderer';
+import { FootprintRenderer, type FootprintEntry } from './scene/footprint-renderer';
 import { MarkerManager } from './scene/marker-manager';
 import { PostProcessing } from './scene/post-processing';
 import { getMinZoom, BODIES, PLANETS, type PlanetDef } from './bodies';
@@ -123,8 +123,10 @@ export class App {
   // 2D footprint
   private footprint2dMesh!: THREE.Mesh;
   private footprint2dPosBuffer!: THREE.BufferAttribute;
+  private footprint2dColorBuffer!: THREE.BufferAttribute;
   private footprint2dBorder!: THREE.LineSegments;
   private footprint2dBorderBuffer!: THREE.BufferAttribute;
+  private footprint2dBorderColorBuffer!: THREE.BufferAttribute;
   // 2D markers
   private markerPoints2d!: THREE.Points;
   private markerPosBuffer2d!: THREE.BufferAttribute;
@@ -407,16 +409,19 @@ export class App {
     this.hlTrack2d.frustumCulled = false;
     this.scene2d.add(this.hlTrack2d);
 
-    // 2D footprint mesh (dynamic triangle fill + border)
+    // 2D footprint mesh (dynamic triangle fill + border, per-vertex color)
     const maxFpVerts = FP_RINGS * FP_PTS * 6 * 3 * 20; // 20 footprints × 3 offsets
     const fpGeo = new THREE.BufferGeometry();
     this.footprint2dPosBuffer = new THREE.BufferAttribute(new Float32Array(maxFpVerts * 3), 3);
     this.footprint2dPosBuffer.setUsage(THREE.DynamicDrawUsage);
+    this.footprint2dColorBuffer = new THREE.BufferAttribute(new Float32Array(maxFpVerts * 3), 3);
+    this.footprint2dColorBuffer.setUsage(THREE.DynamicDrawUsage);
     fpGeo.setAttribute('position', this.footprint2dPosBuffer);
+    fpGeo.setAttribute('color', this.footprint2dColorBuffer);
     fpGeo.setDrawRange(0, 0);
     const cFpFill = parseHexColor(this.cfg.footprintBg);
     this.footprint2dMesh = new THREE.Mesh(fpGeo, new THREE.MeshBasicMaterial({
-      color: new THREE.Color(cFpFill.r, cFpFill.g, cFpFill.b),
+      vertexColors: true,
       transparent: true, opacity: cFpFill.a, side: THREE.DoubleSide, depthWrite: false,
     }));
     this.footprint2dMesh.frustumCulled = false;
@@ -426,11 +431,14 @@ export class App {
     const fpBorderGeo = new THREE.BufferGeometry();
     this.footprint2dBorderBuffer = new THREE.BufferAttribute(new Float32Array(maxFpBorderVerts * 3), 3);
     this.footprint2dBorderBuffer.setUsage(THREE.DynamicDrawUsage);
+    this.footprint2dBorderColorBuffer = new THREE.BufferAttribute(new Float32Array(maxFpBorderVerts * 3), 3);
+    this.footprint2dBorderColorBuffer.setUsage(THREE.DynamicDrawUsage);
     fpBorderGeo.setAttribute('position', this.footprint2dBorderBuffer);
+    fpBorderGeo.setAttribute('color', this.footprint2dBorderColorBuffer);
     fpBorderGeo.setDrawRange(0, 0);
     const cFpBorder = parseHexColor(this.cfg.footprintBorder);
     this.footprint2dBorder = new THREE.LineSegments(fpBorderGeo, new THREE.LineBasicMaterial({
-      color: new THREE.Color(cFpBorder.r, cFpBorder.g, cFpBorder.b),
+      vertexColors: true,
       transparent: true, opacity: cFpBorder.a,
     }));
     this.footprint2dBorder.frustumCulled = false;
@@ -1479,17 +1487,26 @@ export class App {
           { orbitNormal: this.cfg.orbitNormal, orbitHighlighted: this.cfg.orbitHighlighted }
         );
 
-        // Footprints for all selected sats + hovered
-        const fpPositions: THREE.Vector3[] = [];
-        for (const sat of this.selectedSats) fpPositions.push(sat.currentPos);
-        if (this.hoveredSat) {
-          const hovPos = (this.hoveredSat as Satellite).currentPos;
-          if (!fpPositions.includes(hovPos)) fpPositions.push(hovPos);
+        // Footprints for all selected sats + hovered (per-sat orbit color)
+        const fpEntries: FootprintEntry[] = [];
+        {
+          let fpIdx = 0;
+          for (const sat of this.selectedSats) {
+            fpEntries.push({
+              position: sat.currentPos,
+              color: ORBIT_COLORS[fpIdx % ORBIT_COLORS.length] as [number, number, number],
+            });
+            fpIdx++;
+          }
+          if (this.hoveredSat && !this.selectedSats.has(this.hoveredSat)) {
+            const rc = ORBIT_COLORS[this.selectedSats.size % ORBIT_COLORS.length];
+            fpEntries.push({
+              position: (this.hoveredSat as Satellite).currentPos,
+              color: rc as [number, number, number],
+            });
+          }
         }
-        this.footprintRenderer.update(
-          fpPositions,
-          { footprintBg: this.cfg.footprintBg, footprintBorder: this.cfg.footprintBorder }
-        );
+        this.footprintRenderer.update(fpEntries);
 
         this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camDistance);
       }
@@ -1681,13 +1698,17 @@ export class App {
       this.hlTrack2d.visible = false;
     }
 
-    // 2D footprints for highlighted sats
+    // 2D footprints for highlighted sats (per-sat orbit color)
     {
       const fpArr = this.footprint2dPosBuffer.array as Float32Array;
+      const fpCol = this.footprint2dColorBuffer.array as Float32Array;
       const bArr = this.footprint2dBorderBuffer.array as Float32Array;
+      const bCol = this.footprint2dBorderColorBuffer.array as Float32Array;
       let fvi = 0, bvi = 0;
 
-      for (const sat of hlSats) {
+      for (let si = 0; si < hlSats.length; si++) {
+        const sat = hlSats[si];
+        const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
         const grid3d = computeFootprintGrid(sat.currentPos);
         if (!grid3d) continue;
 
@@ -1717,13 +1738,19 @@ export class App {
                   Math.abs(p2.x - p4.x) > MAP_W * 0.4) continue;
 
               if (fvi + 18 > fpArr.length) break;
-              fpArr[fvi++] = p1.x + xOff; fpArr[fvi++] = -p1.y; fpArr[fvi++] = 0.01;
-              fpArr[fvi++] = p3.x + xOff; fpArr[fvi++] = -p3.y; fpArr[fvi++] = 0.01;
-              fpArr[fvi++] = p2.x + xOff; fpArr[fvi++] = -p2.y; fpArr[fvi++] = 0.01;
+              fpArr[fvi] = p1.x + xOff; fpArr[fvi+1] = -p1.y; fpArr[fvi+2] = 0.01;
+              fpCol[fvi] = cr; fpCol[fvi+1] = cg; fpCol[fvi+2] = cb; fvi += 3;
+              fpArr[fvi] = p3.x + xOff; fpArr[fvi+1] = -p3.y; fpArr[fvi+2] = 0.01;
+              fpCol[fvi] = cr; fpCol[fvi+1] = cg; fpCol[fvi+2] = cb; fvi += 3;
+              fpArr[fvi] = p2.x + xOff; fpArr[fvi+1] = -p2.y; fpArr[fvi+2] = 0.01;
+              fpCol[fvi] = cr; fpCol[fvi+1] = cg; fpCol[fvi+2] = cb; fvi += 3;
 
-              fpArr[fvi++] = p2.x + xOff; fpArr[fvi++] = -p2.y; fpArr[fvi++] = 0.01;
-              fpArr[fvi++] = p3.x + xOff; fpArr[fvi++] = -p3.y; fpArr[fvi++] = 0.01;
-              fpArr[fvi++] = p4.x + xOff; fpArr[fvi++] = -p4.y; fpArr[fvi++] = 0.01;
+              fpArr[fvi] = p2.x + xOff; fpArr[fvi+1] = -p2.y; fpArr[fvi+2] = 0.01;
+              fpCol[fvi] = cr; fpCol[fvi+1] = cg; fpCol[fvi+2] = cb; fvi += 3;
+              fpArr[fvi] = p3.x + xOff; fpArr[fvi+1] = -p3.y; fpArr[fvi+2] = 0.01;
+              fpCol[fvi] = cr; fpCol[fvi+1] = cg; fpCol[fvi+2] = cb; fvi += 3;
+              fpArr[fvi] = p4.x + xOff; fpArr[fvi+1] = -p4.y; fpArr[fvi+2] = 0.01;
+              fpCol[fvi] = cr; fpCol[fvi+1] = cg; fpCol[fvi+2] = cb; fvi += 3;
             }
           }
 
@@ -1733,17 +1760,21 @@ export class App {
             const next = (k + 1) % FP_PTS;
             if (Math.abs(outerRing[k].x - outerRing[next].x) > MAP_W * 0.4) continue;
             if (bvi + 6 > bArr.length) break;
-            bArr[bvi++] = outerRing[k].x + xOff; bArr[bvi++] = -outerRing[k].y; bArr[bvi++] = 0.015;
-            bArr[bvi++] = outerRing[next].x + xOff; bArr[bvi++] = -outerRing[next].y; bArr[bvi++] = 0.015;
+            bArr[bvi] = outerRing[k].x + xOff; bArr[bvi+1] = -outerRing[k].y; bArr[bvi+2] = 0.015;
+            bCol[bvi] = cr; bCol[bvi+1] = cg; bCol[bvi+2] = cb; bvi += 3;
+            bArr[bvi] = outerRing[next].x + xOff; bArr[bvi+1] = -outerRing[next].y; bArr[bvi+2] = 0.015;
+            bCol[bvi] = cr; bCol[bvi+1] = cg; bCol[bvi+2] = cb; bvi += 3;
           }
         }
       }
 
       this.footprint2dPosBuffer.needsUpdate = true;
+      this.footprint2dColorBuffer.needsUpdate = true;
       this.footprint2dMesh.geometry.setDrawRange(0, fvi / 3);
       this.footprint2dMesh.visible = fvi > 0;
 
       this.footprint2dBorderBuffer.needsUpdate = true;
+      this.footprint2dBorderColorBuffer.needsUpdate = true;
       this.footprint2dBorder.geometry.setDrawRange(0, bvi / 3);
       this.footprint2dBorder.visible = bvi > 0;
     }
@@ -1851,7 +1882,7 @@ export class App {
         cr = rainbow[0] * b; cg = rainbow[1] * b; cb = rainbow[2] * b;
       } else if (isHov) {
         const rc = ORBIT_COLORS[this.selectedSats.size % ORBIT_COLORS.length];
-        cr = rc[0] * 0.6; cg = rc[1] * 0.6; cb = rc[2] * 0.6;
+        cr = rc[0] * 0.9; cg = rc[1] * 0.9; cb = rc[2] * 0.9;
       } else {
         cr = cNorm.r; cg = cNorm.g; cb = cNorm.b;
       }
