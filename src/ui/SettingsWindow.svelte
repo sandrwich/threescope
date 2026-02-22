@@ -229,6 +229,7 @@
   .row {
     display: flex;
     align-items: center;
+    min-width: 280px;
     justify-content: space-between;
     margin-bottom: 10px;
   }
