@@ -7,6 +7,8 @@
   import { TLE_SOURCES } from '../data/tle-sources';
   import { PLANETS } from '../bodies';
   import { defaultConfig } from '../config';
+  import { observerStore } from '../stores/observer.svelte';
+  import { getElevation, isElevationLoaded } from '../astro/elevation';
   import { tick } from 'svelte';
 
   interface PaletteAction {
@@ -51,6 +53,8 @@
     actions.push({ id: 'view-orbits', category: 'View', label: 'Toggle Orbits', keywords: 'trajectories paths', execute: () => { uiStore.setToggle('showOrbits', !uiStore.showOrbits); close(); } });
     actions.push({ id: 'view-clouds', category: 'View', label: 'Toggle Clouds', execute: () => { uiStore.setToggle('showClouds', !uiStore.showClouds); close(); } });
     actions.push({ id: 'view-night', category: 'View', label: 'Toggle Dark Side', keywords: 'night lights cities', execute: () => { uiStore.setToggle('showNightLights', !uiStore.showNightLights); close(); } });
+    actions.push({ id: 'view-countries', category: 'View', label: 'Toggle Countries', keywords: 'borders outlines', execute: () => { uiStore.setToggle('showCountries', !uiStore.showCountries); close(); } });
+    actions.push({ id: 'view-grid', category: 'View', label: 'Toggle Grid', keywords: 'latitude longitude lines', execute: () => { uiStore.setToggle('showGrid', !uiStore.showGrid); close(); } });
     if (!uiStore.orreryMode) {
       actions.push({ id: 'view-2d3d', category: 'View', label: 'Toggle 2D / 3D', shortcut: 'M', keywords: 'map globe', execute: () => { uiStore.onToggleViewMode?.(); close(); } });
     }
@@ -65,6 +69,20 @@
         execute: () => { uiStore.setMarkerGroupVisible(group.id, !(uiStore.markerVisibility[group.id] ?? false)); close(); },
       });
     }
+
+    // Observer
+    actions.push({ id: 'obs-geolocation', category: 'Observer', label: 'Use My Location', keywords: 'gps geolocation browser position', execute: () => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const alt = isElevationLoaded() ? getElevation(pos.coords.latitude, pos.coords.longitude) : Math.round(pos.coords.altitude ?? 0);
+          observerStore.setFromLatLon(pos.coords.latitude, pos.coords.longitude, alt);
+        },
+        () => {},
+        { enableHighAccuracy: true },
+      );
+      close();
+    } });
 
     // Navigation
     actions.push({ id: 'nav-earth', category: 'Navigate', label: 'Earth', execute: () => { uiStore.onNavigateTo?.('earth'); close(); } });
