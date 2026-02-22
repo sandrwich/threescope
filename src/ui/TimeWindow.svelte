@@ -2,6 +2,7 @@
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { uiStore } from '../stores/ui.svelte';
+  import { epochToUnix, unixToEpoch } from '../astro/epoch';
   import { ICON_TIME } from './shared/icons';
 
   // Parsed display values — synced from store at ~4Hz
@@ -15,6 +16,34 @@
   // Which field is being edited (null = none)
   let editField = $state<string | null>(null);
   let editValue = $state('');
+
+  // Epoch input row
+  let epochExpanded = $state(false);
+  let epochEditing = $state(false);
+  let epochInputValue = $state('');
+  let epochInputEl: HTMLInputElement | undefined = $state();
+
+  let displayUnix = $derived(Math.floor(epochToUnix(timeStore.epoch)));
+
+  function startEpochEdit() {
+    epochEditing = true;
+    epochInputValue = String(displayUnix);
+    requestAnimationFrame(() => epochInputEl?.select());
+  }
+
+  function commitEpochEdit() {
+    if (!epochEditing) return;
+    epochEditing = false;
+    const val = parseInt(epochInputValue);
+    if (!isNaN(val)) {
+      timeStore.warpToEpoch(unixToEpoch(val));
+    }
+  }
+
+  function onEpochKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') commitEpochEdit();
+    else if (e.key === 'Escape') epochEditing = false;
+  }
 
   $effect(() => {
     if (!editField) {
@@ -149,6 +178,36 @@
       <div class="warning">{timeStore.tleWarning}</div>
     {/if}
   </div>
+
+  <div class="epoch-footer">
+    <button class="expand-chevron" onclick={() => epochExpanded = !epochExpanded} title="Unix epoch">
+      <svg viewBox="0 0 10 6" width="10" height="6" fill="currentColor">
+        {#if epochExpanded}
+          <polygon points="5,0 10,6 0,6"/>
+        {:else}
+          <polygon points="0,0 10,0 5,6"/>
+        {/if}
+      </svg>
+    </button>
+    {#if epochExpanded}
+      <div class="epoch-row">
+        <span class="epoch-label">epoch</span>
+        {#if epochEditing}
+          <input
+            class="epoch-input"
+            type="text"
+            bind:this={epochInputEl}
+            bind:value={epochInputValue}
+            onblur={commitEpochEdit}
+            onkeydown={onEpochKeydown}
+          >
+        {:else}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <span class="epoch-value" onclick={startEpochEdit}>{displayUnix}</span>
+        {/if}
+      </div>
+    {/if}
+  </div>
 </DraggableWindow>
 
 <style>
@@ -263,6 +322,61 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-top: 1px;
+    margin-bottom: 6px;
+  }
+  .epoch-footer {
+    border-top: 1px solid var(--border);
+    margin: 0 -14px -12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .expand-chevron {
+    background: none;
+    border: none;
+    color: var(--text-ghost);
+    cursor: pointer;
+    padding: 4px 0;
+    line-height: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.5;
+  }
+  .expand-chevron:hover { opacity: 1; }
+  .epoch-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px 8px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .epoch-label {
+    font-size: 10px;
+    color: var(--text-ghost);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+  .epoch-value, .epoch-input {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-family: inherit;
+    background: none;
+    border: 1px solid transparent;
+    padding: 1px 4px;
+    flex: 1;
+    min-width: 0;
+  }
+  .epoch-value { cursor: text; }
+  .epoch-value:hover { color: var(--text); }
+  .epoch-input {
+    border-color: var(--border-hover);
+    background: var(--ui-bg);
+    color: var(--text);
+    outline: none;
   }
   .warning {
     font-size: 11px;

@@ -9,6 +9,7 @@
   import { defaultConfig } from '../config';
   import { observerStore } from '../stores/observer.svelte';
   import { getElevation, isElevationLoaded } from '../astro/elevation';
+  import { unixToEpoch } from '../astro/epoch';
   import { tick } from 'svelte';
 
   interface PaletteAction {
@@ -23,6 +24,7 @@
   let query = $state('');
   let selectedIndex = $state(0);
   let satMode = $state(false);
+  let epochMode = $state(false);
   let inputEl: HTMLInputElement | undefined = $state();
   let listEl: HTMLDivElement | undefined = $state();
 
@@ -31,6 +33,7 @@
     query = '';
     selectedIndex = 0;
     satMode = false;
+    epochMode = false;
   }
 
   // Build static action list
@@ -47,6 +50,7 @@
     actions.push({ id: 'time-slower', category: 'Time', label: 'Slow Down', shortcut: ',', execute: () => { timeStore.stepBackward(); close(); } });
     actions.push({ id: 'time-reset', category: 'Time', label: 'Reset Speed', shortcut: '/', execute: () => { timeStore.resetSpeed(); close(); } });
     actions.push({ id: 'time-now', category: 'Time', label: 'Jump to Now', execute: () => { timeStore.jumpToNow(); close(); } });
+    actions.push({ id: 'time-epoch', category: 'Time', label: 'Set Epoch...', keywords: 'unix timestamp jump goto', execute: () => { epochMode = true; query = ''; selectedIndex = 0; } });
 
     // View toggles
     actions.push({ id: 'view-spotlight', category: 'View', label: 'Toggle Spotlight', keywords: 'hide unselected focus', execute: () => { uiStore.setToggle('hideUnselected', !uiStore.hideUnselected); close(); } });
@@ -150,7 +154,7 @@
 
   // Filter actions by query
   let filteredActions = $derived.by(() => {
-    if (satMode) return [];
+    if (satMode || epochMode) return [];
     if (!query) return allActions;
     const q = query.toLowerCase();
     return allActions.filter(a => {
@@ -190,8 +194,9 @@
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
-      if (satMode) {
+      if (satMode || epochMode) {
         satMode = false;
+        epochMode = false;
         query = '';
         selectedIndex = 0;
       } else {
@@ -216,7 +221,13 @@
 
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (satMode) {
+      if (epochMode) {
+        const val = parseInt(query);
+        if (!isNaN(val)) {
+          timeStore.warpToEpoch(unixToEpoch(val));
+          close();
+        }
+      } else if (satMode) {
         if (satResults[selectedIndex]) {
           uiStore.onSelectSatelliteByName?.(satResults[selectedIndex]);
           close();
@@ -264,8 +275,8 @@
   <div class="palette-overlay" onclick={onOverlayClick}>
     <div class="palette">
       <div class="palette-input-row">
-        {#if satMode}
-          <button class="back-btn" onclick={() => { satMode = false; query = ''; selectedIndex = 0; }}>&larr;</button>
+        {#if satMode || epochMode}
+          <button class="back-btn" onclick={() => { satMode = false; epochMode = false; query = ''; selectedIndex = 0; }}>&larr;</button>
         {/if}
         <input
           bind:this={inputEl}
@@ -273,13 +284,15 @@
           oninput={onInput}
           class="palette-input"
           type="text"
-          placeholder={satMode ? 'Search satellites...' : 'Search actions...'}
+          placeholder={satMode ? 'Search satellites...' : epochMode ? 'Unix timestamp...' : 'Search actions...'}
           spellcheck="false"
           autocomplete="off"
         />
       </div>
       <div class="palette-list" bind:this={listEl}>
-        {#if satMode}
+        {#if epochMode}
+          <div class="palette-empty">{query ? (isNaN(parseInt(query)) ? 'Enter a valid Unix timestamp' : `Jump to ${new Date(parseInt(query) * 1000).toISOString().replace('T', ' ').replace('.000Z', ' UTC')}`) : 'Enter a Unix timestamp and press Enter'}</div>
+        {:else if satMode}
           {#if satResults.length === 0}
             <div class="palette-empty">{query ? 'No matching satellites' : 'No satellites loaded'}</div>
           {:else}
@@ -319,9 +332,14 @@
         {/if}
       </div>
       <div class="palette-footer">
-        <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
-        <span><kbd>Enter</kbd> select</span>
-        <span><kbd>Esc</kbd> {satMode ? 'back' : 'close'}</span>
+        {#if epochMode}
+          <span><kbd>Enter</kbd> jump</span>
+          <span><kbd>Esc</kbd> back</span>
+        {:else}
+          <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+          <span><kbd>Enter</kbd> select</span>
+          <span><kbd>Esc</kbd> {satMode ? 'back' : 'close'}</span>
+        {/if}
       </div>
     </div>
   </div>
