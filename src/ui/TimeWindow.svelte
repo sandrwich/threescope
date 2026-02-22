@@ -119,6 +119,9 @@
           <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><rect x="2" y="1" width="4" height="14"/><rect x="10" y="1" width="4" height="14"/></svg>
         {/if}
       </button>
+      <button class="tb" title="Reset speed (/)" onclick={() => timeStore.resetSpeed()}>
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><rect x="2" y="2" width="12" height="12"/></svg>
+      </button>
       <button class="tb" title="Faster (.)" onclick={() => timeStore.stepForward()}>
         <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><polygon points="1,2 8,8 1,14"/><polygon points="8,2 15,8 8,14"/></svg>
       </button>
