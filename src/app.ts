@@ -20,6 +20,7 @@ import { Orrery, type PromotedPlanet } from './scene/orrery';
 import { Atmosphere } from './scene/atmosphere';
 import { MapRenderer } from './scene/map-renderer';
 import { CameraController } from './interaction/camera-controller';
+import { InputHandler } from './interaction/input-handler';
 import { computeApsis, computeApsis2D } from './astro/apsis';
 import { getMapCoordinates } from './astro/coordinates';
 import { calculateSunPosition } from './astro/sun';
@@ -100,17 +101,8 @@ export class App {
   private apoSprite3d!: THREE.Sprite;
   private smallmarkTex!: THREE.Texture;
 
-  // Mouse/touch state
-  private mousePos = new THREE.Vector2();
-  private mouseNDC = new THREE.Vector2();
-  private lastLeftClickTime = 0;
-  private isRightDragging = false;
-  private mouseDelta = new THREE.Vector2();
-  private touchCount = 0;
-  private lastTouchPos = new THREE.Vector2();
-  private lastPinchDist = 0;
-  private lastTwoTouchCenter = new THREE.Vector2();
-  private touchMoved = false;
+  // Input handler (mouse/touch/keyboard events)
+  private input!: InputHandler;
 
   // FPS tracking
   private fpsFrames = 0;
@@ -168,7 +160,24 @@ export class App {
 
     this.setLoading(0.9, 'Setting up...');
     this.wireStores();
-    this.setupEvents();
+    this.input = new InputHandler(this.renderer.domElement, this.renderer, this.camera, this.camera3d, this.postProcessing, {
+      getViewMode: () => this.viewMode,
+      getOrreryMode: () => this.orreryMode,
+      getActiveLock: () => this.activeLock,
+      getMinZoom: () => getMinZoom(this.activeLock),
+      clearTargetLock: () => { this.activeLock = TargetLock.NONE; },
+      onSelect: () => this.handleClick(),
+      onDoubleClick3D: () => this.handleDoubleClickLock(),
+      onDoubleClick2D: () => { this.activeLock = TargetLock.EARTH; },
+      onOrreryClick: () => this.handleOrreryClick(),
+      onToggleViewMode: () => {
+        if (!this.orreryMode) {
+          this.viewMode = this.viewMode === ViewMode.VIEW_3D ? ViewMode.VIEW_2D : ViewMode.VIEW_3D;
+          uiStore.viewMode = this.viewMode;
+        }
+      },
+      onResize: () => {},
+    });
 
     this.setLoading(1.0, 'Ready!');
     setTimeout(() => { this.loadingScreen.style.display = 'none'; }, 300);
@@ -483,7 +492,7 @@ export class App {
   private handleOrreryClick() {
     if (!this.orrery) return;
 
-    this.raycaster.setFromCamera(this.mouseNDC, this.camera3d);
+    this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
     const hit = this.orrery.pick(this.raycaster);
     if (!hit) return;
 
@@ -749,250 +758,16 @@ export class App {
     this.maxBatch = s.updateQuality;
   }
 
-  private setupEvents() {
-    // Resize
-    window.addEventListener('resize', () => {
-      const w = window.innerWidth, h = window.innerHeight;
-      this.renderer.setSize(w, h);
-      this.camera3d.aspect = w / h;
-      this.camera3d.updateProjectionMatrix();
-      this.postProcessing.setSize(w, h);
-      this.camera.updateCamera2dProjection();
-    });
-
-    // Mouse tracking
-    window.addEventListener('mousemove', (e) => {
-      const dx = e.movementX, dy = e.movementY;
-      this.mouseDelta.set(dx, dy);
-      this.mousePos.set(e.clientX, e.clientY);
-      this.mouseNDC.set(
-        (e.clientX / window.innerWidth) * 2 - 1,
-        -(e.clientY / window.innerHeight) * 2 + 1
-      );
-
-      if (this.isRightDragging) {
-        if (this.viewMode === ViewMode.VIEW_2D) {
-          // Pan 2D
-          this.camera.pan2d(dx, dy);
-          this.activeLock = TargetLock.NONE;
-        } else {
-          // Orbit 3D
-          if (e.shiftKey) {
-            this.camera.pan3d(dx, dy);
-            this.activeLock = TargetLock.NONE;
-          } else {
-            this.camera.orbit(dx, dy);
-          }
-        }
-      }
-    });
-
-    window.addEventListener('mousedown', (e) => {
-      if (e.button === 2) this.isRightDragging = true;
-    });
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 2) this.isRightDragging = false;
-    });
-
-    // Prevent context menu
-    this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
-
-    // Scroll zoom
-    this.renderer.domElement.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const delta = -Math.sign(e.deltaY);
-      if (this.viewMode === ViewMode.VIEW_2D) {
-        this.camera.applyZoom2d(delta);
-        this.activeLock = TargetLock.NONE;
+  /** Handle click/tap satellite selection */
+  private handleClick() {
+    if (this.hoveredSat) {
+      if (this.selectedSats.has(this.hoveredSat)) {
+        this.selectedSats.delete(this.hoveredSat);
       } else {
-        this.camera.applyZoom3d(delta, getMinZoom(this.activeLock));
+        this.selectedSats.add(this.hoveredSat);
       }
-    }, { passive: false });
-
-    // Click selection
-    this.renderer.domElement.addEventListener('click', (e) => {
-      // Ignore clicks on UI area
-      if (e.clientX < 220 && e.clientY > 110 && e.clientY < 210) return;
-
-      // Orrery mode: pick planet
-      if (this.orreryMode) {
-        this.handleOrreryClick();
-        return;
-      }
-
-      // Toggle selection: click adds/removes, empty click does nothing
-      if (this.hoveredSat) {
-        if (this.selectedSats.has(this.hoveredSat)) {
-          this.selectedSats.delete(this.hoveredSat);
-        } else {
-          this.selectedSats.add(this.hoveredSat);
-        }
-        this.selectedSatsVersion++;
-      }
-
-      // Double click detection for target lock
-      const now = performance.now() / 1000;
-      if (now - this.lastLeftClickTime < 0.3) {
-        if (this.viewMode === ViewMode.VIEW_3D) {
-          this.handleDoubleClickLock();
-        } else {
-          this.activeLock = TargetLock.EARTH;
-        }
-      }
-      this.lastLeftClickTime = now;
-    });
-
-    // Keyboard
-    window.addEventListener('keydown', (e) => {
-      // Ctrl+K: open command palette, Ctrl+F: open satellite search
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'f')) {
-        e.preventDefault();
-        uiStore.commandPaletteSatMode = e.key === 'f';
-        uiStore.commandPaletteOpen = true;
-        return;
-      }
-
-      // Ignore if typing in input/select elements
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
-
-      switch (e.key) {
-        case ' ':
-          e.preventDefault();
-          timeStore.togglePause();
-          break;
-        case '.':
-          timeStore.stepForward();
-          break;
-        case ',':
-          timeStore.stepBackward();
-          break;
-        case '/':
-          if (e.shiftKey) timeStore.jumpToNow();
-          else timeStore.resetSpeed();
-          break;
-        case 'm':
-        case 'M':
-          if (!this.orreryMode) {
-            this.viewMode = this.viewMode === ViewMode.VIEW_3D ? ViewMode.VIEW_2D : ViewMode.VIEW_3D;
-            uiStore.viewMode = this.viewMode;
-          }
-          break;
-      }
-    });
-
-    // Touch events
-    const canvas = this.renderer.domElement;
-
-    canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      this.touchCount = e.touches.length;
-      this.touchMoved = false;
-
-      if (e.touches.length === 1) {
-        this.lastTouchPos.set(e.touches[0].clientX, e.touches[0].clientY);
-        this.mousePos.set(e.touches[0].clientX, e.touches[0].clientY);
-        this.mouseNDC.set(
-          (e.touches[0].clientX / window.innerWidth) * 2 - 1,
-          -(e.touches[0].clientY / window.innerHeight) * 2 + 1
-        );
-      } else if (e.touches.length === 2) {
-        const dx = e.touches[1].clientX - e.touches[0].clientX;
-        const dy = e.touches[1].clientY - e.touches[0].clientY;
-        this.lastPinchDist = Math.sqrt(dx * dx + dy * dy);
-        this.lastTwoTouchCenter.set(
-          (e.touches[0].clientX + e.touches[1].clientX) / 2,
-          (e.touches[0].clientY + e.touches[1].clientY) / 2
-        );
-      }
-    }, { passive: false });
-
-    canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      this.touchMoved = true;
-
-      if (e.touches.length === 1 && this.touchCount === 1) {
-        // Single finger: orbit (3D) or pan (2D)
-        const tx = e.touches[0].clientX, ty = e.touches[0].clientY;
-        const dx = tx - this.lastTouchPos.x;
-        const dy = ty - this.lastTouchPos.y;
-        this.lastTouchPos.set(tx, ty);
-        this.mousePos.set(tx, ty);
-        this.mouseNDC.set(
-          (tx / window.innerWidth) * 2 - 1,
-          -(ty / window.innerHeight) * 2 + 1
-        );
-
-        if (this.viewMode === ViewMode.VIEW_2D) {
-          this.camera.pan2d(dx, dy);
-          this.activeLock = TargetLock.NONE;
-        } else {
-          this.camera.orbit(dx, dy);
-        }
-      } else if (e.touches.length === 2) {
-        // Two fingers: pinch zoom + pan
-        const dx = e.touches[1].clientX - e.touches[0].clientX;
-        const dy = e.touches[1].clientY - e.touches[0].clientY;
-        const pinchDist = Math.sqrt(dx * dx + dy * dy);
-        const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
-        // Pinch zoom
-        if (this.lastPinchDist > 0) {
-          const scale = pinchDist / this.lastPinchDist;
-          if (this.viewMode === ViewMode.VIEW_2D) {
-            this.camera.pinchZoom2d(scale);
-          } else {
-            this.camera.pinchZoom3d(scale, getMinZoom(this.activeLock));
-          }
-        }
-
-        // Two-finger pan (3D only)
-        if (this.viewMode === ViewMode.VIEW_3D) {
-          const panDx = centerX - this.lastTwoTouchCenter.x;
-          const panDy = centerY - this.lastTwoTouchCenter.y;
-          this.camera.pan3d(panDx, panDy);
-          this.activeLock = TargetLock.NONE;
-        }
-
-        this.lastPinchDist = pinchDist;
-        this.lastTwoTouchCenter.set(centerX, centerY);
-      }
-    }, { passive: false });
-
-    canvas.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      // Tap = select (only if finger didn't move)
-      if (!this.touchMoved && this.touchCount === 1 && e.touches.length === 0) {
-        // Orrery mode: pick planet
-        if (this.orreryMode) {
-          this.handleOrreryClick();
-          this.touchCount = 0;
-          return;
-        }
-        // Toggle selection: tap adds/removes, empty tap does nothing
-        if (this.hoveredSat) {
-          if (this.selectedSats.has(this.hoveredSat)) {
-            this.selectedSats.delete(this.hoveredSat);
-          } else {
-            this.selectedSats.add(this.hoveredSat);
-          }
-          this.selectedSatsVersion++;
-        }
-
-        // Double tap detection
-        const now = performance.now() / 1000;
-        if (now - this.lastLeftClickTime < 0.3) {
-          if (this.viewMode === ViewMode.VIEW_3D) {
-            this.handleDoubleClickLock();
-          } else {
-            this.activeLock = TargetLock.EARTH;
-          }
-        }
-        this.lastLeftClickTime = now;
-      }
-      this.touchCount = e.touches.length;
-      this.lastPinchDist = 0;
-    }, { passive: false });
+      this.selectedSatsVersion++;
+    }
   }
 
   private fpsLimit = -1; // -1 = vsync (rAF), 0 = unlocked, >0 = FPS cap
@@ -1117,14 +892,14 @@ export class App {
     // Hover detection (skip in planet/orrery view)
     this.hoveredSat = null;
     if (this.orreryMode && this.orrery) {
-      this.raycaster.setFromCamera(this.mouseNDC, this.camera3d);
+      this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
       const hovered = this.orrery.updateHover(this.raycaster);
       this.renderer.domElement.style.cursor = hovered ? 'pointer' : '';
     } else if (this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON) {
       if (this.viewMode === ViewMode.VIEW_3D) {
         this.detectHover3D();
       } else {
-        this.hoveredSat = this.mapRenderer.detectHover(this.mousePos, this.camera2d, this.satellites, this.timeSystem.getGmstDeg(), this.cfg, this.hideUnselected, this.selectedSats, this.camera.zoom2d, this.touchCount);
+        this.hoveredSat = this.mapRenderer.detectHover(this.input.mousePos, this.camera2d, this.satellites, this.timeSystem.getGmstDeg(), this.cfg, this.hideUnselected, this.selectedSats, this.camera.zoom2d, this.input.touchCount);
       }
     }
 
@@ -1259,7 +1034,7 @@ export class App {
   }
 
   private handleDoubleClickLock() {
-    this.raycaster.setFromCamera(this.mouseNDC, this.camera3d);
+    this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
     const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
     const moonR = MOON_RADIUS_KM / DRAW_SCALE;
     this.tmpSphere.set(this.moonScene.drawPos, moonR);
@@ -1274,8 +1049,8 @@ export class App {
   }
 
   private detectHover3D() {
-    this.raycaster.setFromCamera(this.mouseNDC, this.camera3d);
-    const touchScale = this.touchCount > 0 || ('ontouchstart' in window) ? 3.0 : 1.0;
+    this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
+    const touchScale = this.input.isTouchActive ? 3.0 : 1.0;
     const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
     const camPos = this.camera3d.position;
 
