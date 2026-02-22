@@ -2,6 +2,39 @@ import * as THREE from 'three';
 import type { Marker, MarkerGroup } from '../types';
 import { latLonToSurface } from '../astro/coordinates';
 
+/** Generate a pin/teardrop marker texture on a canvas. */
+export function createPinTexture(): THREE.CanvasTexture {
+  const S = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+
+  const cx = S / 2;
+  const r = S * 0.22;
+  const cy = r + S * 0.05;
+  const tipY = S * 0.95;
+  const openAngle = 0.35;
+
+  // Pin body (teardrop)
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, Math.PI / 2 - openAngle, Math.PI / 2 + openAngle, true);
+  ctx.lineTo(cx, tipY);
+  ctx.closePath();
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+
+  // Inner dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.35, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 interface GroupEntry {
   group: MarkerGroup;
   sprites: THREE.Sprite[];
@@ -13,33 +46,43 @@ export class MarkerManager {
   private groups: GroupEntry[] = [];
   private scene: THREE.Scene;
   private overlay: HTMLElement;
-  private markerTex: THREE.Texture;
+  private pinTex: THREE.Texture;
 
-  constructor(scene: THREE.Scene, markerGroups: MarkerGroup[], markerTex: THREE.Texture, overlay: HTMLElement) {
+  constructor(scene: THREE.Scene, markerGroups: MarkerGroup[], overlay: HTMLElement) {
     this.scene = scene;
     this.overlay = overlay;
-    this.markerTex = markerTex;
+    this.pinTex = createPinTexture();
 
     for (const group of markerGroups) {
       const entry: GroupEntry = { group, sprites: [], labels: [], visible: group.defaultVisible };
       const color = new THREE.Color(group.color);
 
       for (const m of group.markers) {
-        const mat = new THREE.SpriteMaterial({ map: markerTex, color, depthTest: false, transparent: true });
-        const sprite = new THREE.Sprite(mat);
-        sprite.scale.set(0.04, 0.04, 1);
-        scene.add(sprite);
-        entry.sprites.push(sprite);
-
-        const label = document.createElement('div');
-        label.style.cssText = `position:absolute;font-size:11px;color:${group.color};pointer-events:none;white-space:nowrap;display:none;`;
-        label.textContent = m.name;
-        overlay.appendChild(label);
-        entry.labels.push(label);
+        entry.sprites.push(this.createSprite(color));
+        entry.labels.push(this.createLabel(m.name, group.color));
       }
 
       this.groups.push(entry);
     }
+  }
+
+  private createSprite(color: THREE.Color): THREE.Sprite {
+    const mat = new THREE.SpriteMaterial({
+      map: this.pinTex, color, depthTest: false, transparent: true, alphaTest: 0.1,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.03, 0.035, 1);
+    sprite.center.set(0.5, 0); // anchor at pin tip (bottom center)
+    this.scene.add(sprite);
+    return sprite;
+  }
+
+  private createLabel(name: string, colorStr: string): HTMLDivElement {
+    const label = document.createElement('div');
+    label.style.cssText = `position:absolute;font-size:11px;color:${colorStr};pointer-events:none;white-space:nowrap;display:none;`;
+    label.textContent = name;
+    this.overlay.appendChild(label);
+    return label;
   }
 
   updateGroupMarkers(groupId: string, markers: Marker[]) {
@@ -54,17 +97,8 @@ export class MarkerManager {
     // Create new ones
     const color = new THREE.Color(entry.group.color);
     for (const m of markers) {
-      const mat = new THREE.SpriteMaterial({ map: this.markerTex, color, depthTest: false, transparent: true });
-      const sprite = new THREE.Sprite(mat);
-      sprite.scale.set(0.04, 0.04, 1);
-      this.scene.add(sprite);
-      entry.sprites.push(sprite);
-
-      const label = document.createElement('div');
-      label.style.cssText = `position:absolute;font-size:11px;color:${entry.group.color};pointer-events:none;white-space:nowrap;display:none;`;
-      label.textContent = m.name;
-      this.overlay.appendChild(label);
-      entry.labels.push(label);
+      entry.sprites.push(this.createSprite(color));
+      entry.labels.push(this.createLabel(m.name, entry.group.color));
     }
   }
 
@@ -99,8 +133,8 @@ export class MarkerManager {
           const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
           const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
           entry.labels[i].style.display = 'block';
-          entry.labels[i].style.left = `${x + 14}px`;
-          entry.labels[i].style.top = `${y - 8}px`;
+          entry.labels[i].style.left = `${x + 12}px`;
+          entry.labels[i].style.top = `${y - 24}px`;
         } else {
           entry.labels[i].style.display = 'none';
         }

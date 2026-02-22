@@ -218,13 +218,12 @@ export class App {
       loader.load(url, resolve, undefined, () => resolve(new THREE.Texture()));
     });
 
-    const [dayTex, nightTex, cloudTex, moonTex, satTex, markerTex, starTex, smallmarkTex] = await Promise.all([
+    const [dayTex, nightTex, cloudTex, moonTex, satTex, starTex, smallmarkTex] = await Promise.all([
       load('/textures/earth/color.webp'),
       load('/textures/earth/night.webp'),
       load('/textures/earth/clouds.webp'),
       load('/textures/moon/color.webp'),
       load('/textures/ui/sat_icon.png'),
-      load('/textures/ui/marker_icon.png'),
       load('/textures/stars.webp'),
       load('/textures/ui/smallmark.png'),
     ]);
@@ -273,7 +272,7 @@ export class App {
 
     // Markers
     const overlay = this.overlayEl = document.getElementById('svelte-ui')!;
-    this.markerManager = new MarkerManager(this.scene3d, this.cfg.markerGroups, markerTex, overlay);
+    this.markerManager = new MarkerManager(this.scene3d, this.cfg.markerGroups, overlay);
 
     // Geographic overlays (country outlines + lat/lon grid)
     this.geoOverlay = new GeoOverlay(this.scene3d, this.scene2d);
@@ -660,7 +659,7 @@ export class App {
       };
     } else {
       const mapX = (loc.lon / 360.0) * MAP_W;
-      const mapY = -(loc.lat / 180.0) * MAP_H;
+      const mapY = (loc.lat / 180.0) * MAP_H;
       const cam = this.camera2d;
       return {
         x: ((mapX - cam.left) / (cam.right - cam.left)) * window.innerWidth,
@@ -669,12 +668,16 @@ export class App {
     }
   }
 
-  private tryStartObserverDrag(): boolean {
+  private hitTestObserver(): boolean {
     const sp = this.getObserverScreenPos();
     if (!sp) return false;
-    const mx = this.input.mousePos.x, my = this.input.mousePos.y;
-    const dist = Math.sqrt((mx - sp.x) ** 2 + (my - sp.y) ** 2);
-    return dist < 20;
+    const dx = Math.abs(this.input.mousePos.x - sp.x);
+    const dy = sp.y - this.input.mousePos.y; // positive = mouse above tip
+    return dx < 16 && dy > -8 && dy < 28;
+  }
+
+  private tryStartObserverDrag(): boolean {
+    return this.hitTestObserver();
   }
 
   private handleObserverDrag() {
@@ -828,11 +831,7 @@ export class App {
     if (this.input.isDraggingObserver) {
       this.renderer.domElement.style.cursor = 'grabbing';
     } else if (!this.hoveredSat && !this.orreryCtrl.isOrreryMode) {
-      const sp = this.getObserverScreenPos();
-      if (sp) {
-        const dist = Math.sqrt((this.input.mousePos.x - sp.x) ** 2 + (this.input.mousePos.y - sp.y) ** 2);
-        this.renderer.domElement.style.cursor = dist < 20 ? 'grab' : '';
-      }
+      this.renderer.domElement.style.cursor = this.hitTestObserver() ? 'grab' : '';
     }
 
     // activeSat = hovered, or first selected if nothing hovered

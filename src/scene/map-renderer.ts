@@ -11,6 +11,7 @@ import { epochToGmst } from '../astro/epoch';
 import { calculateSunPosition } from '../astro/sun';
 import { computeApsis2D } from '../astro/apsis';
 import { uiStore } from '../stores/ui.svelte';
+import { createPinTexture } from './marker-manager';
 
 export interface MapRendererInit {
   dayTex: THREE.Texture;
@@ -224,7 +225,7 @@ export class MapRenderer {
       const color = new THREE.Color(group.color);
       for (const m of group.markers) {
         const mapX = (m.lon / 360.0) * MAP_W;
-        const mapY = -(m.lat / 180.0) * MAP_H;
+        const mapY = (m.lat / 180.0) * MAP_H;
         allMarkers.push({ groupId: group.id, mapX, mapY, color });
 
         const label = document.createElement('div');
@@ -245,8 +246,10 @@ export class MapRenderer {
     mGeo2d.setAttribute('position', this.markerPosBuffer2d);
     mGeo2d.setAttribute('color', this.markerColorBuffer2d);
     mGeo2d.setDrawRange(0, 0);
+    const pinTex = createPinTexture();
     this.markerPoints2d = new THREE.Points(mGeo2d, new THREE.PointsMaterial({
-      size: 8, sizeAttenuation: false, vertexColors: true, transparent: true, depthTest: false,
+      size: 20, sizeAttenuation: false, vertexColors: true, transparent: true, depthTest: false,
+      map: pinTex, alphaTest: 0.1,
     }));
     this.markerPoints2d.frustumCulled = false;
     scene2d.add(this.markerPoints2d);
@@ -286,7 +289,7 @@ export class MapRenderer {
     const c = new THREE.Color(color);
     for (const m of markers) {
       const mapX = (m.lon / 360.0) * MAP_W;
-      const mapY = -(m.lat / 180.0) * MAP_H;
+      const mapY = (m.lat / 180.0) * MAP_H;
       this.markerData2d.push({ groupId, mapX, mapY, color: c });
 
       const label = document.createElement('div');
@@ -499,18 +502,23 @@ export class MapRenderer {
       this.footprint2dBorder.visible = bvi > 0;
     }
 
-    // 2D markers
+    // 2D markers (pin-shaped, offset up so tip = actual position)
     {
+      const PIN_SIZE = 20;
       const mPos = this.markerPosBuffer2d.array as Float32Array;
       const mCol = this.markerColorBuffer2d.array as Float32Array;
       let mi = 0;
+
+      // Offset point center up by half pin size so tip aligns with position
+      const worldPerPx = (camera2d.top - camera2d.bottom) / window.innerHeight;
+      const yOff = (PIN_SIZE / 2) * worldPerPx;
 
       for (const md of this.markerData2d) {
         const visible = uiStore.markerVisibility[md.groupId] ?? false;
         if (!visible) continue;
         for (let off = -1; off <= 1; off++) {
           if (mi + 3 > mPos.length) break;
-          mPos[mi] = md.mapX + off * MAP_W; mPos[mi + 1] = md.mapY; mPos[mi + 2] = 0.04;
+          mPos[mi] = md.mapX + off * MAP_W; mPos[mi + 1] = md.mapY + yOff; mPos[mi + 2] = 0.04;
           mCol[mi] = md.color.r; mCol[mi + 1] = md.color.g; mCol[mi + 2] = md.color.b;
           mi += 3;
         }
@@ -545,7 +553,7 @@ export class MapRenderer {
         }
         ml.div.style.display = 'block';
         ml.div.style.left = `${nx * vw + 8}px`;
-        ml.div.style.top = `${ny * vh - 6}px`;
+        ml.div.style.top = `${ny * vh - PIN_SIZE}px`;
       }
     }
 
