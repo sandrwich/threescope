@@ -19,6 +19,8 @@ class UIStore {
   showClouds = $state(true);
   showNightLights = $state(true);
   showSkybox = $state(true);
+  showCountries = $state(false);
+  showGrid = $state(false);
 
   // Marker group visibility (keyed by group id)
   markerVisibility = $state<Record<string, boolean>>({});
@@ -86,6 +88,8 @@ class UIStore {
     this.showClouds = load('threescope_clouds', true);
     this.showNightLights = load('threescope_night', true);
     this.showSkybox = load('threescope_skybox', true);
+    this.showCountries = load('threescope_countries', false);
+    this.showGrid = load('threescope_grid', false);
   }
 
   /** Initialize marker group visibility from config defaults + localStorage */
@@ -111,6 +115,8 @@ class UIStore {
       case 'showClouds': this.showClouds = value; localStorage.setItem('threescope_clouds', String(value)); break;
       case 'showNightLights': this.showNightLights = value; localStorage.setItem('threescope_night', String(value)); break;
       case 'showSkybox': this.showSkybox = value; localStorage.setItem('threescope_skybox', String(value)); break;
+      case 'showCountries': this.showCountries = value; localStorage.setItem('threescope_countries', String(value)); break;
+      case 'showGrid': this.showGrid = value; localStorage.setItem('threescope_grid', String(value)); break;
     }
     this.onToggleChange?.(key, value);
   }

@@ -58,6 +58,16 @@
             onchange={() => uiStore.setToggle('showClouds', uiStore.showClouds)}>
           Clouds
         </label>
+        <label class="toggle-label" title="Show country border outlines">
+          <input type="checkbox" bind:checked={uiStore.showCountries}
+            onchange={() => uiStore.setToggle('showCountries', uiStore.showCountries)}>
+          Countries
+        </label>
+        <label class="toggle-label" title="Show latitude/longitude grid (15°)">
+          <input type="checkbox" bind:checked={uiStore.showGrid}
+            onchange={() => uiStore.setToggle('showGrid', uiStore.showGrid)}>
+          Grid
+        </label>
       </div>
     {/if}
 

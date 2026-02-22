@@ -29,6 +29,7 @@ import { timeStore } from './stores/time.svelte';
 import { uiStore } from './stores/ui.svelte';
 import { settingsStore } from './stores/settings.svelte';
 import { UIUpdater } from './ui/ui-updater';
+import { GeoOverlay } from './scene/geo-overlay';
 
 function formatAge(ms: number): string {
   const mins = Math.floor(ms / 60000);
@@ -94,6 +95,9 @@ export class App {
 
   // Input handler (mouse/touch/keyboard events)
   private input!: InputHandler;
+
+  // Geographic overlays (country outlines + lat/lon grid)
+  private geoOverlay!: GeoOverlay;
 
   // UI updater (selection window, hover tooltip, apsis labels)
   private uiUpdater = new UIUpdater();
@@ -262,6 +266,10 @@ export class App {
     const overlay = document.getElementById('svelte-ui')!;
     this.markerManager = new MarkerManager(this.scene3d, this.cfg.markerGroups, markerTex, overlay);
 
+    // Geographic overlays (country outlines + lat/lon grid)
+    this.geoOverlay = new GeoOverlay(this.scene3d, this.scene2d);
+    this.geoOverlay.setCountriesUrl('/data/countries-110m.json');
+
     this.mapRenderer = new MapRenderer(this.scene2d, {
       dayTex, nightTex, satTex, smallmarkTex,
       markerGroups: this.cfg.markerGroups,
@@ -361,6 +369,8 @@ export class App {
     this.cfg.showNightLights = uiStore.showNightLights;
     this.moonScene.setShowNight(uiStore.showNightLights);
     if (!uiStore.showSkybox) this.scene3d.background = new THREE.Color(this.cfg.bgColor);
+    this.geoOverlay.setCountriesVisible(uiStore.showCountries);
+    this.geoOverlay.setGridVisible(uiStore.showGrid);
 
     // Apply initial marker visibility
     for (const g of this.cfg.markerGroups) {
@@ -390,6 +400,12 @@ export class App {
           break;
         case 'showSkybox':
           this.scene3d.background = value ? this.starTex : new THREE.Color(this.cfg.bgColor);
+          break;
+        case 'showCountries':
+          this.geoOverlay.setCountriesVisible(value);
+          break;
+        case 'showGrid':
+          this.geoOverlay.setGridVisible(value);
           break;
       }
     };
@@ -710,6 +726,10 @@ export class App {
         this.moonScene.update(epoch);
         this.sunScene.update(epoch);
       }
+
+      // Geographic overlays rotate with Earth
+      this.geoOverlay.setRotation(earthRotRad);
+      this.geoOverlay.set3dVisible(earthMode);
 
       // Sun direction in ECI/world space
       const sunEciDir = calculateSunPosition(epoch).normalize();
