@@ -29,6 +29,7 @@ export class InputHandler {
   private _mouseNDC = new THREE.Vector2();
   private _lastLeftClickTime = 0;
   private _isRightDragging = false;
+  private _isMiddleDragging = false;
   private _mouseDelta = new THREE.Vector2();
   private _touchCount = 0;
   private _lastTouchPos = new THREE.Vector2();
@@ -78,14 +79,14 @@ export class InputHandler {
         -(e.clientY / window.innerHeight) * 2 + 1,
       );
 
-      if (this._isRightDragging) {
+      if (this._isRightDragging || this._isMiddleDragging) {
         if (this.cb.getViewMode() === ViewMode.VIEW_2D) {
           // Pan 2D
           this.camera.pan2d(dx, dy);
           this.cb.clearTargetLock();
         } else {
           // Orbit 3D
-          if (e.shiftKey) {
+          if (e.shiftKey || e.altKey) {
             this.camera.pan3d(dx, dy);
             this.cb.clearTargetLock();
           } else {
@@ -97,9 +98,11 @@ export class InputHandler {
 
     window.addEventListener('mousedown', (e) => {
       if (e.button === 2) this._isRightDragging = true;
+      if (e.button === 1) this._isMiddleDragging = true;
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 2) this._isRightDragging = false;
+      if (e.button === 1) this._isMiddleDragging = false;
     });
 
     // Prevent context menu
@@ -168,14 +171,21 @@ export class InputHandler {
           timeStore.stepBackward();
           break;
         case '/':
-          if (e.shiftKey) timeStore.jumpToNow();
-          else timeStore.resetSpeed();
+          timeStore.resetSpeed();
           break;
         case 'm':
         case 'M':
           this.cb.onToggleViewMode();
           break;
+        case '?':
+          uiStore.infoModalOpen = true;
+          break;
       }
+    });
+
+    // Prevent middle-click auto-scroll
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 1) e.preventDefault();
     });
 
     // Touch events

@@ -44,7 +44,7 @@
     actions.push({ id: 'time-faster', category: 'Time', label: 'Speed Up', shortcut: '.', execute: () => { timeStore.stepForward(); close(); } });
     actions.push({ id: 'time-slower', category: 'Time', label: 'Slow Down', shortcut: ',', execute: () => { timeStore.stepBackward(); close(); } });
     actions.push({ id: 'time-reset', category: 'Time', label: 'Reset Speed', shortcut: '/', execute: () => { timeStore.resetSpeed(); close(); } });
-    actions.push({ id: 'time-now', category: 'Time', label: 'Jump to Now', shortcut: '?', execute: () => { timeStore.jumpToNow(); close(); } });
+    actions.push({ id: 'time-now', category: 'Time', label: 'Jump to Now', execute: () => { timeStore.jumpToNow(); close(); } });
 
     // View toggles
     actions.push({ id: 'view-spotlight', category: 'View', label: 'Toggle Spotlight', keywords: 'hide unselected focus', execute: () => { uiStore.setToggle('hideUnselected', !uiStore.hideUnselected); close(); } });

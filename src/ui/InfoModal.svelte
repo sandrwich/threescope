@@ -19,8 +19,8 @@
     <div class="section">
       <h3>Mouse</h3>
       <div class="ctrl-table">
-        <span class="ctrl-key"><kbd>RMB</kbd> drag</span><span class="ctrl-desc">Orbit camera</span>
-        <span class="ctrl-key"><kbd>Shift</kbd>+<kbd>RMB</kbd> drag</span><span class="ctrl-desc">Pan camera</span>
+        <span class="ctrl-key"><kbd>MMB</kbd> drag</span><span class="ctrl-desc">Orbit camera</span>
+        <span class="ctrl-key"><kbd>Shift</kbd>+<kbd>MMB</kbd> drag</span><span class="ctrl-desc">Pan camera</span>
         <span class="ctrl-key"><kbd>Scroll</kbd></span><span class="ctrl-desc">Zoom in / out</span>
         <span class="ctrl-key">Click satellite</span><span class="ctrl-desc">Select / deselect</span>
       </div>
@@ -34,6 +34,7 @@
         <span class="ctrl-key"><kbd>M</kbd></span><span class="ctrl-desc">Toggle 2D / 3D map</span>
         <span class="ctrl-key"><kbd>Ctrl</kbd>+<kbd>K</kbd></span><span class="ctrl-desc">Command palette</span>
         <span class="ctrl-key"><kbd>Ctrl</kbd>+<kbd>F</kbd></span><span class="ctrl-desc">Search satellite</span>
+        <span class="ctrl-key"><kbd>?</kbd></span><span class="ctrl-desc">Show help</span>
       </div>
     </div>
   </div>
