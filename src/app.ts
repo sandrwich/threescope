@@ -9,7 +9,7 @@ import { CloudLayer } from './scene/cloud-layer';
 import { MoonScene } from './scene/moon-scene';
 import { SunScene } from './scene/sun-scene';
 import { SatelliteManager } from './scene/satellite-manager';
-import { OrbitRenderer } from './scene/orbit-renderer';
+import { OrbitRenderer, ORBIT_COLORS } from './scene/orbit-renderer';
 import { FootprintRenderer } from './scene/footprint-renderer';
 import { MarkerManager } from './scene/marker-manager';
 import { PostProcessing } from './scene/post-processing';
@@ -18,7 +18,9 @@ import { type GraphicsSettings, PRESETS, DEFAULT_PRESET, findMatchingPreset, get
 import { type SimulationSettings, DEFAULT_SIM_PRESET, findMatchingSimPreset, getSimPresetSettings } from './simulation';
 import { Orrery, type PromotedPlanet } from './scene/orrery';
 import { Atmosphere } from './scene/atmosphere';
-import { computeApsis } from './astro/apsis';
+import { computeApsis, computeApsis2D } from './astro/apsis';
+import { computeFootprintGrid } from './astro/footprint';
+import { FP_RINGS, FP_PTS } from './constants';
 import { getMapCoordinates } from './astro/coordinates';
 import { calculatePosition } from './astro/propagator';
 import { epochToGmst } from './astro/epoch';
@@ -116,7 +118,27 @@ export class App {
   private maxSatVerts2d = 15000 * 3; // 3 offsets per sat
   private hlTrack2d!: THREE.LineSegments;
   private hlTrackBuffer2d!: THREE.BufferAttribute;
-  private maxTrackVerts2d = 4001 * 3 * 2; // 3 offsets, 2 verts per segment
+  private hlTrackColorBuffer2d!: THREE.BufferAttribute;
+  private maxTrackVerts2d = 4001 * 3 * 2 * 20; // 3 offsets, 2 verts per segment, 20 sats
+  // 2D footprint
+  private footprint2dMesh!: THREE.Mesh;
+  private footprint2dPosBuffer!: THREE.BufferAttribute;
+  private footprint2dBorder!: THREE.LineSegments;
+  private footprint2dBorderBuffer!: THREE.BufferAttribute;
+  // 2D markers
+  private markerPoints2d!: THREE.Points;
+  private markerPosBuffer2d!: THREE.BufferAttribute;
+  private markerColorBuffer2d!: THREE.BufferAttribute;
+  private markerLabels2d: { div: HTMLDivElement; groupId: string; mapX: number; mapY: number }[] = [];
+  private markerData2d: { groupId: string; mapX: number; mapY: number; color: THREE.Color }[] = [];
+  // 2D apsis
+  private apsisPoints2d!: THREE.Points;
+  private apsisPosBuffer2d!: THREE.BufferAttribute;
+  private apsisColorBuffer2d!: THREE.BufferAttribute;
+  // 3D apsis sprites
+  private periSprite3d!: THREE.Sprite;
+  private apoSprite3d!: THREE.Sprite;
+  private smallmarkTex!: THREE.Texture;
 
   // Mouse/touch state
   private mousePos = new THREE.Vector2();
@@ -206,7 +228,7 @@ export class App {
       loader.load(url, resolve, undefined, () => resolve(new THREE.Texture()));
     });
 
-    const [dayTex, nightTex, cloudTex, moonTex, satTex, markerTex, starTex] = await Promise.all([
+    const [dayTex, nightTex, cloudTex, moonTex, satTex, markerTex, starTex, smallmarkTex] = await Promise.all([
       load('/textures/earth/color.webp'),
       load('/textures/earth/night.webp'),
       load('/textures/earth/clouds.webp'),
@@ -214,7 +236,9 @@ export class App {
       load('/textures/ui/sat_icon.png'),
       load('/textures/ui/marker_icon.png'),
       load('/textures/stars.webp'),
+      load('/textures/ui/smallmark.png'),
     ]);
+    this.smallmarkTex = smallmarkTex;
 
     // Match Raylib's texture behavior:
     // - flipY=false: Raylib/OpenGL doesn't flip, and our custom GenEarthMesh UVs
@@ -326,8 +350,46 @@ export class App {
     satGeo2d.setAttribute('position', this.satPosBuffer2d);
     satGeo2d.setAttribute('color', this.satColorBuffer2d);
     satGeo2d.setDrawRange(0, 0);
-    this.satPoints2d = new THREE.Points(satGeo2d, new THREE.PointsMaterial({
-      size: 6, sizeAttenuation: false, vertexColors: true, transparent: true, depthTest: false,
+    this.satPoints2d = new THREE.Points(satGeo2d, new THREE.ShaderMaterial({
+      uniforms: { pointTexture: { value: satTex } },
+      vertexShader: `
+        varying vec3 vColor;
+        void main() {
+          vColor = color;
+          gl_PointSize = 14.0;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D pointTexture;
+        varying vec3 vColor;
+        void main() {
+          vec4 texel = texture2D(pointTexture, gl_PointCoord);
+          if (texel.a > 0.1) {
+            gl_FragColor = vec4(vColor * texel.rgb, texel.a);
+            return;
+          }
+          float s = 0.06;
+          float na = max(
+            max(texture2D(pointTexture, gl_PointCoord + vec2(s, 0.0)).a,
+                texture2D(pointTexture, gl_PointCoord - vec2(s, 0.0)).a),
+            max(texture2D(pointTexture, gl_PointCoord + vec2(0.0, s)).a,
+                texture2D(pointTexture, gl_PointCoord - vec2(0.0, s)).a)
+          );
+          na = max(na, max(
+            max(texture2D(pointTexture, gl_PointCoord + vec2(s, s) * 0.707).a,
+                texture2D(pointTexture, gl_PointCoord - vec2(s, s) * 0.707).a),
+            max(texture2D(pointTexture, gl_PointCoord + vec2(s, -s) * 0.707).a,
+                texture2D(pointTexture, gl_PointCoord - vec2(s, -s) * 0.707).a)
+          ));
+          if (na > 0.1) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.7);
+            return;
+          }
+          discard;
+        }
+      `,
+      transparent: true, depthTest: false, vertexColors: true,
     }));
     this.satPoints2d.frustumCulled = false;
     this.scene2d.add(this.satPoints2d);
@@ -336,11 +398,105 @@ export class App {
     const hlGeo2d = new THREE.BufferGeometry();
     this.hlTrackBuffer2d = new THREE.BufferAttribute(new Float32Array(this.maxTrackVerts2d * 3), 3);
     this.hlTrackBuffer2d.setUsage(THREE.DynamicDrawUsage);
+    this.hlTrackColorBuffer2d = new THREE.BufferAttribute(new Float32Array(this.maxTrackVerts2d * 3), 3);
+    this.hlTrackColorBuffer2d.setUsage(THREE.DynamicDrawUsage);
     hlGeo2d.setAttribute('position', this.hlTrackBuffer2d);
+    hlGeo2d.setAttribute('color', this.hlTrackColorBuffer2d);
     hlGeo2d.setDrawRange(0, 0);
-    this.hlTrack2d = new THREE.LineSegments(hlGeo2d, new THREE.LineBasicMaterial({ transparent: true }));
+    this.hlTrack2d = new THREE.LineSegments(hlGeo2d, new THREE.LineBasicMaterial({ transparent: true, vertexColors: true }));
     this.hlTrack2d.frustumCulled = false;
     this.scene2d.add(this.hlTrack2d);
+
+    // 2D footprint mesh (dynamic triangle fill + border)
+    const maxFpVerts = FP_RINGS * FP_PTS * 6 * 3 * 20; // 20 footprints × 3 offsets
+    const fpGeo = new THREE.BufferGeometry();
+    this.footprint2dPosBuffer = new THREE.BufferAttribute(new Float32Array(maxFpVerts * 3), 3);
+    this.footprint2dPosBuffer.setUsage(THREE.DynamicDrawUsage);
+    fpGeo.setAttribute('position', this.footprint2dPosBuffer);
+    fpGeo.setDrawRange(0, 0);
+    const cFpFill = parseHexColor(this.cfg.footprintBg);
+    this.footprint2dMesh = new THREE.Mesh(fpGeo, new THREE.MeshBasicMaterial({
+      color: new THREE.Color(cFpFill.r, cFpFill.g, cFpFill.b),
+      transparent: true, opacity: cFpFill.a, side: THREE.DoubleSide, depthWrite: false,
+    }));
+    this.footprint2dMesh.frustumCulled = false;
+    this.scene2d.add(this.footprint2dMesh);
+
+    const maxFpBorderVerts = FP_PTS * 2 * 3 * 20;
+    const fpBorderGeo = new THREE.BufferGeometry();
+    this.footprint2dBorderBuffer = new THREE.BufferAttribute(new Float32Array(maxFpBorderVerts * 3), 3);
+    this.footprint2dBorderBuffer.setUsage(THREE.DynamicDrawUsage);
+    fpBorderGeo.setAttribute('position', this.footprint2dBorderBuffer);
+    fpBorderGeo.setDrawRange(0, 0);
+    const cFpBorder = parseHexColor(this.cfg.footprintBorder);
+    this.footprint2dBorder = new THREE.LineSegments(fpBorderGeo, new THREE.LineBasicMaterial({
+      color: new THREE.Color(cFpBorder.r, cFpBorder.g, cFpBorder.b),
+      transparent: true, opacity: cFpBorder.a,
+    }));
+    this.footprint2dBorder.frustumCulled = false;
+    this.scene2d.add(this.footprint2dBorder);
+
+    // 2D markers (pre-compute map positions from lat/lon)
+    const allMarkers: { groupId: string; mapX: number; mapY: number; color: THREE.Color }[] = [];
+    for (const group of this.cfg.markerGroups) {
+      const color = new THREE.Color(group.color);
+      for (const m of group.markers) {
+        const mapX = (m.lon / 360.0) * MAP_W;
+        const mapY = -(m.lat / 180.0) * MAP_H;
+        allMarkers.push({ groupId: group.id, mapX, mapY, color });
+
+        const label = document.createElement('div');
+        label.style.cssText = `position:absolute;font-size:11px;color:${group.color};pointer-events:none;white-space:nowrap;display:none;`;
+        label.textContent = m.name;
+        overlay.appendChild(label);
+        this.markerLabels2d.push({ div: label, groupId: group.id, mapX, mapY });
+      }
+    }
+    this.markerData2d = allMarkers;
+
+    const maxMarkerVerts = allMarkers.length * 3; // 3 offsets per marker
+    const mGeo2d = new THREE.BufferGeometry();
+    this.markerPosBuffer2d = new THREE.BufferAttribute(new Float32Array(maxMarkerVerts * 3), 3);
+    this.markerPosBuffer2d.setUsage(THREE.DynamicDrawUsage);
+    this.markerColorBuffer2d = new THREE.BufferAttribute(new Float32Array(maxMarkerVerts * 3), 3);
+    this.markerColorBuffer2d.setUsage(THREE.DynamicDrawUsage);
+    mGeo2d.setAttribute('position', this.markerPosBuffer2d);
+    mGeo2d.setAttribute('color', this.markerColorBuffer2d);
+    mGeo2d.setDrawRange(0, 0);
+    this.markerPoints2d = new THREE.Points(mGeo2d, new THREE.PointsMaterial({
+      size: 8, sizeAttenuation: false, vertexColors: true, transparent: true, depthTest: false,
+    }));
+    this.markerPoints2d.frustumCulled = false;
+    this.scene2d.add(this.markerPoints2d);
+
+    // 2D apsis points (peri/apo markers on map)
+    const maxApsisVerts = 20 * 2 * 3; // 20 sats × 2 apsis × 3 offsets
+    const apsisGeo2d = new THREE.BufferGeometry();
+    this.apsisPosBuffer2d = new THREE.BufferAttribute(new Float32Array(maxApsisVerts * 3), 3);
+    this.apsisPosBuffer2d.setUsage(THREE.DynamicDrawUsage);
+    this.apsisColorBuffer2d = new THREE.BufferAttribute(new Float32Array(maxApsisVerts * 3), 3);
+    this.apsisColorBuffer2d.setUsage(THREE.DynamicDrawUsage);
+    apsisGeo2d.setAttribute('position', this.apsisPosBuffer2d);
+    apsisGeo2d.setAttribute('color', this.apsisColorBuffer2d);
+    apsisGeo2d.setDrawRange(0, 0);
+    this.apsisPoints2d = new THREE.Points(apsisGeo2d, new THREE.PointsMaterial({
+      size: 10, sizeAttenuation: false, vertexColors: true, transparent: true, depthTest: false,
+    }));
+    this.apsisPoints2d.frustumCulled = false;
+    this.scene2d.add(this.apsisPoints2d);
+
+    // 3D apsis sprites (diamond icons at periapsis/apoapsis)
+    const periMat = new THREE.SpriteMaterial({ map: smallmarkTex, color: 0x87ceeb, depthTest: false, transparent: true });
+    this.periSprite3d = new THREE.Sprite(periMat);
+    this.periSprite3d.scale.set(0.03, 0.03, 1);
+    this.periSprite3d.visible = false;
+    this.scene3d.add(this.periSprite3d);
+
+    const apoMat = new THREE.SpriteMaterial({ map: smallmarkTex, color: 0xffa500, depthTest: false, transparent: true });
+    this.apoSprite3d = new THREE.Sprite(apoMat);
+    this.apoSprite3d.scale.set(0.03, 0.03, 1);
+    this.apoSprite3d.visible = false;
+    this.scene3d.add(this.apoSprite3d);
   }
 
   private currentGroup = DEFAULT_GROUP;
@@ -828,10 +984,10 @@ export class App {
       const aspect = w / h;
       const halfH = MAP_H / 2 / this.cam2dZoom;
       const halfW = halfH * aspect;
-      this.camera2d.left = -halfW;
-      this.camera2d.right = halfW;
-      this.camera2d.top = halfH;
-      this.camera2d.bottom = -halfH;
+      this.camera2d.left = this.cam2dTarget.x - halfW;
+      this.camera2d.right = this.cam2dTarget.x + halfW;
+      this.camera2d.top = this.cam2dTarget.y + halfH;
+      this.camera2d.bottom = this.cam2dTarget.y - halfH;
       this.camera2d.updateProjectionMatrix();
     });
 
@@ -1225,14 +1381,17 @@ export class App {
     );
     this.camera3d.lookAt(this.target3d);
 
+    // Clamp 2D target Y so map doesn't scroll beyond bounds
+    this.targetCam2dTarget.y = Math.max(-MAP_H / 2, Math.min(MAP_H / 2, this.targetCam2dTarget.y));
+
     // Update 2D camera
     const aspect = window.innerWidth / window.innerHeight;
     const halfH = MAP_H / 2 / this.cam2dZoom;
     const halfW = halfH * aspect;
     this.camera2d.left = this.cam2dTarget.x - halfW;
     this.camera2d.right = this.cam2dTarget.x + halfW;
-    this.camera2d.top = halfH;
-    this.camera2d.bottom = -halfH;
+    this.camera2d.top = this.cam2dTarget.y + halfH;
+    this.camera2d.bottom = this.cam2dTarget.y - halfH;
     this.camera2d.updateProjectionMatrix();
 
     // Hover detection (skip in planet/orrery view)
@@ -1298,6 +1457,8 @@ export class App {
 
       this.satManager.setVisible(earthMode);
       uiStore.earthTogglesVisible = earthMode;
+      // Hide 2D marker labels in 3D mode
+      for (const ml of this.markerLabels2d) ml.div.style.display = 'none';
       const showNight = earthMode || this.activeLock === TargetLock.MOON || this.activeLock === TargetLock.PLANET;
       uiStore.nightToggleVisible = showNight;
       if (earthMode) {
@@ -1317,7 +1478,10 @@ export class App {
         // Footprints for all selected sats + hovered
         const fpPositions: THREE.Vector3[] = [];
         for (const sat of this.selectedSats) fpPositions.push(sat.currentPos);
-        if (this.hoveredSat && !this.selectedSats.has(this.hoveredSat)) fpPositions.push(this.hoveredSat.currentPos);
+        if (this.hoveredSat) {
+          const hovPos = (this.hoveredSat as Satellite).currentPos;
+          if (!fpPositions.includes(hovPos)) fpPositions.push(hovPos);
+        }
         this.footprintRenderer.update(
           fpPositions,
           { footprintBg: this.cfg.footprintBg, footprintBorder: this.cfg.footprintBorder }
@@ -1344,6 +1508,8 @@ export class App {
       this.markerManager.hide();
       this.orbitRenderer.clear();
       this.footprintRenderer.clear();
+      this.periSprite3d.visible = false;
+      this.apoSprite3d.visible = false;
 
       // Disable tone mapping for 2D direct render
       const prevToneMapping = this.renderer.toneMapping;
@@ -1430,14 +1596,15 @@ export class App {
       if (this.hideUnselected && this.selectedSats.size > 0 && !this.selectedSats.has(sat)) continue;
 
       const mc = getMapCoordinates(sat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
-      // mc.y is positive for south, but in scene space we negate it
-      const dx = mc.x - mouseWorldX;
-      const dy = -mc.y - mouseWorldY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist < hitRadius && dist < closestDist) {
-        closestDist = dist;
-        this.hoveredSat = sat;
+      // Check all 3 x-offsets for wrap-around
+      for (const off of [-MAP_W, 0, MAP_W]) {
+        const dx = (mc.x + off) - mouseWorldX;
+        const dy = -mc.y - mouseWorldY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < hitRadius && dist < closestDist) {
+          closestDist = dist;
+          this.hoveredSat = sat;
+        }
       }
     }
   }
@@ -1450,52 +1617,221 @@ export class App {
     const sunEcef = sunEci.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
     this.mapMaterial.uniforms.sunDir.value.copy(sunEcef);
 
-    // Ground track for hovered or first selected
-    const firstSel2d = this.selectedSats.size > 0 ? this.selectedSats.values().next().value! : null;
-    const activeSat = this.hoveredSat ?? firstSel2d;
+    // Build set of sats needing highlight (ground track, footprint, apsis)
+    const hlSats: Satellite[] = [];
+    for (const sat of this.selectedSats) {
+      if (hlSats.length >= 20) break;
+      hlSats.push(sat);
+    }
+    if (this.hoveredSat && !this.selectedSats.has(this.hoveredSat) && hlSats.length < 20) {
+      hlSats.push(this.hoveredSat);
+    }
+
     const cHL = parseHexColor(this.cfg.orbitHighlighted);
 
-    // Highlighted ground track (using pre-allocated buffer)
-    if (activeSat) {
-      const segments = Math.min(4000, Math.max(50, Math.floor(400 * this.cfg.orbitsToDraw)));
-      const periodDays = TWO_PI / activeSat.meanMotion / 86400.0;
-      const timeStep = (periodDays * this.cfg.orbitsToDraw) / segments;
-
-      const trackPts: { x: number; y: number }[] = [];
-      for (let j = 0; j <= segments; j++) {
-        const t = epoch + j * timeStep;
-        const pos = calculatePosition(activeSat, t);
-        const gm = epochToGmst(t);
-        trackPts.push(getMapCoordinates(pos, gm, this.cfg.earthRotationOffset));
-      }
-
+    // Ground tracks for all highlighted sats (rainbow colors)
+    if (hlSats.length > 0) {
       const arr = this.hlTrackBuffer2d.array as Float32Array;
+      const col = this.hlTrackColorBuffer2d.array as Float32Array;
       let vi = 0;
-      for (let off = -1; off <= 1; off++) {
-        const xOff = off * MAP_W;
-        for (let j = 1; j <= segments; j++) {
-          if (vi + 6 > this.maxTrackVerts2d * 3) break;
-          if (Math.abs(trackPts[j].x - trackPts[j - 1].x) < MAP_W * 0.6) {
-            arr[vi++] = trackPts[j - 1].x + xOff; arr[vi++] = -trackPts[j - 1].y; arr[vi++] = 0.02;
-            arr[vi++] = trackPts[j].x + xOff; arr[vi++] = -trackPts[j].y; arr[vi++] = 0.02;
+
+      for (let si = 0; si < hlSats.length; si++) {
+        const sat = hlSats[si];
+        const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
+        const segments = Math.min(4000, Math.max(50, Math.floor(400 * this.cfg.orbitsToDraw)));
+        const periodDays = TWO_PI / sat.meanMotion / 86400.0;
+        const timeStep = (periodDays * this.cfg.orbitsToDraw) / segments;
+
+        const trackPts: { x: number; y: number }[] = [];
+        for (let j = 0; j <= segments; j++) {
+          const t = epoch + j * timeStep;
+          const pos = calculatePosition(sat, t);
+          const gm = epochToGmst(t);
+          trackPts.push(getMapCoordinates(pos, gm, this.cfg.earthRotationOffset));
+        }
+
+        for (let off = -1; off <= 1; off++) {
+          const xOff = off * MAP_W;
+          for (let j = 1; j <= segments; j++) {
+            if (vi + 6 > this.maxTrackVerts2d * 3) break;
+            if (Math.abs(trackPts[j].x - trackPts[j - 1].x) < MAP_W * 0.6) {
+              arr[vi] = trackPts[j - 1].x + xOff; arr[vi+1] = -trackPts[j - 1].y; arr[vi+2] = 0.02;
+              col[vi] = cr; col[vi+1] = cg; col[vi+2] = cb;
+              vi += 3;
+              arr[vi] = trackPts[j].x + xOff; arr[vi+1] = -trackPts[j].y; arr[vi+2] = 0.02;
+              col[vi] = cr; col[vi+1] = cg; col[vi+2] = cb;
+              vi += 3;
+            }
           }
         }
       }
 
       this.hlTrackBuffer2d.needsUpdate = true;
+      this.hlTrackColorBuffer2d.needsUpdate = true;
       this.hlTrack2d.geometry.setDrawRange(0, vi / 3);
       const mat = this.hlTrack2d.material as THREE.LineBasicMaterial;
-      mat.color.setRGB(cHL.r, cHL.g, cHL.b);
+      mat.color.setRGB(1, 1, 1); // vertex colors handle tinting
       mat.opacity = cHL.a;
       this.hlTrack2d.visible = vi > 0;
     } else {
       this.hlTrack2d.visible = false;
     }
 
-    // Satellite dots on map (using pre-allocated buffer)
+    // 2D footprints for highlighted sats
+    {
+      const fpArr = this.footprint2dPosBuffer.array as Float32Array;
+      const bArr = this.footprint2dBorderBuffer.array as Float32Array;
+      let fvi = 0, bvi = 0;
+
+      for (const sat of hlSats) {
+        const grid3d = computeFootprintGrid(sat.currentPos);
+        if (!grid3d) continue;
+
+        // Project grid to 2D map coords
+        const grid2d: { x: number; y: number }[][] = [];
+        for (let i = 0; i <= FP_RINGS; i++) {
+          const ring: { x: number; y: number }[] = [];
+          for (let k = 0; k < FP_PTS; k++) {
+            ring.push(getMapCoordinates(grid3d[i][k], gmstDeg, this.cfg.earthRotationOffset));
+          }
+          grid2d.push(ring);
+        }
+
+        for (let off = -1; off <= 1; off++) {
+          const xOff = off * MAP_W;
+
+          // Fill triangles
+          for (let i = 0; i < FP_RINGS; i++) {
+            for (let k = 0; k < FP_PTS; k++) {
+              const next = (k + 1) % FP_PTS;
+              const p1 = grid2d[i][k], p2 = grid2d[i][next];
+              const p3 = grid2d[i + 1][k], p4 = grid2d[i + 1][next];
+
+              // Skip quads that cross antimeridian
+              if (Math.abs(p1.x - p2.x) > MAP_W * 0.4 ||
+                  Math.abs(p1.x - p3.x) > MAP_W * 0.4 ||
+                  Math.abs(p2.x - p4.x) > MAP_W * 0.4) continue;
+
+              if (fvi + 18 > fpArr.length) break;
+              fpArr[fvi++] = p1.x + xOff; fpArr[fvi++] = -p1.y; fpArr[fvi++] = 0.01;
+              fpArr[fvi++] = p3.x + xOff; fpArr[fvi++] = -p3.y; fpArr[fvi++] = 0.01;
+              fpArr[fvi++] = p2.x + xOff; fpArr[fvi++] = -p2.y; fpArr[fvi++] = 0.01;
+
+              fpArr[fvi++] = p2.x + xOff; fpArr[fvi++] = -p2.y; fpArr[fvi++] = 0.01;
+              fpArr[fvi++] = p3.x + xOff; fpArr[fvi++] = -p3.y; fpArr[fvi++] = 0.01;
+              fpArr[fvi++] = p4.x + xOff; fpArr[fvi++] = -p4.y; fpArr[fvi++] = 0.01;
+            }
+          }
+
+          // Border ring (outermost)
+          const outerRing = grid2d[FP_RINGS];
+          for (let k = 0; k < FP_PTS; k++) {
+            const next = (k + 1) % FP_PTS;
+            if (Math.abs(outerRing[k].x - outerRing[next].x) > MAP_W * 0.4) continue;
+            if (bvi + 6 > bArr.length) break;
+            bArr[bvi++] = outerRing[k].x + xOff; bArr[bvi++] = -outerRing[k].y; bArr[bvi++] = 0.015;
+            bArr[bvi++] = outerRing[next].x + xOff; bArr[bvi++] = -outerRing[next].y; bArr[bvi++] = 0.015;
+          }
+        }
+      }
+
+      this.footprint2dPosBuffer.needsUpdate = true;
+      this.footprint2dMesh.geometry.setDrawRange(0, fvi / 3);
+      this.footprint2dMesh.visible = fvi > 0;
+
+      this.footprint2dBorderBuffer.needsUpdate = true;
+      this.footprint2dBorder.geometry.setDrawRange(0, bvi / 3);
+      this.footprint2dBorder.visible = bvi > 0;
+    }
+
+    // 2D markers
+    {
+      const mPos = this.markerPosBuffer2d.array as Float32Array;
+      const mCol = this.markerColorBuffer2d.array as Float32Array;
+      let mi = 0;
+
+      for (const md of this.markerData2d) {
+        const visible = uiStore.markerVisibility[md.groupId] ?? false;
+        if (!visible) continue;
+        for (let off = -1; off <= 1; off++) {
+          if (mi + 3 > mPos.length) break;
+          mPos[mi] = md.mapX + off * MAP_W; mPos[mi + 1] = md.mapY; mPos[mi + 2] = 0.04;
+          mCol[mi] = md.color.r; mCol[mi + 1] = md.color.g; mCol[mi + 2] = md.color.b;
+          mi += 3;
+        }
+      }
+
+      this.markerPosBuffer2d.needsUpdate = true;
+      this.markerColorBuffer2d.needsUpdate = true;
+      this.markerPoints2d.geometry.setDrawRange(0, mi / 3);
+
+      // Position marker labels
+      const showLabels = this.cam2dZoom > 0.5;
+      const camL = this.camera2d.left, camR = this.camera2d.right;
+      const camT = this.camera2d.top, camB = this.camera2d.bottom;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      for (const ml of this.markerLabels2d) {
+        const visible = (uiStore.markerVisibility[ml.groupId] ?? false) && showLabels;
+        if (!visible) {
+          ml.div.style.display = 'none';
+          continue;
+        }
+        // Find best x-offset for this marker relative to camera center
+        const camCenterX = (camL + camR) / 2;
+        let bestX = ml.mapX;
+        for (const off of [-MAP_W, 0, MAP_W]) {
+          if (Math.abs(ml.mapX + off - camCenterX) < Math.abs(bestX - camCenterX)) bestX = ml.mapX + off;
+        }
+        const nx = (bestX - camL) / (camR - camL);
+        const ny = (ml.mapY - camT) / (camB - camT);
+        if (nx < -0.1 || nx > 1.1 || ny < -0.1 || ny > 1.1) {
+          ml.div.style.display = 'none';
+          continue;
+        }
+        ml.div.style.display = 'block';
+        ml.div.style.left = `${nx * vw + 8}px`;
+        ml.div.style.top = `${ny * vh - 6}px`;
+      }
+    }
+
+    // 2D apsis markers (peri/apo dots on map)
+    {
+      const aPos = this.apsisPosBuffer2d.array as Float32Array;
+      const aCol = this.apsisColorBuffer2d.array as Float32Array;
+      let ai = 0;
+      const periColor = { r: 0.529, g: 0.808, b: 0.922 }; // #87ceeb
+      const apoColor = { r: 1.0, g: 0.647, b: 0.0 };       // #ffa500
+
+      for (const sat of hlSats) {
+        const peri = computeApsis2D(sat, epoch, false, this.cfg.earthRotationOffset);
+        const apo = computeApsis2D(sat, epoch, true, this.cfg.earthRotationOffset);
+
+        for (let off = -1; off <= 1; off++) {
+          if (ai + 6 > aPos.length) break;
+          aPos[ai] = peri.x + off * MAP_W; aPos[ai + 1] = -peri.y; aPos[ai + 2] = 0.03;
+          aCol[ai] = periColor.r; aCol[ai + 1] = periColor.g; aCol[ai + 2] = periColor.b;
+          ai += 3;
+          aPos[ai] = apo.x + off * MAP_W; aPos[ai + 1] = -apo.y; aPos[ai + 2] = 0.03;
+          aCol[ai] = apoColor.r; aCol[ai + 1] = apoColor.g; aCol[ai + 2] = apoColor.b;
+          ai += 3;
+        }
+      }
+
+      this.apsisPosBuffer2d.needsUpdate = true;
+      this.apsisColorBuffer2d.needsUpdate = true;
+      this.apsisPoints2d.geometry.setDrawRange(0, ai / 3);
+    }
+
+    // Satellite dots on map (rainbow colors for selected, hover = brighter)
     const cNorm = parseHexColor(this.cfg.satNormal);
-    const cSel = parseHexColor(this.cfg.satSelected);
-    const cHov = parseHexColor(this.cfg.satHighlighted);
+
+    // Build rainbow map for selected sats (index matches orbit color)
+    const selColorMap2d = new Map<Satellite, number[]>();
+    let selIdx2d = 0;
+    for (const s of this.selectedSats) {
+      selColorMap2d.set(s, ORBIT_COLORS[selIdx2d % ORBIT_COLORS.length]);
+      selIdx2d++;
+    }
 
     const posArr = this.satPosBuffer2d.array as Float32Array;
     const colArr = this.satColorBuffer2d.array as Float32Array;
@@ -1503,13 +1839,22 @@ export class App {
     for (const sat of this.satellites) {
       if (si + 9 > this.maxSatVerts2d * 3) break;
       const mc = getMapCoordinates(sat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
-      let c = cNorm;
-      if (this.selectedSats.has(sat)) c = cSel;
-      else if (sat === this.hoveredSat) c = cHov;
+      const rainbow = selColorMap2d.get(sat);
+      const isHov = sat === this.hoveredSat;
+      let cr: number, cg: number, cb: number;
+      if (rainbow) {
+        const b = isHov ? 1.5 : 1.0;
+        cr = rainbow[0] * b; cg = rainbow[1] * b; cb = rainbow[2] * b;
+      } else if (isHov) {
+        const rc = ORBIT_COLORS[this.selectedSats.size % ORBIT_COLORS.length];
+        cr = rc[0] * 0.6; cg = rc[1] * 0.6; cb = rc[2] * 0.6;
+      } else {
+        cr = cNorm.r; cg = cNorm.g; cb = cNorm.b;
+      }
 
       for (let off = -1; off <= 1; off++) {
         posArr[si] = mc.x + off * MAP_W; posArr[si + 1] = -mc.y; posArr[si + 2] = 0.05;
-        colArr[si] = c.r; colArr[si + 1] = c.g; colArr[si + 2] = c.b;
+        colArr[si] = cr; colArr[si + 1] = cg; colArr[si + 2] = cb;
         si += 3;
       }
     }
@@ -1566,8 +1911,15 @@ export class App {
           );
         } else {
           const mc = getMapCoordinates(cardSat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
-          const nx = (mc.x - this.camera2d.left) / (this.camera2d.right - this.camera2d.left);
-          const ny = (mc.y - this.camera2d.top) / (this.camera2d.bottom - this.camera2d.top);
+          // Find best x-offset for wrap-around
+          const camCX = (this.camera2d.left + this.camera2d.right) / 2;
+          let bestX = mc.x;
+          for (const off of [-MAP_W, MAP_W]) {
+            if (Math.abs(mc.x + off - camCX) < Math.abs(bestX - camCX)) bestX = mc.x + off;
+          }
+          const nx = (bestX - this.camera2d.left) / (this.camera2d.right - this.camera2d.left);
+          // sceneY = -mc.y, map to screen: top of camera → top of screen (screenY=0)
+          const ny = (this.camera2d.top + mc.y) / (this.camera2d.top - this.camera2d.bottom);
           screenPos = new THREE.Vector2(nx * window.innerWidth, ny * window.innerHeight);
         }
 
@@ -1593,6 +1945,31 @@ export class App {
       if (this.viewMode === ViewMode.VIEW_3D) {
         const pDraw = apsis.periPos.clone().divideScalar(DRAW_SCALE);
         const aDraw = apsis.apoPos.clone().divideScalar(DRAW_SCALE);
+        const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
+        const camPos = this.camera3d.position;
+
+        // Earth occlusion check helper
+        const isOccluded = (pt: THREE.Vector3): boolean => {
+          const dx = pt.x - camPos.x, dy = pt.y - camPos.y, dz = pt.z - camPos.z;
+          const L = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          const ux = dx / L, uy = dy / L, uz = dz / L;
+          const t = -(camPos.x * ux + camPos.y * uy + camPos.z * uz);
+          if (t > 0 && t < L) {
+            const cx = camPos.x + ux * t, cy = camPos.y + uy * t, cz = camPos.z + uz * t;
+            if (Math.sqrt(cx * cx + cy * cy + cz * cz) < earthR * 0.99) return true;
+          }
+          return false;
+        };
+
+        const periOccluded = isOccluded(pDraw);
+        const apoOccluded = isOccluded(aDraw);
+
+        // Position 3D apsis sprites
+        this.periSprite3d.position.copy(pDraw);
+        this.periSprite3d.visible = !periOccluded;
+        this.apoSprite3d.position.copy(aDraw);
+        this.apoSprite3d.visible = !apoOccluded;
+
         const pp = pDraw.project(this.camera3d);
         const ap = aDraw.project(this.camera3d);
         const vw = window.innerWidth;
@@ -1600,7 +1977,7 @@ export class App {
 
         const ppX = (pp.x * 0.5 + 0.5) * vw;
         const ppY = (-pp.y * 0.5 + 0.5) * vh;
-        if (pp.z < 1 && ppX > -50 && ppX < vw + 50 && ppY > -20 && ppY < vh + 20) {
+        if (!periOccluded && pp.z < 1 && ppX > -50 && ppX < vw + 50 && ppY > -20 && ppY < vh + 20) {
           uiStore.periText = `Peri: ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
           uiStore.periVisible = true;
           if (periLabel) {
@@ -1613,7 +1990,7 @@ export class App {
 
         const apX = (ap.x * 0.5 + 0.5) * vw;
         const apY = (-ap.y * 0.5 + 0.5) * vh;
-        if (ap.z < 1 && apX > -50 && apX < vw + 50 && apY > -20 && apY < vh + 20) {
+        if (!apoOccluded && ap.z < 1 && apX > -50 && apX < vw + 50 && apY > -20 && apY < vh + 20) {
           uiStore.apoText = `Apo: ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
           uiStore.apoVisible = true;
           if (apoLabel) {
@@ -1624,8 +2001,43 @@ export class App {
           uiStore.apoVisible = false;
         }
       } else {
-        uiStore.periVisible = false;
-        uiStore.apoVisible = false;
+        // 2D mode: position apsis text labels on the map
+        this.periSprite3d.visible = false;
+        this.apoSprite3d.visible = false;
+
+        const peri2d = computeApsis2D(cardSat, this.timeSystem.currentEpoch, false, this.cfg.earthRotationOffset);
+        const apo2d = computeApsis2D(cardSat, this.timeSystem.currentEpoch, true, this.cfg.earthRotationOffset);
+
+        const camL = this.camera2d.left, camR = this.camera2d.right;
+        const camT = this.camera2d.top, camB = this.camera2d.bottom;
+        const camCenterX = (camL + camR) / 2;
+        const vw = window.innerWidth, vh = window.innerHeight;
+
+        // Wrap to nearest x-offset
+        let periX = peri2d.x;
+        let apoX = apo2d.x;
+        for (const off of [-MAP_W, MAP_W]) {
+          if (Math.abs(peri2d.x + off - camCenterX) < Math.abs(periX - camCenterX)) periX = peri2d.x + off;
+          if (Math.abs(apo2d.x + off - camCenterX) < Math.abs(apoX - camCenterX)) apoX = apo2d.x + off;
+        }
+
+        const pnx = (periX - camL) / (camR - camL);
+        const pny = (-peri2d.y - camB) / (camT - camB);
+        uiStore.periText = `Peri: ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
+        uiStore.periVisible = pnx > -0.1 && pnx < 1.1 && pny > -0.1 && pny < 1.1;
+        if (uiStore.periVisible && periLabel) {
+          periLabel.style.left = `${pnx * vw + 12}px`;
+          periLabel.style.top = `${(1 - pny) * vh - 8}px`;
+        }
+
+        const anx = (apoX - camL) / (camR - camL);
+        const any_ = (-apo2d.y - camB) / (camT - camB);
+        uiStore.apoText = `Apo: ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
+        uiStore.apoVisible = anx > -0.1 && anx < 1.1 && any_ > -0.1 && any_ < 1.1;
+        if (uiStore.apoVisible && apoLabel) {
+          apoLabel.style.left = `${anx * vw + 12}px`;
+          apoLabel.style.top = `${(1 - any_) * vh - 8}px`;
+        }
       }
     } else {
       // No cardSat — still show panel if sats are selected (summary only, no orbital detail)
@@ -1635,6 +2047,8 @@ export class App {
       uiStore.satInfoDetail = '';
       uiStore.periVisible = false;
       uiStore.apoVisible = false;
+      this.periSprite3d.visible = false;
+      this.apoSprite3d.visible = false;
       // Position at top-left when showing selection-only panel
       if (hasSelection && infoEl) {
         infoEl.style.left = '10px';

@@ -5,6 +5,16 @@ import { parseHexColor } from '../config';
 import { calculatePosition } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
 
+// Pride flag rainbow palette for per-satellite orbit colors
+export const ORBIT_COLORS = [
+  [0.894, 0.012, 0.012], // Red     #E40303
+  [1.000, 0.553, 0.000], // Orange  #FF8C00
+  [1.000, 0.929, 0.000], // Yellow  #FFED00
+  [0.000, 0.502, 0.149], // Green   #008026
+  [0.145, 0.302, 0.773], // Blue    #254DC5
+  [0.451, 0.165, 0.510], // Violet  #732A82
+];
+
 // Default segment counts for orbit visualization
 const SEGMENTS_NORMAL = 90;
 const SEGMENTS_LARGE = 30;
@@ -15,6 +25,7 @@ export class OrbitRenderer {
   // Highlight orbits (SGP4 for accuracy — supports multiple selected sats)
   private highlightLine: THREE.LineSegments;
   private highlightBuffer: THREE.BufferAttribute;
+  private highlightColorBuffer: THREE.BufferAttribute;
   private highlightMat: THREE.LineBasicMaterial;
   private maxHighlightVerts: number;
   private highlightSegmentsPerOrbit = 400;
@@ -23,6 +34,7 @@ export class OrbitRenderer {
   // Nadir lines (one per highlighted sat)
   private nadirLine: THREE.LineSegments;
   private nadirBuffer: THREE.BufferAttribute;
+  private nadirColorBuffer: THREE.BufferAttribute;
   private nadirMat: THREE.LineBasicMaterial;
 
   // Normal orbits (batched LineSegments)
@@ -73,9 +85,12 @@ export class OrbitRenderer {
     const hlGeo = new THREE.BufferGeometry();
     this.highlightBuffer = new THREE.BufferAttribute(new Float32Array(this.maxHighlightVerts * 3), 3);
     this.highlightBuffer.setUsage(THREE.DynamicDrawUsage);
+    this.highlightColorBuffer = new THREE.BufferAttribute(new Float32Array(this.maxHighlightVerts * 3), 3);
+    this.highlightColorBuffer.setUsage(THREE.DynamicDrawUsage);
     hlGeo.setAttribute('position', this.highlightBuffer);
+    hlGeo.setAttribute('color', this.highlightColorBuffer);
     hlGeo.setDrawRange(0, 0);
-    this.highlightMat = new THREE.LineBasicMaterial({ transparent: true });
+    this.highlightMat = new THREE.LineBasicMaterial({ transparent: true, vertexColors: true });
     this.highlightLine = new THREE.LineSegments(hlGeo, this.highlightMat);
     this.highlightLine.frustumCulled = false;
     this.highlightLine.visible = false;
@@ -85,9 +100,12 @@ export class OrbitRenderer {
     const ndGeo = new THREE.BufferGeometry();
     this.nadirBuffer = new THREE.BufferAttribute(new Float32Array(this.maxHighlightOrbits * 2 * 3), 3);
     this.nadirBuffer.setUsage(THREE.DynamicDrawUsage);
+    this.nadirColorBuffer = new THREE.BufferAttribute(new Float32Array(this.maxHighlightOrbits * 2 * 3), 3);
+    this.nadirColorBuffer.setUsage(THREE.DynamicDrawUsage);
     ndGeo.setAttribute('position', this.nadirBuffer);
+    ndGeo.setAttribute('color', this.nadirColorBuffer);
     ndGeo.setDrawRange(0, 0);
-    this.nadirMat = new THREE.LineBasicMaterial({ transparent: true });
+    this.nadirMat = new THREE.LineBasicMaterial({ transparent: true, vertexColors: true });
     this.nadirLine = new THREE.LineSegments(ndGeo, this.nadirMat);
     this.nadirLine.frustumCulled = false;
     this.nadirLine.visible = false;
@@ -343,11 +361,16 @@ export class OrbitRenderer {
     }
 
     // --- Highlighted orbits (SGP4 for accuracy — one per active sat) ---
+    // Always use rainbow palette for selected sat orbits
+
     if (highlightSats.length > 0) {
       const arr = this.highlightBuffer.array as Float32Array;
+      const col = this.highlightColorBuffer.array as Float32Array;
       let vi = 0;
 
-      for (const sat of highlightSats) {
+      for (let si = 0; si < highlightSats.length; si++) {
+        const sat = highlightSats[si];
+        const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
         const segments = Math.min(this.highlightSegmentsPerOrbit, Math.max(90, Math.floor(400 * orbitsToDraw)));
         const periodDays = TWO_PI / sat.meanMotion / 86400.0;
         const timeStep = (periodDays * orbitsToDraw) / segments;
@@ -361,32 +384,45 @@ export class OrbitRenderer {
           const cy = pos.y / DRAW_SCALE;
           const cz = pos.z / DRAW_SCALE;
           if (i > 0 && vi + 6 <= this.maxHighlightVerts * 3) {
-            arr[vi++] = px; arr[vi++] = py; arr[vi++] = pz;
-            arr[vi++] = cx; arr[vi++] = cy; arr[vi++] = cz;
+            arr[vi] = px; arr[vi+1] = py; arr[vi+2] = pz;
+            col[vi] = cr; col[vi+1] = cg; col[vi+2] = cb;
+            vi += 3;
+            arr[vi] = cx; arr[vi+1] = cy; arr[vi+2] = cz;
+            col[vi] = cr; col[vi+1] = cg; col[vi+2] = cb;
+            vi += 3;
           }
           px = cx; py = cy; pz = cz;
         }
       }
 
       this.highlightBuffer.needsUpdate = true;
+      this.highlightColorBuffer.needsUpdate = true;
       this.highlightLine.geometry.setDrawRange(0, vi / 3);
-      this.highlightMat.color.setRGB(cHL.r, cHL.g, cHL.b);
+      this.highlightMat.color.setRGB(1, 1, 1); // vertex colors handle tinting
       this.highlightMat.opacity = cHL.a;
       this.highlightLine.visible = true;
 
       // Nadir lines (one per highlighted sat)
       const nd = this.nadirBuffer.array as Float32Array;
+      const ndCol = this.nadirColorBuffer.array as Float32Array;
       let ni = 0;
-      for (const sat of highlightSats) {
+      for (let si = 0; si < highlightSats.length; si++) {
+        const sat = highlightSats[si];
+        const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
         if (ni + 6 > this.maxHighlightOrbits * 6) break;
-        nd[ni++] = 0; nd[ni++] = 0; nd[ni++] = 0;
-        nd[ni++] = sat.currentPos.x / DRAW_SCALE;
-        nd[ni++] = sat.currentPos.y / DRAW_SCALE;
-        nd[ni++] = sat.currentPos.z / DRAW_SCALE;
+        nd[ni] = 0; nd[ni+1] = 0; nd[ni+2] = 0;
+        ndCol[ni] = cr; ndCol[ni+1] = cg; ndCol[ni+2] = cb;
+        ni += 3;
+        nd[ni] = sat.currentPos.x / DRAW_SCALE;
+        nd[ni+1] = sat.currentPos.y / DRAW_SCALE;
+        nd[ni+2] = sat.currentPos.z / DRAW_SCALE;
+        ndCol[ni] = cr; ndCol[ni+1] = cg; ndCol[ni+2] = cb;
+        ni += 3;
       }
       this.nadirBuffer.needsUpdate = true;
+      this.nadirColorBuffer.needsUpdate = true;
       this.nadirLine.geometry.setDrawRange(0, ni / 3);
-      this.nadirMat.color.setRGB(cHL.r, cHL.g, cHL.b);
+      this.nadirMat.color.setRGB(1, 1, 1);
       this.nadirMat.opacity = cHL.a * 0.5;
       this.nadirLine.visible = true;
     } else {

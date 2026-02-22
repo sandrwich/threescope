@@ -3,6 +3,7 @@ import type { Satellite } from '../types';
 import { DRAW_SCALE, EARTH_RADIUS_KM } from '../constants';
 import { parseHexColor } from '../config';
 import { calculatePosition } from '../astro/propagator';
+import { ORBIT_COLORS } from './orbit-renderer';
 
 export class SatelliteManager {
   points: THREE.Points;
@@ -52,8 +53,31 @@ export class SatelliteManager {
         varying float vAlpha;
         void main() {
           vec4 texel = texture2D(pointTexture, gl_PointCoord);
-          if (texel.a < 0.1) discard;
-          gl_FragColor = vec4(vColor * texel.rgb, texel.a * vAlpha);
+          if (texel.a > 0.1) {
+            gl_FragColor = vec4(vColor * texel.rgb, texel.a * vAlpha);
+            return;
+          }
+          // Dark outline: sample at two distances for a thick, strong outline
+          float na = 0.0;
+          for (float s = 0.06; s <= 0.14; s += 0.04) {
+            na = max(na, max(
+              max(texture2D(pointTexture, gl_PointCoord + vec2(s, 0.0)).a,
+                  texture2D(pointTexture, gl_PointCoord - vec2(s, 0.0)).a),
+              max(texture2D(pointTexture, gl_PointCoord + vec2(0.0, s)).a,
+                  texture2D(pointTexture, gl_PointCoord - vec2(0.0, s)).a)
+            ));
+            na = max(na, max(
+              max(texture2D(pointTexture, gl_PointCoord + vec2(s, s) * 0.707).a,
+                  texture2D(pointTexture, gl_PointCoord - vec2(s, s) * 0.707).a),
+              max(texture2D(pointTexture, gl_PointCoord + vec2(s, -s) * 0.707).a,
+                  texture2D(pointTexture, gl_PointCoord - vec2(s, -s) * 0.707).a)
+            ));
+          }
+          if (na > 0.1) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.9 * vAlpha);
+            return;
+          }
+          discard;
         }
       `,
       transparent: true,
@@ -90,6 +114,14 @@ export class SatelliteManager {
     const cSelected = parseHexColor(colorConfig.selected);
     const bloomBoost = bloomEnabled ? 2.0 : 1.0;
 
+    // Build rainbow color map for selected sats (index matches orbit color)
+    const selectedColorMap = new Map<Satellite, number[]>();
+    let selIdx = 0;
+    for (const s of selectedSats) {
+      selectedColorMap.set(s, ORBIT_COLORS[selIdx % ORBIT_COLORS.length]);
+      selIdx++;
+    }
+
     const count = Math.min(satellites.length, this.maxSats);
     const drawRange = this.points.geometry.drawRange;
     drawRange.count = count;
@@ -124,15 +156,27 @@ export class SatelliteManager {
       this.posAttr.array[i * 3 + 1] = dy;
       this.posAttr.array[i * 3 + 2] = dz;
 
-      // Determine color (boost highlighted/selected for bloom)
-      let c = cNormal;
-      let boost = 1.0;
-      if (selectedSats.has(sat)) { c = cSelected; boost = bloomBoost; }
-      else if (sat === hoveredSat) { c = cHighlight; boost = bloomBoost; }
-
-      this.colorAttr.array[i * 3] = c.r * boost;
-      this.colorAttr.array[i * 3 + 1] = c.g * boost;
-      this.colorAttr.array[i * 3 + 2] = c.b * boost;
+      // Determine color: rainbow for selected (brighter if hovered), normal otherwise
+      const isHovered = sat === hoveredSat;
+      const rainbow = selectedColorMap.get(sat);
+      if (rainbow) {
+        const b = bloomBoost * (isHovered ? 1.5 : 1.0);
+        this.colorAttr.array[i * 3] = rainbow[0] * b;
+        this.colorAttr.array[i * 3 + 1] = rainbow[1] * b;
+        this.colorAttr.array[i * 3 + 2] = rainbow[2] * b;
+      } else if (isHovered) {
+        // Unselected hover: use next rainbow color at lower brightness
+        const nextIdx = selectedSats.size;
+        const rc = ORBIT_COLORS[nextIdx % ORBIT_COLORS.length];
+        this.colorAttr.array[i * 3] = rc[0] * 0.6;
+        this.colorAttr.array[i * 3 + 1] = rc[1] * 0.6;
+        this.colorAttr.array[i * 3 + 2] = rc[2] * 0.6;
+      } else {
+        this.colorAttr.array[i * 3] = cNormal.r;
+        this.colorAttr.array[i * 3 + 1] = cNormal.g;
+        this.colorAttr.array[i * 3 + 2] = cNormal.b;
+      }
+      const c = rainbow ? cSelected : cNormal;
 
       // Alpha: handle occlusion + fade
       let alpha = c.a;
