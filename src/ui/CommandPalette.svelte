@@ -37,7 +37,7 @@
 
     // Satellite
     actions.push({ id: 'sat-search', category: 'Satellite', label: 'Search Satellite...', shortcut: 'Ctrl+F', execute: () => { satMode = true; query = ''; selectedIndex = 0; } });
-    actions.push({ id: 'sat-deselect', category: 'Satellite', label: 'Deselect', keywords: 'clear unselect', execute: () => { uiStore.onDeselectSatellite?.(); close(); } });
+    actions.push({ id: 'sat-deselect-all', category: 'Satellite', label: 'Deselect All', keywords: 'clear unselect', execute: () => { uiStore.onDeselectAll?.(); close(); } });
 
     // Time
     actions.push({ id: 'time-pause', category: 'Time', label: 'Play / Pause', shortcut: 'Space', execute: () => { timeStore.togglePause(); close(); } });
@@ -84,7 +84,7 @@
         category: 'Data',
         label: `Load ${src.name}`,
         keywords: 'tle satellite group',
-        execute: () => { uiStore.onTLEGroupChange?.(src.group); close(); },
+        execute: () => { uiStore.currentTleGroup = src.group; localStorage.setItem('threescope_tle_group', src.group); uiStore.onTLEGroupChange?.(src.group); close(); },
       });
     }
 
@@ -105,14 +105,32 @@
     return actions;
   }
 
-  const actions = buildActions();
+  const staticActions = buildActions();
+
+  // Build full action list (static + dynamic per-selected-sat deselect, grouped with Satellite category)
+  let allActions = $derived.by(() => {
+    const selectedNames = uiStore.satInfoSelectedNames;
+    if (selectedNames.length === 0) return staticActions;
+    const dynamicActions: PaletteAction[] = selectedNames.map(name => ({
+      id: `sat-deselect-${name}`,
+      category: 'Satellite',
+      label: `Deselect ${name}`,
+      keywords: 'remove unselect',
+      execute: () => { uiStore.onDeselectSatelliteByName?.(name); close(); },
+    }));
+    // Insert after last Satellite action so they're grouped together
+    const lastSatIdx = staticActions.findLastIndex(a => a.category === 'Satellite');
+    const result = [...staticActions];
+    result.splice(lastSatIdx + 1, 0, ...dynamicActions);
+    return result;
+  });
 
   // Filter actions by query
   let filteredActions = $derived.by(() => {
     if (satMode) return [];
-    if (!query) return actions;
+    if (!query) return allActions;
     const q = query.toLowerCase();
-    return actions.filter(a => {
+    return allActions.filter(a => {
       const searchable = `${a.category} ${a.label} ${a.keywords ?? ''}`.toLowerCase();
       return searchable.includes(q);
     });

@@ -5,7 +5,6 @@
 
   let customVisible = $state(false);
   let urlValue = $state('');
-  let currentGroup = $state(localStorage.getItem('threescope_tle_group') || 'none');
   let fileInput: HTMLInputElement | undefined = $state();
   let canvasEl: HTMLCanvasElement | undefined = $state();
 
@@ -18,7 +17,7 @@
       return;
     }
     customVisible = false;
-    currentGroup = val;
+    uiStore.currentTleGroup = val;
     localStorage.setItem('threescope_tle_group', val);
     await uiStore.onTLEGroupChange?.(val);
   }
@@ -71,7 +70,7 @@
     <button class="picker-btn" onclick={() => uiStore.infoModalOpen = true}>
       <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M6 6.5a2 2 0 0 1 3.9.5c0 1.5-2 1.5-2 3" stroke-linecap="round"/><circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none"/></svg>
     </button>
-    <select value={currentGroup} onchange={onSelectChange}>
+    <select value={uiStore.currentTleGroup} onchange={onSelectChange}>
       <option value="__custom__">Custom...</option>
       {#each TLE_SOURCES as src}
         <option value={src.group}>{src.name}</option>

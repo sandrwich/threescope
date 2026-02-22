@@ -74,7 +74,7 @@ export class SatelliteManager {
     currentEpoch: number,
     cameraPos: THREE.Vector3,
     hoveredSat: Satellite | null,
-    selectedSat: Satellite | null,
+    selectedSats: Set<Satellite>,
     unselectedFade: number,
     hideUnselected: boolean,
     colorConfig: { normal: string; highlighted: string; selected: string },
@@ -82,7 +82,7 @@ export class SatelliteManager {
     dt = 1 / 60,
     maxBatch = 16,
     bloomEnabled = false,
-    fadingInSat: Satellite | null = null
+    fadingInSats: Set<Satellite> = new Set()
   ) {
     const earthRadius = EARTH_RADIUS_KM / DRAW_SCALE;
     const cNormal = parseHexColor(colorConfig.normal);
@@ -112,7 +112,7 @@ export class SatelliteManager {
     for (let i = 0; i < count; i++) {
       const sat = satellites[i];
 
-      if (i % batchCount === batch || sat === hoveredSat || sat === selectedSat) {
+      if (i % batchCount === batch || sat === hoveredSat || selectedSats.has(sat)) {
         sat.currentPos = calculatePosition(sat, currentEpoch);
       }
 
@@ -127,7 +127,7 @@ export class SatelliteManager {
       // Determine color (boost highlighted/selected for bloom)
       let c = cNormal;
       let boost = 1.0;
-      if (sat === selectedSat) { c = cSelected; boost = bloomBoost; }
+      if (selectedSats.has(sat)) { c = cSelected; boost = bloomBoost; }
       else if (sat === hoveredSat) { c = cHighlight; boost = bloomBoost; }
 
       this.colorAttr.array[i * 3] = c.r * boost;
@@ -136,7 +136,7 @@ export class SatelliteManager {
 
       // Alpha: handle occlusion + fade
       let alpha = c.a;
-      if (sat !== selectedSat && sat !== hoveredSat && sat !== fadingInSat) {
+      if (!selectedSats.has(sat) && sat !== hoveredSat && !fadingInSats.has(sat)) {
         alpha *= unselectedFade;
       }
       if (alpha <= 0) {

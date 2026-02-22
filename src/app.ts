@@ -75,13 +75,14 @@ export class App {
 
   private satellites: Satellite[] = [];
   private hoveredSat: Satellite | null = null;
-  private selectedSat: Satellite | null = null;
+  private selectedSats = new Set<Satellite>();
+  private selectedSatsVersion = 0;
   private activeLock = TargetLock.EARTH;
   private viewMode = ViewMode.VIEW_3D;
   private hideUnselected = false;
   private unselectedFade = 1.0;
-  private fadingInSat: Satellite | null = null;
-  private prevSelectedSat: Satellite | null = null;
+  private fadingInSats = new Set<Satellite>();
+  private prevSelectedSats = new Set<Satellite>();
   private cfg = { ...defaultConfig };
 
   // Reusable temp objects (avoid per-frame allocations)
@@ -348,7 +349,7 @@ export class App {
     this.currentGroup = group;
     if (group === 'none') {
       this.satellites = [];
-      this.selectedSat = null;
+      this.selectedSats.clear(); this.selectedSatsVersion++;
       this.hoveredSat = null;
       this.orbitRenderer.precomputeOrbits([], this.timeSystem.currentEpoch);
       uiStore.satStatusText = '0 sats';
@@ -359,7 +360,7 @@ export class App {
         uiStore.satStatusText = msg;
       }, forceRetry);
       this.satellites = result.satellites;
-      this.selectedSat = null;
+      this.selectedSats.clear(); this.selectedSatsVersion++;
       this.hoveredSat = null;
       this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
 
@@ -381,7 +382,7 @@ export class App {
   private loadCustomTLE(text: string, label: string) {
     try {
       this.satellites = parseTLEText(text);
-      this.selectedSat = null;
+      this.selectedSats.clear(); this.selectedSatsVersion++;
       this.hoveredSat = null;
       this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
       uiStore.satStatusText = `${this.satellites.length} Sats (${label})`;
@@ -426,7 +427,7 @@ export class App {
     if (!this.orrery || this.activePlanet?.id === planet.id) return;
 
     this.setEarthVisible(false);
-    this.selectedSat = null;
+    this.selectedSats.clear(); this.selectedSatsVersion++;
     this.hoveredSat = null;
     this.activePlanet = planet;
     this.activeLock = TargetLock.PLANET;
@@ -515,7 +516,7 @@ export class App {
 
     // Hide Earth/moon/sats
     this.setEarthVisible(false);
-    this.selectedSat = null;
+    this.selectedSats.clear(); this.selectedSatsVersion++;
     this.hoveredSat = null;
 
     // Position camera to fit all planets with some padding
@@ -715,9 +716,20 @@ export class App {
       }
     };
 
-    // Command palette: deselect satellite
-    uiStore.onDeselectSatellite = () => {
-      this.selectedSat = null;
+    // Command palette: deselect all satellites
+    uiStore.onDeselectAll = () => {
+      this.selectedSats.clear(); this.selectedSatsVersion++;
+    };
+
+    // Command palette: deselect satellite by name
+    uiStore.onDeselectSatelliteByName = (name: string) => {
+      for (const sat of this.selectedSats) {
+        if (sat.name === name) {
+          this.selectedSats.delete(sat);
+          this.selectedSatsVersion++;
+          break;
+        }
+      }
     };
 
     // Command palette: toggle 2D/3D
@@ -730,10 +742,18 @@ export class App {
       return this.satellites.map(s => s.name);
     };
 
-    // Command palette: select satellite by name
+    // Command palette: get selected satellite names
+    uiStore.getSelectedSatelliteNames = () => {
+      return [...this.selectedSats].map(s => s.name);
+    };
+
+    // Command palette: select satellite by name (adds to selection)
     uiStore.onSelectSatelliteByName = (name: string) => {
       const sat = this.satellites.find(s => s.name === name);
-      if (sat) this.selectedSat = sat;
+      if (sat) {
+        this.selectedSats.add(sat);
+        this.selectedSatsVersion++;
+      }
     };
 
     // Mini planet renderer — wait for Svelte to mount the canvas
@@ -886,7 +906,15 @@ export class App {
         return;
       }
 
-      this.selectedSat = this.hoveredSat;
+      // Toggle selection: click adds/removes, empty click does nothing
+      if (this.hoveredSat) {
+        if (this.selectedSats.has(this.hoveredSat)) {
+          this.selectedSats.delete(this.hoveredSat);
+        } else {
+          this.selectedSats.add(this.hoveredSat);
+        }
+        this.selectedSatsVersion++;
+      }
 
       // Double click detection for target lock
       const now = performance.now() / 1000;
@@ -1035,7 +1063,15 @@ export class App {
           this.touchCount = 0;
           return;
         }
-        this.selectedSat = this.hoveredSat;
+        // Toggle selection: tap adds/removes, empty tap does nothing
+        if (this.hoveredSat) {
+          if (this.selectedSats.has(this.hoveredSat)) {
+            this.selectedSats.delete(this.hoveredSat);
+          } else {
+            this.selectedSats.add(this.hoveredSat);
+          }
+          this.selectedSatsVersion++;
+        }
 
         // Double tap detection
         const now = performance.now() / 1000;
@@ -1129,23 +1165,23 @@ export class App {
     const gmstDeg = this.timeSystem.getGmstDeg();
 
     // Unselected fade
-    const shouldHide = this.hideUnselected && this.selectedSat !== null;
+    const shouldHide = this.hideUnselected && this.selectedSats.size > 0;
     if (shouldHide) {
       this.unselectedFade -= 3.0 * dt;
       if (this.unselectedFade < 0) this.unselectedFade = 0;
-      this.fadingInSat = null;
+      this.fadingInSats.clear();
     } else {
-      // Detect deselection transition: selectedSat just went null while faded out
-      if (this.prevSelectedSat && !this.selectedSat && this.unselectedFade < 1.0) {
-        this.fadingInSat = this.prevSelectedSat;
+      // Detect deselection transition: sats removed from selection while faded out
+      if (this.prevSelectedSats.size > 0 && this.selectedSats.size === 0 && this.unselectedFade < 1.0) {
+        this.fadingInSats = new Set(this.prevSelectedSats);
       }
       this.unselectedFade += 3.0 * dt;
       if (this.unselectedFade > 1) {
         this.unselectedFade = 1;
-        this.fadingInSat = null;
+        this.fadingInSats.clear();
       }
     }
-    this.prevSelectedSat = this.selectedSat;
+    this.prevSelectedSats = new Set(this.selectedSats);
 
     // Target lock
     if (this.activeLock === TargetLock.EARTH) {
@@ -1213,7 +1249,9 @@ export class App {
       }
     }
 
-    const activeSat = this.hoveredSat ?? this.selectedSat;
+    // activeSat = hovered, or first selected if nothing hovered
+    const firstSelected = this.selectedSats.size > 0 ? this.selectedSats.values().next().value! : null;
+    const activeSat = this.hoveredSat ?? firstSelected;
 
     const earthMode = this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON && !this.orreryMode;
 
@@ -1265,19 +1303,23 @@ export class App {
       if (earthMode) {
         this.satManager.update(
           this.satellites, epoch, this.camera3d.position,
-          this.hoveredSat, this.selectedSat, this.unselectedFade, this.hideUnselected,
+          this.hoveredSat, this.selectedSats, this.unselectedFade, this.hideUnselected,
           { normal: this.cfg.satNormal, highlighted: this.cfg.satHighlighted, selected: this.cfg.satSelected },
-          this.timeSystem.timeMultiplier, dt, this.maxBatch, this.bloomEnabled, this.fadingInSat
+          this.timeSystem.timeMultiplier, dt, this.maxBatch, this.bloomEnabled, this.fadingInSats
         );
 
         this.orbitRenderer.update(
-          this.satellites, epoch, this.hoveredSat, this.selectedSat,
-          this.unselectedFade, this.cfg.orbitsToDraw,
+          this.satellites, epoch, this.hoveredSat, this.selectedSats,
+          this.selectedSatsVersion, this.unselectedFade, this.cfg.orbitsToDraw,
           { orbitNormal: this.cfg.orbitNormal, orbitHighlighted: this.cfg.orbitHighlighted }
         );
 
+        // Footprints for all selected sats + hovered
+        const fpPositions: THREE.Vector3[] = [];
+        for (const sat of this.selectedSats) fpPositions.push(sat.currentPos);
+        if (this.hoveredSat && !this.selectedSats.has(this.hoveredSat)) fpPositions.push(this.hoveredSat.currentPos);
         this.footprintRenderer.update(
-          activeSat ? activeSat.currentPos : null,
+          fpPositions,
           { footprintBg: this.cfg.footprintBg, footprintBorder: this.cfg.footprintBorder }
         );
 
@@ -1339,19 +1381,35 @@ export class App {
   private detectHover3D() {
     this.raycaster.setFromCamera(this.mouseNDC, this.camera3d);
     const touchScale = this.touchCount > 0 || ('ontouchstart' in window) ? 3.0 : 1.0;
+    const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
+    const camPos = this.camera3d.position;
 
-    let closestDist = 9999;
+    let closestRayDist = 9999;
     for (const sat of this.satellites) {
-      if (this.hideUnselected && this.selectedSat && sat !== this.selectedSat) continue;
+      if (this.hideUnselected && this.selectedSats.size > 0 && !this.selectedSats.has(sat)) continue;
 
       this.tmpVec3.copy(sat.currentPos).divideScalar(DRAW_SCALE);
-      const distToCam = this.camera3d.position.distanceTo(this.tmpVec3);
+      const distToCam = camPos.distanceTo(this.tmpVec3);
       const hitRadius = 0.015 * distToCam * touchScale;
+
+      // Skip satellites occluded by Earth
+      const vx = this.tmpVec3.x - camPos.x, vy = this.tmpVec3.y - camPos.y, vz = this.tmpVec3.z - camPos.z;
+      const L = Math.sqrt(vx * vx + vy * vy + vz * vz);
+      if (L > 0) {
+        const dx = vx / L, dy = vy / L, dz = vz / L;
+        const t = -(camPos.x * dx + camPos.y * dy + camPos.z * dz);
+        if (t > 0 && t < L) {
+          const cx = camPos.x + dx * t, cy = camPos.y + dy * t, cz = camPos.z + dz * t;
+          if (Math.sqrt(cx * cx + cy * cy + cz * cz) < earthR * 0.99) continue;
+        }
+      }
 
       this.tmpSphere.set(this.tmpVec3, hitRadius);
       if (this.raycaster.ray.intersectsSphere(this.tmpSphere)) {
-        if (distToCam < closestDist) {
-          closestDist = distToCam;
+        // Pick the satellite closest to the ray (not closest to camera)
+        const rayDist = this.raycaster.ray.distanceToPoint(this.tmpVec3);
+        if (rayDist < closestRayDist) {
+          closestRayDist = rayDist;
           this.hoveredSat = sat;
         }
       }
@@ -1369,7 +1427,7 @@ export class App {
     let closestDist = 9999;
 
     for (const sat of this.satellites) {
-      if (this.hideUnselected && this.selectedSat && sat !== this.selectedSat) continue;
+      if (this.hideUnselected && this.selectedSats.size > 0 && !this.selectedSats.has(sat)) continue;
 
       const mc = getMapCoordinates(sat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
       // mc.y is positive for south, but in scene space we negate it
@@ -1392,7 +1450,9 @@ export class App {
     const sunEcef = sunEci.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
     this.mapMaterial.uniforms.sunDir.value.copy(sunEcef);
 
-    const activeSat = this.hoveredSat ?? this.selectedSat;
+    // Ground track for hovered or first selected
+    const firstSel2d = this.selectedSats.size > 0 ? this.selectedSats.values().next().value! : null;
+    const activeSat = this.hoveredSat ?? firstSel2d;
     const cHL = parseHexColor(this.cfg.orbitHighlighted);
 
     // Highlighted ground track (using pre-allocated buffer)
@@ -1444,7 +1504,7 @@ export class App {
       if (si + 9 > this.maxSatVerts2d * 3) break;
       const mc = getMapCoordinates(sat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
       let c = cNorm;
-      if (sat === this.selectedSat) c = cSel;
+      if (this.selectedSats.has(sat)) c = cSel;
       else if (sat === this.hoveredSat) c = cHov;
 
       for (let off = -1; off <= 1; off++) {
@@ -1460,8 +1520,13 @@ export class App {
   }
 
   private updateUI(activeSat: Satellite | null, gmstDeg: number) {
-    // When a sat is selected, only show info card for it (not hover)
-    const cardSat = this.selectedSat ? this.selectedSat : activeSat;
+    // cardSat drives the orbital detail display — hovered takes priority, then first selected
+    const cardSat = activeSat;
+
+    // Update selected names list for summary panel
+    uiStore.satInfoSelectedNames = this.selectedSats.size > 0
+      ? [...this.selectedSats].map(s => s.name)
+      : [];
 
     // Satellite info — content via store, position via direct DOM
     const infoEl = uiStore.satInfoEl;
@@ -1563,9 +1628,18 @@ export class App {
         uiStore.apoVisible = false;
       }
     } else {
-      uiStore.satInfoVisible = false;
+      // No cardSat — still show panel if sats are selected (summary only, no orbital detail)
+      const hasSelection = this.selectedSats.size > 0;
+      uiStore.satInfoVisible = hasSelection;
+      uiStore.satInfoName = '';
+      uiStore.satInfoDetail = '';
       uiStore.periVisible = false;
       uiStore.apoVisible = false;
+      // Position at top-left when showing selection-only panel
+      if (hasSelection && infoEl) {
+        infoEl.style.left = '10px';
+        infoEl.style.top = '10px';
+      }
     }
   }
 }

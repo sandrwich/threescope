@@ -12,14 +12,16 @@ const SEGMENTS_LARGE = 30;
 export class OrbitRenderer {
   private scene: THREE.Scene;
 
-  // Reusable highlight orbit (SGP4 for accuracy on single satellite)
-  private highlightLine: THREE.Line;
+  // Highlight orbits (SGP4 for accuracy — supports multiple selected sats)
+  private highlightLine: THREE.LineSegments;
   private highlightBuffer: THREE.BufferAttribute;
   private highlightMat: THREE.LineBasicMaterial;
-  private maxHighlightPts = 4001;
+  private maxHighlightVerts: number;
+  private highlightSegmentsPerOrbit = 400;
+  private maxHighlightOrbits = 20;
 
-  // Reusable nadir line
-  private nadirLine: THREE.Line;
+  // Nadir lines (one per highlighted sat)
+  private nadirLine: THREE.LineSegments;
   private nadirBuffer: THREE.BufferAttribute;
   private nadirMat: THREE.LineBasicMaterial;
 
@@ -55,33 +57,38 @@ export class OrbitRenderer {
 
   // Assembly state — only rebuild GPU buffer when visibility changes
   private lastActiveSat: Satellite | null | undefined = undefined; // undefined = never assembled
-  private lastSelectedSat: Satellite | null | undefined = undefined;
+  private lastSelectedSatsVersion = -1;
+  private lastSelectedSatsSize = -1;
   private lastFadedOut = false;
   private assembledVertFloats = 0;
+  private selectedSatsVersion = 0; // bumped externally when selection changes
   showNormalOrbits = true;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
 
-    // Pre-allocate highlight orbit buffer
+    // Pre-allocate highlight orbit buffer (LineSegments for multi-orbit support)
+    // Each orbit uses segments line-segment pairs = segments * 2 verts
+    this.maxHighlightVerts = this.highlightSegmentsPerOrbit * 2 * this.maxHighlightOrbits;
     const hlGeo = new THREE.BufferGeometry();
-    this.highlightBuffer = new THREE.BufferAttribute(new Float32Array(this.maxHighlightPts * 3), 3);
+    this.highlightBuffer = new THREE.BufferAttribute(new Float32Array(this.maxHighlightVerts * 3), 3);
     this.highlightBuffer.setUsage(THREE.DynamicDrawUsage);
     hlGeo.setAttribute('position', this.highlightBuffer);
     hlGeo.setDrawRange(0, 0);
     this.highlightMat = new THREE.LineBasicMaterial({ transparent: true });
-    this.highlightLine = new THREE.Line(hlGeo, this.highlightMat);
+    this.highlightLine = new THREE.LineSegments(hlGeo, this.highlightMat);
     this.highlightLine.frustumCulled = false;
     this.highlightLine.visible = false;
     scene.add(this.highlightLine);
 
-    // Pre-allocate nadir line buffer
+    // Pre-allocate nadir line buffer (one line segment per highlighted sat)
     const ndGeo = new THREE.BufferGeometry();
-    this.nadirBuffer = new THREE.BufferAttribute(new Float32Array(6), 3);
+    this.nadirBuffer = new THREE.BufferAttribute(new Float32Array(this.maxHighlightOrbits * 2 * 3), 3);
     this.nadirBuffer.setUsage(THREE.DynamicDrawUsage);
     ndGeo.setAttribute('position', this.nadirBuffer);
+    ndGeo.setDrawRange(0, 0);
     this.nadirMat = new THREE.LineBasicMaterial({ transparent: true });
-    this.nadirLine = new THREE.Line(ndGeo, this.nadirMat);
+    this.nadirLine = new THREE.LineSegments(ndGeo, this.nadirMat);
     this.nadirLine.frustumCulled = false;
     this.nadirLine.visible = false;
     scene.add(this.nadirLine);
@@ -291,7 +298,8 @@ export class OrbitRenderer {
     satellites: Satellite[],
     currentEpoch: number,
     hoveredSat: Satellite | null,
-    selectedSat: Satellite | null,
+    selectedSats: Set<Satellite>,
+    selectedSatsVersion: number,
     unselectedFade: number,
     orbitsToDraw: number,
     colorConfig: { orbitNormal: string; orbitHighlighted: string }
@@ -321,37 +329,63 @@ export class OrbitRenderer {
       }
     }
 
-    const activeSat = hoveredSat ?? selectedSat;
     const cHL = parseHexColor(colorConfig.orbitHighlighted);
 
-    // --- Highlighted orbit (SGP4 for accuracy — shows perturbation over multiple orbits) ---
-    if (activeSat) {
-      const segments = Math.min(this.maxHighlightPts - 1, Math.max(90, Math.floor(400 * orbitsToDraw)));
-      const periodDays = TWO_PI / activeSat.meanMotion / 86400.0;
-      const timeStep = (periodDays * orbitsToDraw) / segments;
-      const arr = this.highlightBuffer.array as Float32Array;
+    // --- Build set of all sats that need highlight orbits ---
+    const highlightSats: Satellite[] = [];
+    for (const sat of selectedSats) {
+      if (highlightSats.length >= this.maxHighlightOrbits) break;
+      highlightSats.push(sat);
+    }
+    // Add hovered sat if not already in set
+    if (hoveredSat && !selectedSats.has(hoveredSat) && highlightSats.length < this.maxHighlightOrbits) {
+      highlightSats.push(hoveredSat);
+    }
 
-      for (let i = 0; i <= segments; i++) {
-        const t = currentEpoch + i * timeStep;
-        const pos = calculatePosition(activeSat, t);
-        arr[i * 3] = pos.x / DRAW_SCALE;
-        arr[i * 3 + 1] = pos.y / DRAW_SCALE;
-        arr[i * 3 + 2] = pos.z / DRAW_SCALE;
+    // --- Highlighted orbits (SGP4 for accuracy — one per active sat) ---
+    if (highlightSats.length > 0) {
+      const arr = this.highlightBuffer.array as Float32Array;
+      let vi = 0;
+
+      for (const sat of highlightSats) {
+        const segments = Math.min(this.highlightSegmentsPerOrbit, Math.max(90, Math.floor(400 * orbitsToDraw)));
+        const periodDays = TWO_PI / sat.meanMotion / 86400.0;
+        const timeStep = (periodDays * orbitsToDraw) / segments;
+
+        // Compute orbit points, then emit as line-segment pairs
+        let px = 0, py = 0, pz = 0;
+        for (let i = 0; i <= segments; i++) {
+          const t = currentEpoch + i * timeStep;
+          const pos = calculatePosition(sat, t);
+          const cx = pos.x / DRAW_SCALE;
+          const cy = pos.y / DRAW_SCALE;
+          const cz = pos.z / DRAW_SCALE;
+          if (i > 0 && vi + 6 <= this.maxHighlightVerts * 3) {
+            arr[vi++] = px; arr[vi++] = py; arr[vi++] = pz;
+            arr[vi++] = cx; arr[vi++] = cy; arr[vi++] = cz;
+          }
+          px = cx; py = cy; pz = cz;
+        }
       }
 
       this.highlightBuffer.needsUpdate = true;
-      this.highlightLine.geometry.setDrawRange(0, segments + 1);
+      this.highlightLine.geometry.setDrawRange(0, vi / 3);
       this.highlightMat.color.setRGB(cHL.r, cHL.g, cHL.b);
       this.highlightMat.opacity = cHL.a;
       this.highlightLine.visible = true;
 
-      // Nadir line
+      // Nadir lines (one per highlighted sat)
       const nd = this.nadirBuffer.array as Float32Array;
-      nd[0] = 0; nd[1] = 0; nd[2] = 0;
-      nd[3] = activeSat.currentPos.x / DRAW_SCALE;
-      nd[4] = activeSat.currentPos.y / DRAW_SCALE;
-      nd[5] = activeSat.currentPos.z / DRAW_SCALE;
+      let ni = 0;
+      for (const sat of highlightSats) {
+        if (ni + 6 > this.maxHighlightOrbits * 6) break;
+        nd[ni++] = 0; nd[ni++] = 0; nd[ni++] = 0;
+        nd[ni++] = sat.currentPos.x / DRAW_SCALE;
+        nd[ni++] = sat.currentPos.y / DRAW_SCALE;
+        nd[ni++] = sat.currentPos.z / DRAW_SCALE;
+      }
       this.nadirBuffer.needsUpdate = true;
+      this.nadirLine.geometry.setDrawRange(0, ni / 3);
       this.nadirMat.color.setRGB(cHL.r, cHL.g, cHL.b);
       this.nadirMat.opacity = cHL.a * 0.5;
       this.nadirLine.visible = true;
@@ -361,28 +395,31 @@ export class OrbitRenderer {
     }
 
     // --- Normal orbits: assembled from precomputed analytical data ---
-    if (!this.showNormalOrbits || !this.precomputedAll || this.precomputedSatCount !== satellites.length || (selectedSat !== null && unselectedFade <= 0.01)) {
+    const hasSelection = selectedSats.size > 0;
+    if (!this.showNormalOrbits || !this.precomputedAll || this.precomputedSatCount !== satellites.length || (hasSelection && unselectedFade <= 0.01)) {
       this.normalLines.visible = false;
       return;
     }
 
-    const fadedOut = selectedSat !== null && unselectedFade <= 0.01;
+    const fadedOut = hasSelection && unselectedFade <= 0.01;
 
     // Only reassemble GPU buffer when visibility state actually changes
-    const needsAssemble = this.lastActiveSat !== activeSat
-      || this.lastSelectedSat !== selectedSat
+    const needsAssemble = this.lastActiveSat !== hoveredSat
+      || this.lastSelectedSatsVersion !== selectedSatsVersion
+      || this.lastSelectedSatsSize !== selectedSats.size
       || this.lastFadedOut !== fadedOut;
 
     if (needsAssemble) {
-      this.lastActiveSat = activeSat;
-      this.lastSelectedSat = selectedSat;
+      this.lastActiveSat = hoveredSat;
+      this.lastSelectedSatsVersion = selectedSatsVersion;
+      this.lastSelectedSatsSize = selectedSats.size;
       this.lastFadedOut = fadedOut;
 
       const arr = this.normalBuffer.array as Float32Array;
       const fpo = this.precomputedFloatsPerOrbit;
       let vertIdx = 0;
 
-      if (!activeSat && !selectedSat) {
+      if (!hoveredSat && !hasSelection) {
         // Fast path: no filtering needed — single memcpy of entire precomputed buffer
         const totalFloats = satellites.length * fpo;
         if (totalFloats <= this.maxNormalVerts * 3) {
@@ -390,10 +427,11 @@ export class OrbitRenderer {
           vertIdx = totalFloats;
         }
       } else {
-        // Selective copy, skipping active satellite
+        // Selective copy: skip highlighted sats (drawn separately), skip faded-out non-selected
         for (let i = 0; i < satellites.length; i++) {
-          if (satellites[i] === activeSat) continue;
-          if (selectedSat && satellites[i] !== selectedSat && unselectedFade <= 0.01) continue;
+          const sat = satellites[i];
+          if (sat === hoveredSat || selectedSats.has(sat)) continue;
+          if (hasSelection && unselectedFade <= 0.01) continue;
           if (vertIdx + fpo > this.maxNormalVerts * 3) break;
 
           const srcOffset = i * fpo;

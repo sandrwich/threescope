@@ -4,7 +4,6 @@ import { ViewMode } from '../types';
 class UIStore {
   // Satellite state
   hoveredSat = $state<Satellite | null>(null);
-  selectedSat = $state<Satellite | null>(null);
   fpsDisplay = $state(0);
   fpsColor = $state('#00ff00');
   satStatusText = $state('');
@@ -36,6 +35,7 @@ class UIStore {
   satInfoName = $state('');
   satInfoDetail = $state('');
   satInfoNameColor = $state('#00ff00');
+  satInfoSelectedNames = $state<string[]>([]);
 
   // Apsis labels
   periVisible = $state(false);
@@ -49,6 +49,9 @@ class UIStore {
   apoLabelEl: HTMLDivElement | null = null;
   planetCanvasEl: HTMLCanvasElement | null = null;
 
+  // TLE group (shared between TlePicker and CommandPalette)
+  currentTleGroup = $state(localStorage.getItem('threescope_tle_group') || 'none');
+
   // Earth-specific toggles visibility (hidden in orrery/planet mode)
   earthTogglesVisible = $state(true);
   nightToggleVisible = $state(true);
@@ -61,9 +64,11 @@ class UIStore {
   onCustomTLEUrl: ((url: string) => Promise<void>) | null = null;
   onPlanetButtonClick: (() => void) | null = null;
   onNavigateTo: ((id: string) => void) | null = null;
-  onDeselectSatellite: (() => void) | null = null;
+  onDeselectAll: (() => void) | null = null;
+  onDeselectSatelliteByName: ((name: string) => void) | null = null;
   onToggleViewMode: (() => void) | null = null;
   getSatelliteNames: (() => string[]) | null = null;
+  getSelectedSatelliteNames: (() => string[]) | null = null;
   onSelectSatelliteByName: ((name: string) => void) | null = null;
 
   loadToggles() {
