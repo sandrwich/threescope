@@ -9,6 +9,7 @@
   import SettingsWindow from './SettingsWindow.svelte';
   import TimeWindow from './TimeWindow.svelte';
   import ViewWindow from './ViewWindow.svelte';
+  import SelectionWindow from './SelectionWindow.svelte';
   import CommandPalette from './CommandPalette.svelte';
 </script>
 
@@ -23,6 +24,7 @@
   <SettingsWindow />
   <TimeWindow />
   <ViewWindow />
+  <SelectionWindow />
   <CommandPalette />
 </div>
 

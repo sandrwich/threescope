@@ -51,5 +51,18 @@ export interface AppConfig {
   markerGroups: MarkerGroup[];
 }
 
+export interface SelectedSatInfo {
+  name: string;
+  color: [number, number, number]; // RGB 0-1 from ORBIT_COLORS
+  altKm: number;
+  speedKmS: number;
+  latDeg: number;
+  lonDeg: number;
+  incDeg: number;
+  eccen: number;
+  raanDeg: number;
+  periodMin: number;
+}
+
 export enum TargetLock { NONE, EARTH, MOON, SUN, PLANET }
 export enum ViewMode { VIEW_3D, VIEW_2D }

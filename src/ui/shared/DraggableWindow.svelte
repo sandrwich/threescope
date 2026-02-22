@@ -6,12 +6,14 @@
 
   let {
     title = '',
+    icon = undefined as any,
     open = $bindable(true),
     initialX = 10,
     initialY = 50,
     children,
   }: {
     title?: string;
+    icon?: any;
     open?: boolean;
     initialX?: number;
     initialY?: number;
@@ -50,18 +52,37 @@
     dragging = false;
   }
 
+  function clampToViewport() {
+    if (!windowEl || dragging) return;
+    const w = windowEl.offsetWidth;
+    const h = windowEl.offsetHeight;
+    const maxX = window.innerWidth - w - 10;
+    const maxY = window.innerHeight - h - 10;
+    if (x > maxX) x = Math.max(10, maxX);
+    if (y > maxY) y = Math.max(10, maxY);
+  }
+
   onMount(() => {
     if (!initialized) {
-      x = Math.min(initialX, window.innerWidth - 80);
-      y = Math.min(initialY, window.innerHeight - 30);
+      x = initialX;
+      y = initialY;
       initialized = true;
+      requestAnimationFrame(clampToViewport);
     }
     bringToFront();
+
+    // Re-clamp whenever the window resizes (content changes, viewport resize)
+    const ro = new ResizeObserver(clampToViewport);
+    if (windowEl) ro.observe(windowEl);
+    window.addEventListener('resize', clampToViewport);
+
     // Capture phase so clicks on inputs/selects/buttons still bring window to front
     windowEl?.addEventListener('mousedown', bringToFront, true);
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', clampToViewport);
       windowEl?.removeEventListener('mousedown', bringToFront, true);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
@@ -77,7 +98,10 @@
   >
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="window-titlebar" onmousedown={onTitleMouseDown}>
-      <span class="window-title">{title}</span>
+      <span class="window-title">
+        {#if icon}{@render icon()}{/if}
+        {title}
+      </span>
       <button class="window-close" onclick={() => open = false}>&times;</button>
     </div>
     <div class="window-body">
@@ -95,6 +119,7 @@
     font-size: 13px;
     color: var(--text-muted);
     min-width: 200px;
+    max-width: calc(100vw - 20px);
   }
   .window-titlebar {
     display: flex;
@@ -113,6 +138,9 @@
     text-transform: uppercase;
     letter-spacing: 1px;
     font-weight: normal;
+    display: flex;
+    align-items: center;
+    gap: 5px;
   }
   .window-close {
     background: none;
@@ -124,6 +152,16 @@
     line-height: 1;
   }
   .window-close:hover { color: var(--text-dim); }
+  .window-title :global(.title-icon) {
+    display: inline-flex;
+    align-items: center;
+    line-height: 0;
+    margin-top: -2px;
+  }
+  .window-title :global(.title-icon svg) {
+    width: 11px;
+    height: 11px;
+  }
   .window-body {
     padding: 12px 14px;
   }

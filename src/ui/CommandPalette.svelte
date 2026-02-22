@@ -100,6 +100,7 @@
     actions.push({ id: 'win-time', category: 'Window', label: 'Toggle Time Control', execute: () => { uiStore.timeWindowOpen = !uiStore.timeWindowOpen; close(); } });
     actions.push({ id: 'win-view', category: 'Window', label: 'Toggle View', execute: () => { uiStore.viewWindowOpen = !uiStore.viewWindowOpen; close(); } });
     actions.push({ id: 'win-settings', category: 'Window', label: 'Toggle Settings', execute: () => { uiStore.settingsOpen = !uiStore.settingsOpen; close(); } });
+    actions.push({ id: 'win-selection', category: 'Window', label: 'Toggle Selection', keywords: 'selected satellites panel', execute: () => { uiStore.selectionWindowOpen = !uiStore.selectionWindowOpen; close(); } });
     actions.push({ id: 'win-help', category: 'Window', label: 'Show Help', keywords: 'info controls keyboard', execute: () => { uiStore.infoModalOpen = true; close(); } });
 
     return actions;
@@ -109,7 +110,7 @@
 
   // Build full action list (static + dynamic per-selected-sat deselect, grouped with Satellite category)
   let allActions = $derived.by(() => {
-    const selectedNames = uiStore.satInfoSelectedNames;
+    const selectedNames = uiStore.selectedSatData.map(s => s.name);
     if (selectedNames.length === 0) return staticActions;
     const dynamicActions: PaletteAction[] = selectedNames.map(name => ({
       id: `sat-deselect-${name}`,

@@ -1,4 +1,4 @@
-import type { Satellite } from '../types';
+import type { Satellite, SelectedSatInfo } from '../types';
 import { ViewMode } from '../types';
 
 class UIStore {
@@ -30,12 +30,16 @@ class UIStore {
   commandPaletteOpen = $state(false);
   commandPaletteSatMode = $state(false);
 
-  // Sat info tooltip — content set via store, position set via direct DOM
+  // Selection window
+  selectionWindowOpen = $state(true);
+  selectedSatData = $state<SelectedSatInfo[]>([]);
+
+  // Hover tooltip — content set via store, position set via direct DOM
   satInfoVisible = $state(false);
   satInfoName = $state('');
   satInfoDetail = $state('');
-  satInfoNameColor = $state('#00ff00');
-  satInfoSelectedNames = $state<string[]>([]);
+  satInfoNameColor = $state('#ffff00');
+  satInfoHint = $state('');
 
   // Apsis labels
   periVisible = $state(false);

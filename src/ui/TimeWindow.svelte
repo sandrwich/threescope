@@ -2,6 +2,7 @@
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { uiStore } from '../stores/ui.svelte';
+  import { ICON_TIME } from './shared/icons';
 
   // Parsed display values — synced from store at ~4Hz
   let year = $state(0);
@@ -104,7 +105,8 @@
   </div>
 {/snippet}
 
-<DraggableWindow title="Time Control" bind:open={uiStore.timeWindowOpen} initialX={10} initialY={34}>
+{#snippet timeIcon()}<span class="title-icon">{@html ICON_TIME}</span>{/snippet}
+<DraggableWindow title="Time Control" icon={timeIcon} bind:open={uiStore.timeWindowOpen} initialX={10} initialY={34}>
   <div class="tc">
     <div class="transport-row">
       <button class="tb" title="Slower (,)" onclick={() => timeStore.stepBackward()}>

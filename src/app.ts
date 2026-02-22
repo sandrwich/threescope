@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Satellite } from './types';
+import type { Satellite, SelectedSatInfo } from './types';
 import { TargetLock, ViewMode } from './types';
 import { defaultConfig, parseHexColor } from './config';
 import { DRAW_SCALE, EARTH_RADIUS_KM, MOON_RADIUS_KM, MU, RAD2DEG, DEG2RAD, MAP_W, MAP_H, TWO_PI } from './constants';
@@ -1865,60 +1865,64 @@ export class App {
   }
 
   private updateUI(activeSat: Satellite | null, gmstDeg: number) {
-    // cardSat drives the orbital detail display — hovered takes priority, then first selected
     const cardSat = activeSat;
 
-    // Update selected names list for summary panel
-    uiStore.satInfoSelectedNames = this.selectedSats.size > 0
-      ? [...this.selectedSats].map(s => s.name)
-      : [];
+    // Compute per-sat data for Selection Window
+    const satDataArr: SelectedSatInfo[] = [];
+    let selIdx = 0;
+    for (const sat of this.selectedSats) {
+      const rKm = sat.currentPos.length();
+      let lonDeg = (Math.atan2(-sat.currentPos.z, sat.currentPos.x) - (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD) * RAD2DEG;
+      while (lonDeg > 180) lonDeg -= 360;
+      while (lonDeg < -180) lonDeg += 360;
+      satDataArr.push({
+        name: sat.name,
+        color: ORBIT_COLORS[selIdx % ORBIT_COLORS.length] as [number, number, number],
+        altKm: rKm - EARTH_RADIUS_KM,
+        speedKmS: Math.sqrt(MU * (2.0 / rKm - 1.0 / sat.semiMajorAxis)),
+        latDeg: Math.asin(sat.currentPos.y / rKm) * RAD2DEG,
+        lonDeg,
+        incDeg: sat.inclination * RAD2DEG,
+        eccen: sat.eccentricity,
+        raanDeg: sat.raan * RAD2DEG,
+        periodMin: (TWO_PI / sat.meanMotion) / 60,
+      });
+      selIdx++;
+    }
+    uiStore.selectedSatData = satDataArr;
 
-    // Satellite info — content via store, position via direct DOM
+    // Hover tooltip — only when actually hovering
     const infoEl = uiStore.satInfoEl;
     const periLabel = uiStore.periLabelEl;
     const apoLabel = uiStore.apoLabelEl;
 
-    if (cardSat) {
-      const rKm = cardSat.currentPos.length();
+    if (this.hoveredSat) {
+      const hSat = this.hoveredSat;
+      const rKm = hSat.currentPos.length();
       const alt = rKm - EARTH_RADIUS_KM;
-      const speed = Math.sqrt(MU * (2.0 / rKm - 1.0 / cardSat.semiMajorAxis));
-      const latDeg = Math.asin(cardSat.currentPos.y / rKm) * RAD2DEG;
-      let lonDeg = (Math.atan2(-cardSat.currentPos.z, cardSat.currentPos.x) - (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD) * RAD2DEG;
-      while (lonDeg > 180) lonDeg -= 360;
-      while (lonDeg < -180) lonDeg += 360;
-
-      uiStore.satInfoNameColor = cardSat === this.hoveredSat ? '#ffff00' : '#00ff00';
-      uiStore.satInfoName = cardSat.name;
-      uiStore.satInfoDetail =
-        `Inc: ${(cardSat.inclination * RAD2DEG).toFixed(2)} deg<br>` +
-        `RAAN: ${(cardSat.raan * RAD2DEG).toFixed(2)} deg<br>` +
-        `Ecc: ${cardSat.eccentricity.toFixed(5)}<br>` +
-        `Alt: ${alt.toFixed(2)} km<br>` +
-        `Spd: ${speed.toFixed(2)} km/s<br>` +
-        `Lat: ${latDeg.toFixed(2)} deg<br>` +
-        `Lon: ${lonDeg.toFixed(2)} deg`;
+      const speed = Math.sqrt(MU * (2.0 / rKm - 1.0 / hSat.semiMajorAxis));
+      uiStore.satInfoName = hSat.name;
+      uiStore.satInfoDetail = `Altitude: ${alt.toFixed(0)} km<br>Speed: ${speed.toFixed(2)} km/s`;
+      uiStore.satInfoHint = this.selectedSats.has(hSat) ? 'Click to deselect' : 'Click to select';
       uiStore.satInfoVisible = true;
 
-      // Position the popup near the satellite (direct DOM for performance)
       if (infoEl) {
         let screenPos: THREE.Vector2;
         if (this.viewMode === ViewMode.VIEW_3D) {
-          const drawPos = cardSat.currentPos.clone().divideScalar(DRAW_SCALE);
+          const drawPos = hSat.currentPos.clone().divideScalar(DRAW_SCALE);
           const projected = drawPos.project(this.camera3d);
           screenPos = new THREE.Vector2(
             (projected.x * 0.5 + 0.5) * window.innerWidth,
             (-projected.y * 0.5 + 0.5) * window.innerHeight
           );
         } else {
-          const mc = getMapCoordinates(cardSat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
-          // Find best x-offset for wrap-around
+          const mc = getMapCoordinates(hSat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
           const camCX = (this.camera2d.left + this.camera2d.right) / 2;
           let bestX = mc.x;
           for (const off of [-MAP_W, MAP_W]) {
             if (Math.abs(mc.x + off - camCX) < Math.abs(bestX - camCX)) bestX = mc.x + off;
           }
           const nx = (bestX - this.camera2d.left) / (this.camera2d.right - this.camera2d.left);
-          // sceneY = -mc.y, map to screen: top of camera → top of screen (screenY=0)
           const ny = (this.camera2d.top + mc.y) / (this.camera2d.top - this.camera2d.bottom);
           screenPos = new THREE.Vector2(nx * window.innerWidth, ny * window.innerHeight);
         }
@@ -1927,17 +1931,19 @@ export class App {
         const vh = window.innerHeight;
         const infoW = infoEl.offsetWidth;
         const infoH = infoEl.offsetHeight;
-
         let boxX = screenPos.x + 15;
         let boxY = screenPos.y + 15;
         if (boxX + infoW > vw - 4) boxX = Math.max(4, screenPos.x - infoW - 15);
         if (boxY + infoH > vh - 4) boxY = Math.max(4, screenPos.y - infoH - 15);
-
         infoEl.style.left = `${boxX}px`;
         infoEl.style.top = `${boxY}px`;
       }
+    } else {
+      uiStore.satInfoVisible = false;
+    }
 
-      // Apsis labels
+    // Apsis labels — tied to cardSat (hovered ?? firstSelected)
+    if (cardSat) {
       const apsis = computeApsis(cardSat, this.timeSystem.currentEpoch);
       const periR = apsis.periPos.length();
       const apoR = apsis.apoPos.length();
@@ -2040,20 +2046,11 @@ export class App {
         }
       }
     } else {
-      // No cardSat — still show panel if sats are selected (summary only, no orbital detail)
-      const hasSelection = this.selectedSats.size > 0;
-      uiStore.satInfoVisible = hasSelection;
-      uiStore.satInfoName = '';
-      uiStore.satInfoDetail = '';
+      // No cardSat — hide apsis markers
       uiStore.periVisible = false;
       uiStore.apoVisible = false;
       this.periSprite3d.visible = false;
       this.apoSprite3d.visible = false;
-      // Position at top-left when showing selection-only panel
-      if (hasSelection && infoEl) {
-        infoEl.style.left = '10px';
-        infoEl.style.top = '10px';
-      }
     }
   }
 }

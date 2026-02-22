@@ -1,6 +1,7 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import { uiStore } from '../stores/ui.svelte';
+  import { ICON_VIEW } from './shared/icons';
   import { settingsStore } from '../stores/settings.svelte';
   import { findMatchingPreset, getPresetSettings } from '../graphics';
   import { defaultConfig } from '../config';
@@ -20,7 +21,8 @@
   let rtxTitle = $derived(isCustomized ? 'Open graphics settings' : (rtxChecked ? 'Switch to Standard' : 'Switch to RTX'));
 </script>
 
-<DraggableWindow title="View" bind:open={uiStore.viewWindowOpen} initialX={10} initialY={200}>
+{#snippet viewIcon()}<span class="title-icon">{@html ICON_VIEW}</span>{/snippet}
+<DraggableWindow title="View" icon={viewIcon} bind:open={uiStore.viewWindowOpen} initialX={10} initialY={200}>
   <div class="view-content">
     <div class="section">
       <div class="section-header">Rendering</div>

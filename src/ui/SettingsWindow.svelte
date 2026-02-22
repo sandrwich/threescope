@@ -3,6 +3,7 @@
   import InfoTip from './shared/InfoTip.svelte';
   import Checkbox from './shared/Checkbox.svelte';
   import { uiStore } from '../stores/ui.svelte';
+  import { ICON_SETTINGS } from './shared/icons';
   import { settingsStore } from '../stores/settings.svelte';
   import { getPresetSettings } from '../graphics';
   import { getSimPresetSettings } from '../simulation';
@@ -70,7 +71,8 @@
   let isAnalytical = $derived(settingsStore.simulation.orbitMode === 'analytical');
 </script>
 
-<DraggableWindow title="Settings" bind:open={uiStore.settingsOpen} initialX={10} initialY={470}>
+{#snippet settIcon()}<span class="title-icon">{@html ICON_SETTINGS}</span>{/snippet}
+<DraggableWindow title="Settings" icon={settIcon} bind:open={uiStore.settingsOpen} initialX={10} initialY={470}>
   <h4 class="section-header">Graphics</h4>
   <div class="row">
     <label>Preset</label>
