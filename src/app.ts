@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import type { Satellite, SelectedSatInfo } from './types';
+import type { Satellite } from './types';
 import { TargetLock, ViewMode } from './types';
 import { defaultConfig, parseHexColor } from './config';
-import { DRAW_SCALE, EARTH_RADIUS_KM, MOON_RADIUS_KM, MU, RAD2DEG, DEG2RAD, MAP_W, MAP_H, TWO_PI } from './constants';
+import { DRAW_SCALE, EARTH_RADIUS_KM, MOON_RADIUS_KM, DEG2RAD, MAP_H } from './constants';
 import { TimeSystem } from './simulation/time-system';
 import { Earth } from './scene/earth';
 import { CloudLayer } from './scene/cloud-layer';
@@ -21,7 +21,6 @@ import { MapRenderer } from './scene/map-renderer';
 import { CameraController } from './interaction/camera-controller';
 import { InputHandler } from './interaction/input-handler';
 import { OrreryController } from './scene/orrery-controller';
-import { computeApsis, computeApsis2D } from './astro/apsis';
 import { getMapCoordinates } from './astro/coordinates';
 import { calculateSunPosition } from './astro/sun';
 import { fetchTLEData, parseTLEText, clearRateLimit, type FetchResult } from './data/tle-loader';
@@ -29,6 +28,7 @@ import { TLE_SOURCES, DEFAULT_GROUP } from './data/tle-sources';
 import { timeStore } from './stores/time.svelte';
 import { uiStore } from './stores/ui.svelte';
 import { settingsStore } from './stores/settings.svelte';
+import { UIUpdater } from './ui/ui-updater';
 
 function formatAge(ms: number): string {
   const mins = Math.floor(ms / 60000);
@@ -94,6 +94,9 @@ export class App {
 
   // Input handler (mouse/touch/keyboard events)
   private input!: InputHandler;
+
+  // UI updater (selection window, hover tooltip, apsis labels)
+  private uiUpdater = new UIUpdater();
 
   // FPS tracking
   private fpsFrames = 0;
@@ -800,7 +803,20 @@ export class App {
     // Mini planet spinner
     this.orreryCtrl.renderMini(dt);
 
-    this.updateUI(activeSat, gmstDeg);
+    this.uiUpdater.update({
+      activeSat,
+      hoveredSat: this.hoveredSat,
+      selectedSats: this.selectedSats,
+      gmstDeg,
+      cfg: this.cfg,
+      viewMode: this.viewMode,
+      camera3d: this.camera3d,
+      camera2d: this.camera2d,
+      currentEpoch: this.timeSystem.currentEpoch,
+      periSprite3d: this.periSprite3d,
+      apoSprite3d: this.apoSprite3d,
+      moonDrawPos: this.moonScene.drawPos,
+    });
   }
 
   private handleDoubleClickLock() {
@@ -855,188 +871,4 @@ export class App {
     }
   }
 
-  private updateUI(activeSat: Satellite | null, gmstDeg: number) {
-    const cardSat = activeSat;
-
-    // Compute per-sat data for Selection Window
-    const satDataArr: SelectedSatInfo[] = [];
-    let selIdx = 0;
-    for (const sat of this.selectedSats) {
-      const rKm = sat.currentPos.length();
-      let lonDeg = (Math.atan2(-sat.currentPos.z, sat.currentPos.x) - (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD) * RAD2DEG;
-      while (lonDeg > 180) lonDeg -= 360;
-      while (lonDeg < -180) lonDeg += 360;
-      satDataArr.push({
-        name: sat.name,
-        color: ORBIT_COLORS[selIdx % ORBIT_COLORS.length] as [number, number, number],
-        altKm: rKm - EARTH_RADIUS_KM,
-        speedKmS: Math.sqrt(MU * (2.0 / rKm - 1.0 / sat.semiMajorAxis)),
-        latDeg: Math.asin(sat.currentPos.y / rKm) * RAD2DEG,
-        lonDeg,
-        incDeg: sat.inclination * RAD2DEG,
-        eccen: sat.eccentricity,
-        raanDeg: sat.raan * RAD2DEG,
-        periodMin: (TWO_PI / sat.meanMotion) / 60,
-      });
-      selIdx++;
-    }
-    uiStore.selectedSatData = satDataArr;
-
-    // Hover tooltip — only when actually hovering
-    const infoEl = uiStore.satInfoEl;
-    const periLabel = uiStore.periLabelEl;
-    const apoLabel = uiStore.apoLabelEl;
-
-    if (this.hoveredSat) {
-      const hSat = this.hoveredSat;
-      const rKm = hSat.currentPos.length();
-      const alt = rKm - EARTH_RADIUS_KM;
-      const speed = Math.sqrt(MU * (2.0 / rKm - 1.0 / hSat.semiMajorAxis));
-      uiStore.satInfoName = hSat.name;
-      uiStore.satInfoDetail = `Altitude: ${alt.toFixed(0)} km<br>Speed: ${speed.toFixed(2)} km/s`;
-      uiStore.satInfoHint = this.selectedSats.has(hSat) ? 'Click to deselect' : 'Click to select';
-      uiStore.satInfoVisible = true;
-
-      if (infoEl) {
-        let screenPos: THREE.Vector2;
-        if (this.viewMode === ViewMode.VIEW_3D) {
-          const drawPos = hSat.currentPos.clone().divideScalar(DRAW_SCALE);
-          const projected = drawPos.project(this.camera3d);
-          screenPos = new THREE.Vector2(
-            (projected.x * 0.5 + 0.5) * window.innerWidth,
-            (-projected.y * 0.5 + 0.5) * window.innerHeight
-          );
-        } else {
-          const mc = getMapCoordinates(hSat.currentPos, gmstDeg, this.cfg.earthRotationOffset);
-          const camCX = (this.camera2d.left + this.camera2d.right) / 2;
-          let bestX = mc.x;
-          for (const off of [-MAP_W, MAP_W]) {
-            if (Math.abs(mc.x + off - camCX) < Math.abs(bestX - camCX)) bestX = mc.x + off;
-          }
-          const nx = (bestX - this.camera2d.left) / (this.camera2d.right - this.camera2d.left);
-          const ny = (this.camera2d.top + mc.y) / (this.camera2d.top - this.camera2d.bottom);
-          screenPos = new THREE.Vector2(nx * window.innerWidth, ny * window.innerHeight);
-        }
-
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        const infoW = infoEl.offsetWidth;
-        const infoH = infoEl.offsetHeight;
-        let boxX = screenPos.x + 15;
-        let boxY = screenPos.y + 15;
-        if (boxX + infoW > vw - 4) boxX = Math.max(4, screenPos.x - infoW - 15);
-        if (boxY + infoH > vh - 4) boxY = Math.max(4, screenPos.y - infoH - 15);
-        infoEl.style.left = `${boxX}px`;
-        infoEl.style.top = `${boxY}px`;
-      }
-    } else {
-      uiStore.satInfoVisible = false;
-    }
-
-    // Apsis labels — tied to cardSat (hovered ?? firstSelected)
-    if (cardSat) {
-      const apsis = computeApsis(cardSat, this.timeSystem.currentEpoch);
-      const periR = apsis.periPos.length();
-      const apoR = apsis.apoPos.length();
-
-      if (this.viewMode === ViewMode.VIEW_3D) {
-        const pDraw = apsis.periPos.clone().divideScalar(DRAW_SCALE);
-        const aDraw = apsis.apoPos.clone().divideScalar(DRAW_SCALE);
-        const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
-        const camPos = this.camera3d.position;
-
-        const isOccluded = (pt: THREE.Vector3): boolean => {
-          const dx = pt.x - camPos.x, dy = pt.y - camPos.y, dz = pt.z - camPos.z;
-          const L = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          const ux = dx / L, uy = dy / L, uz = dz / L;
-          const t = -(camPos.x * ux + camPos.y * uy + camPos.z * uz);
-          if (t > 0 && t < L) {
-            const cx = camPos.x + ux * t, cy = camPos.y + uy * t, cz = camPos.z + uz * t;
-            if (Math.sqrt(cx * cx + cy * cy + cz * cz) < earthR * 0.99) return true;
-          }
-          return false;
-        };
-
-        const periOccluded = isOccluded(pDraw);
-        const apoOccluded = isOccluded(aDraw);
-
-        this.periSprite3d.position.copy(pDraw);
-        this.periSprite3d.visible = !periOccluded;
-        this.apoSprite3d.position.copy(aDraw);
-        this.apoSprite3d.visible = !apoOccluded;
-
-        const pp = pDraw.project(this.camera3d);
-        const ap = aDraw.project(this.camera3d);
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-
-        const ppX = (pp.x * 0.5 + 0.5) * vw;
-        const ppY = (-pp.y * 0.5 + 0.5) * vh;
-        if (!periOccluded && pp.z < 1 && ppX > -50 && ppX < vw + 50 && ppY > -20 && ppY < vh + 20) {
-          uiStore.periText = `Peri: ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
-          uiStore.periVisible = true;
-          if (periLabel) {
-            periLabel.style.left = `${ppX + 20}px`;
-            periLabel.style.top = `${ppY - 8}px`;
-          }
-        } else {
-          uiStore.periVisible = false;
-        }
-
-        const apX = (ap.x * 0.5 + 0.5) * vw;
-        const apY = (-ap.y * 0.5 + 0.5) * vh;
-        if (!apoOccluded && ap.z < 1 && apX > -50 && apX < vw + 50 && apY > -20 && apY < vh + 20) {
-          uiStore.apoText = `Apo: ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
-          uiStore.apoVisible = true;
-          if (apoLabel) {
-            apoLabel.style.left = `${apX + 20}px`;
-            apoLabel.style.top = `${apY - 8}px`;
-          }
-        } else {
-          uiStore.apoVisible = false;
-        }
-      } else {
-        this.periSprite3d.visible = false;
-        this.apoSprite3d.visible = false;
-
-        const peri2d = computeApsis2D(cardSat, this.timeSystem.currentEpoch, false, this.cfg.earthRotationOffset);
-        const apo2d = computeApsis2D(cardSat, this.timeSystem.currentEpoch, true, this.cfg.earthRotationOffset);
-
-        const camL = this.camera2d.left, camR = this.camera2d.right;
-        const camT = this.camera2d.top, camB = this.camera2d.bottom;
-        const camCenterX = (camL + camR) / 2;
-        const vw = window.innerWidth, vh = window.innerHeight;
-
-        let periX = peri2d.x;
-        let apoX = apo2d.x;
-        for (const off of [-MAP_W, MAP_W]) {
-          if (Math.abs(peri2d.x + off - camCenterX) < Math.abs(periX - camCenterX)) periX = peri2d.x + off;
-          if (Math.abs(apo2d.x + off - camCenterX) < Math.abs(apoX - camCenterX)) apoX = apo2d.x + off;
-        }
-
-        const pnx = (periX - camL) / (camR - camL);
-        const pny = (-peri2d.y - camB) / (camT - camB);
-        uiStore.periText = `Peri: ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
-        uiStore.periVisible = pnx > -0.1 && pnx < 1.1 && pny > -0.1 && pny < 1.1;
-        if (uiStore.periVisible && periLabel) {
-          periLabel.style.left = `${pnx * vw + 12}px`;
-          periLabel.style.top = `${(1 - pny) * vh - 8}px`;
-        }
-
-        const anx = (apoX - camL) / (camR - camL);
-        const any_ = (-apo2d.y - camB) / (camT - camB);
-        uiStore.apoText = `Apo: ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
-        uiStore.apoVisible = anx > -0.1 && anx < 1.1 && any_ > -0.1 && any_ < 1.1;
-        if (uiStore.apoVisible && apoLabel) {
-          apoLabel.style.left = `${anx * vw + 12}px`;
-          apoLabel.style.top = `${(1 - any_) * vh - 8}px`;
-        }
-      }
-    } else {
-      uiStore.periVisible = false;
-      uiStore.apoVisible = false;
-      this.periSprite3d.visible = false;
-      this.apoSprite3d.visible = false;
-    }
-  }
 }
