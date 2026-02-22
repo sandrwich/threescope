@@ -16,14 +16,18 @@ class UIStore {
 
   // Toggles (persisted via localStorage)
   hideUnselected = $state(true);
+  showOrbits = $state(true);
   showClouds = $state(true);
   showNightLights = $state(true);
-  showMarkers = $state(false);
+
+  // Marker group visibility (keyed by group id)
+  markerVisibility = $state<Record<string, boolean>>({});
 
   // Window/modal visibility
   infoModalOpen = $state(false);
   settingsOpen = $state(false);
   timeWindowOpen = $state(true);
+  viewWindowOpen = $state(true);
 
   // Sat info tooltip — content set via store, position set via direct DOM
   satInfoVisible = $state(false);
@@ -49,6 +53,7 @@ class UIStore {
 
   // Callbacks registered by App
   onToggleChange: ((key: string, value: boolean) => void) | null = null;
+  onMarkerGroupChange: ((groupId: string, visible: boolean) => void) | null = null;
   onTLEGroupChange: ((group: string) => Promise<void>) | null = null;
   onCustomTLELoad: ((text: string, name: string) => void) | null = null;
   onCustomTLEUrl: ((url: string) => Promise<void>) | null = null;
@@ -60,17 +65,33 @@ class UIStore {
       return saved !== null ? (defaultVal ? saved !== 'false' : saved === 'true') : defaultVal;
     };
     this.hideUnselected = load('threescope_spotlight', true);
+    this.showOrbits = load('threescope_orbits', true);
     this.showClouds = load('threescope_clouds', true);
     this.showNightLights = load('threescope_night', true);
-    this.showMarkers = load('threescope_markers', false);
+  }
+
+  /** Initialize marker group visibility from config defaults + localStorage */
+  loadMarkerGroups(groups: { id: string; defaultVisible: boolean }[]) {
+    const vis: Record<string, boolean> = {};
+    for (const g of groups) {
+      const saved = localStorage.getItem(`threescope_markers_${g.id}`);
+      vis[g.id] = saved !== null ? saved === 'true' : g.defaultVisible;
+    }
+    this.markerVisibility = vis;
+  }
+
+  setMarkerGroupVisible(groupId: string, visible: boolean) {
+    this.markerVisibility = { ...this.markerVisibility, [groupId]: visible };
+    localStorage.setItem(`threescope_markers_${groupId}`, String(visible));
+    this.onMarkerGroupChange?.(groupId, visible);
   }
 
   setToggle(key: string, value: boolean) {
     switch (key) {
       case 'hideUnselected': this.hideUnselected = value; localStorage.setItem('threescope_spotlight', String(value)); break;
+      case 'showOrbits': this.showOrbits = value; localStorage.setItem('threescope_orbits', String(value)); break;
       case 'showClouds': this.showClouds = value; localStorage.setItem('threescope_clouds', String(value)); break;
       case 'showNightLights': this.showNightLights = value; localStorage.setItem('threescope_night', String(value)); break;
-      case 'showMarkers': this.showMarkers = value; localStorage.setItem('threescope_markers', String(value)); break;
     }
     this.onToggleChange?.(key, value);
   }

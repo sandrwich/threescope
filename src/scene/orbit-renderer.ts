@@ -58,6 +58,7 @@ export class OrbitRenderer {
   private lastSelectedSat: Satellite | null | undefined = undefined;
   private lastFadedOut = false;
   private assembledVertFloats = 0;
+  showNormalOrbits = true;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -360,7 +361,7 @@ export class OrbitRenderer {
     }
 
     // --- Normal orbits: assembled from precomputed analytical data ---
-    if (!this.precomputedAll || this.precomputedSatCount !== satellites.length || (selectedSat !== null && unselectedFade <= 0.01)) {
+    if (!this.showNormalOrbits || !this.precomputedAll || this.precomputedSatCount !== satellites.length || (selectedSat !== null && unselectedFade <= 0.01)) {
       this.normalLines.visible = false;
       return;
     }

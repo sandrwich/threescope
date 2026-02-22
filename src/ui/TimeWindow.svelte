@@ -104,7 +104,7 @@
   </div>
 {/snippet}
 
-<DraggableWindow title="Time Control" bind:open={uiStore.timeWindowOpen} initialX={10} initialY={200}>
+<DraggableWindow title="Time Control" bind:open={uiStore.timeWindowOpen} initialX={10} initialY={34}>
   <div class="tc">
     <div class="transport-row">
       <button class="tb" title="Slower (,)" onclick={() => timeStore.stepBackward()}>

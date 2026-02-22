@@ -79,7 +79,6 @@ export class App {
   private activeLock = TargetLock.EARTH;
   private viewMode = ViewMode.VIEW_3D;
   private hideUnselected = false;
-  private showMarkers = false;
   private unselectedFade = 1.0;
   private fadingInSat: Satellite | null = null;
   private prevSelectedSat: Satellite | null = null;
@@ -265,7 +264,7 @@ export class App {
 
     // Markers
     const overlay = document.getElementById('svelte-ui')!;
-    this.markerManager = new MarkerManager(this.scene3d, this.cfg.markers, markerTex, overlay);
+    this.markerManager = new MarkerManager(this.scene3d, this.cfg.markerGroups, markerTex, overlay);
 
     // 2D map plane
     this.mapMaterial = new THREE.ShaderMaterial({
@@ -597,13 +596,19 @@ export class App {
     // --- Load persisted settings from localStorage ---
     settingsStore.load();
     uiStore.loadToggles();
+    uiStore.loadMarkerGroups(this.cfg.markerGroups);
 
     // Apply initial toggle values
     this.hideUnselected = uiStore.hideUnselected;
+    this.orbitRenderer.showNormalOrbits = uiStore.showOrbits;
     this.cfg.showClouds = uiStore.showClouds;
     this.cfg.showNightLights = uiStore.showNightLights;
     this.moonScene.setShowNight(uiStore.showNightLights);
-    this.showMarkers = uiStore.showMarkers;
+
+    // Apply initial marker visibility
+    for (const g of this.cfg.markerGroups) {
+      this.markerManager.setGroupVisible(g.id, uiStore.markerVisibility[g.id] ?? g.defaultVisible);
+    }
 
     // Apply initial graphics
     this.applyGraphics(settingsStore.graphics);
@@ -620,16 +625,18 @@ export class App {
     uiStore.onToggleChange = (key: string, value: boolean) => {
       switch (key) {
         case 'hideUnselected': this.hideUnselected = value; break;
+        case 'showOrbits': this.orbitRenderer.showNormalOrbits = value; break;
         case 'showClouds': this.cfg.showClouds = value; break;
         case 'showNightLights':
           this.cfg.showNightLights = value;
           this.moonScene.setShowNight(value);
           break;
-        case 'showMarkers':
-          this.showMarkers = value;
-          if (!value) this.markerManager.hide();
-          break;
       }
+    };
+
+    // Marker group visibility
+    uiStore.onMarkerGroupChange = (groupId: string, visible: boolean) => {
+      this.markerManager.setGroupVisible(groupId, visible);
     };
 
     // Graphics settings changed from SettingsWindow
@@ -1225,11 +1232,7 @@ export class App {
           { footprintBg: this.cfg.footprintBg, footprintBorder: this.cfg.footprintBorder }
         );
 
-        if (this.showMarkers) {
-          this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camDistance);
-        } else {
-          this.markerManager.hide();
-        }
+        this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camDistance);
       }
 
       const bloomForBody = this.activeLock === TargetLock.PLANET

@@ -40,7 +40,9 @@ export class SatelliteManager {
           vColor = color;
           vAlpha = alpha;
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = pointSize;
+          float dist = -mvPos.z;
+          gl_PointSize = pointSize * (5.0 / max(dist, 0.5));
+          gl_PointSize = clamp(gl_PointSize, 3.0, pointSize);
           gl_Position = projectionMatrix * mvPos;
         }
       `,

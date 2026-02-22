@@ -8,6 +8,7 @@
   import InfoModal from './InfoModal.svelte';
   import SettingsWindow from './SettingsWindow.svelte';
   import TimeWindow from './TimeWindow.svelte';
+  import ViewWindow from './ViewWindow.svelte';
 </script>
 
 <div id="ui-overlay">
@@ -20,6 +21,7 @@
   <InfoModal />
   <SettingsWindow />
   <TimeWindow />
+  <ViewWindow />
 </div>
 
 <style>

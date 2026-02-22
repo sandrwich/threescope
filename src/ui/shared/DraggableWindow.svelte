@@ -52,8 +52,8 @@
 
   onMount(() => {
     if (!initialized) {
-      x = initialX;
-      y = initialY;
+      x = Math.min(initialX, window.innerWidth - 80);
+      y = Math.min(initialY, window.innerHeight - 30);
       initialized = true;
     }
     bringToFront();

@@ -70,7 +70,7 @@
   let isAnalytical = $derived(settingsStore.simulation.orbitMode === 'analytical');
 </script>
 
-<DraggableWindow title="Settings" bind:open={uiStore.settingsOpen} initialX={10} initialY={400}>
+<DraggableWindow title="Settings" bind:open={uiStore.settingsOpen} initialX={10} initialY={450}>
   <h4 class="section-header">Graphics</h4>
   <div class="row">
     <label>Preset</label>

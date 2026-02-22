@@ -27,6 +27,14 @@ export interface Marker {
   lon: number;
 }
 
+export interface MarkerGroup {
+  id: string;
+  label: string;
+  color: string;
+  defaultVisible: boolean;
+  markers: Marker[];
+}
+
 export interface AppConfig {
   earthRotationOffset: number;
   orbitsToDraw: number;
@@ -40,7 +48,7 @@ export interface AppConfig {
   satSelected: string;
   footprintBg: string;
   footprintBorder: string;
-  markers: Marker[];
+  markerGroups: MarkerGroup[];
 }
 
 export enum TargetLock { NONE, EARTH, MOON, SUN, PLANET }
