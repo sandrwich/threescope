@@ -19,6 +19,7 @@ import { type SimulationSettings, DEFAULT_SIM_PRESET, findMatchingSimPreset, get
 import { Orrery, type PromotedPlanet } from './scene/orrery';
 import { Atmosphere } from './scene/atmosphere';
 import { MapRenderer } from './scene/map-renderer';
+import { CameraController } from './interaction/camera-controller';
 import { computeApsis, computeApsis2D } from './astro/apsis';
 import { getMapCoordinates } from './astro/coordinates';
 import { calculateSunPosition } from './astro/sun';
@@ -89,21 +90,8 @@ export class App {
   private tmpVec3 = new THREE.Vector3();
   private tmpSphere = new THREE.Sphere();
 
-  // 3D camera state
-  private camDistance = 35.0;
-  private camAngleX = 0.785;
-  private camAngleY = 0.5;
-  private targetCamDistance = 35.0;
-  private targetCamAngleX = 0.785;
-  private targetCamAngleY = 0.5;
-  private target3d = new THREE.Vector3();
-  private targetTarget3d = new THREE.Vector3();
-
-  // 2D camera state
-  private cam2dZoom = 1.0;
-  private targetCam2dZoom = 1.0;
-  private cam2dTarget = new THREE.Vector2();
-  private targetCam2dTarget = new THREE.Vector2();
+  // Camera state (3D orbital + 2D orthographic)
+  private camera!: CameraController;
 
   // 2D map renderer
   private mapRenderer!: MapRenderer;
@@ -167,6 +155,7 @@ export class App {
     this.camera2d = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, -10, 10);
     this.camera2d.position.set(0, 0, 5);
     this.camera2d.lookAt(0, 0, 0);
+    this.camera = new CameraController(this.camera3d, this.camera2d);
     this.scene2d = new THREE.Scene();
     this.scene2d.background = new THREE.Color(this.cfg.bgColor);
 
@@ -423,7 +412,7 @@ export class App {
     if (this.pendingHiTex) { this.pendingHiTex.dispose(); this.pendingHiTex = null; }
     this.activeLock = TargetLock.EARTH;
     this.setEarthVisible(true);
-    this.targetTarget3d.set(0, 0, 0);
+    this.camera.setTarget3dXYZ(0, 0, 0);
     this.updatePlanetPickerUI();
   }
 
@@ -468,16 +457,15 @@ export class App {
     const vFov = this.camera3d.fov * Math.PI / 360; // half vertical FOV in radians
     if (this.orrery.vertical) {
       // Look straight on; offset target slightly right to account for side labels
-      this.targetTarget3d.set(2, 0, 0);
-      this.targetCamDistance = halfSpan / Math.tan(vFov);
-      this.targetCamAngleY = 0;
+      this.camera.setTarget3dXYZ(2, 0, 0);
+      this.camera.setTargetDistance(halfSpan / Math.tan(vFov));
+      this.camera.setTargetAngles(0, 0);
     } else {
-      this.targetTarget3d.set(0, 0, 0);
+      this.camera.setTarget3dXYZ(0, 0, 0);
       const hFov = Math.atan(Math.tan(vFov) * this.camera3d.aspect);
-      this.targetCamDistance = halfSpan / Math.tan(hFov);
-      this.targetCamAngleY = 0.3;
+      this.camera.setTargetDistance(halfSpan / Math.tan(hFov));
+      this.camera.setTargetAngles(0, 0.3);
     }
-    this.targetCamAngleX = 0;
   }
 
   private exitOrrery() {
@@ -502,18 +490,15 @@ export class App {
     // Earth/Moon have dedicated scenes — navigate immediately with matching zoom
     if (hit.id === 'earth') {
       this.navigateToEarth();
-      this.targetCamDistance = 10.5;
-      this.camDistance = 10.5;
-      this.target3d.set(0, 0, 0);
+      this.camera.snapDistance(10.5);
+      this.camera.snapTarget3dXYZ(0, 0, 0);
       return;
     } else if (hit.id === 'moon') {
       this.navigateToEarth();
       this.activeLock = TargetLock.MOON;
       // Snap camera to moon immediately — no long fly-in from orrery position
-      this.targetTarget3d.copy(this.moonScene.drawPos);
-      this.target3d.copy(this.moonScene.drawPos);
-      this.targetCamDistance = 3.0;
-      this.camDistance = 3.0;
+      this.camera.snapTarget3d(this.moonScene.drawPos);
+      this.camera.snapDistance(3.0);
       return;
     }
 
@@ -522,10 +507,8 @@ export class App {
     const pos = this.orrery.getBodyPosition(hit.id);
     const bodyR = this.orrery.getBodyDrawRadius(hit.id);
     if (pos) {
-      this.targetTarget3d.copy(pos);
-      this.target3d.copy(pos);
-      this.targetCamDistance = bodyR * 3.5;
-      this.camDistance = bodyR * 3.5;
+      this.camera.snapTarget3d(pos);
+      this.camera.snapDistance(bodyR * 3.5);
     }
 
     if (hit.planetDef) {
@@ -647,7 +630,7 @@ export class App {
     uiStore.onNavigateTo = (id: string) => {
       if (id === 'earth') {
         if (this.orreryMode) this.navigateToEarth();
-        else { this.activeLock = TargetLock.EARTH; this.targetTarget3d.set(0, 0, 0); }
+        else { this.activeLock = TargetLock.EARTH; this.camera.setTarget3dXYZ(0, 0, 0); }
       } else if (id === 'moon') {
         if (this.orreryMode) this.navigateToEarth();
         this.activeLock = TargetLock.MOON;
@@ -774,14 +757,7 @@ export class App {
       this.camera3d.aspect = w / h;
       this.camera3d.updateProjectionMatrix();
       this.postProcessing.setSize(w, h);
-      const aspect = w / h;
-      const halfH = MAP_H / 2 / this.cam2dZoom;
-      const halfW = halfH * aspect;
-      this.camera2d.left = this.cam2dTarget.x - halfW;
-      this.camera2d.right = this.cam2dTarget.x + halfW;
-      this.camera2d.top = this.cam2dTarget.y + halfH;
-      this.camera2d.bottom = this.cam2dTarget.y - halfH;
-      this.camera2d.updateProjectionMatrix();
+      this.camera.updateCamera2dProjection();
     });
 
     // Mouse tracking
@@ -797,24 +773,15 @@ export class App {
       if (this.isRightDragging) {
         if (this.viewMode === ViewMode.VIEW_2D) {
           // Pan 2D
-          const scale = 1.0 / this.targetCam2dZoom;
-          this.targetCam2dTarget.x -= dx * scale;
-          this.targetCam2dTarget.y -= dy * scale;
+          this.camera.pan2d(dx, dy);
           this.activeLock = TargetLock.NONE;
         } else {
           // Orbit 3D
           if (e.shiftKey) {
-            const forward = new THREE.Vector3().subVectors(this.target3d, this.camera3d.position).normalize();
-            const right = new THREE.Vector3().crossVectors(forward, this.camera3d.up).normalize();
-            const upVec = new THREE.Vector3().crossVectors(right, forward).normalize();
-            const panSpeed = this.targetCamDistance * 0.001;
-            this.targetTarget3d.add(right.multiplyScalar(-dx * panSpeed));
-            this.targetTarget3d.add(upVec.multiplyScalar(dy * panSpeed));
+            this.camera.pan3d(dx, dy);
             this.activeLock = TargetLock.NONE;
           } else {
-            this.targetCamAngleX -= dx * 0.005;
-            this.targetCamAngleY += dy * 0.005;
-            this.targetCamAngleY = Math.max(-1.5, Math.min(1.5, this.targetCamAngleY));
+            this.camera.orbit(dx, dy);
           }
         }
       }
@@ -835,12 +802,10 @@ export class App {
       e.preventDefault();
       const delta = -Math.sign(e.deltaY);
       if (this.viewMode === ViewMode.VIEW_2D) {
-        this.targetCam2dZoom += delta * 0.1 * this.targetCam2dZoom;
-        this.targetCam2dZoom = Math.max(0.1, this.targetCam2dZoom);
+        this.camera.applyZoom2d(delta);
         this.activeLock = TargetLock.NONE;
       } else {
-        this.targetCamDistance -= delta * (this.targetCamDistance * 0.1);
-        this.targetCamDistance = Math.max(getMinZoom(this.activeLock), this.targetCamDistance);
+        this.camera.applyZoom3d(delta, getMinZoom(this.activeLock));
       }
     }, { passive: false });
 
@@ -958,14 +923,10 @@ export class App {
         );
 
         if (this.viewMode === ViewMode.VIEW_2D) {
-          const scale = 1.0 / this.targetCam2dZoom;
-          this.targetCam2dTarget.x -= dx * scale;
-          this.targetCam2dTarget.y -= dy * scale;
+          this.camera.pan2d(dx, dy);
           this.activeLock = TargetLock.NONE;
         } else {
-          this.targetCamAngleX -= dx * 0.005;
-          this.targetCamAngleY += dy * 0.005;
-          this.targetCamAngleY = Math.max(-1.5, Math.min(1.5, this.targetCamAngleY));
+          this.camera.orbit(dx, dy);
         }
       } else if (e.touches.length === 2) {
         // Two fingers: pinch zoom + pan
@@ -979,11 +940,9 @@ export class App {
         if (this.lastPinchDist > 0) {
           const scale = pinchDist / this.lastPinchDist;
           if (this.viewMode === ViewMode.VIEW_2D) {
-            this.targetCam2dZoom *= scale;
-            this.targetCam2dZoom = Math.max(0.1, this.targetCam2dZoom);
+            this.camera.pinchZoom2d(scale);
           } else {
-            this.targetCamDistance /= scale;
-            this.targetCamDistance = Math.max(getMinZoom(this.activeLock), this.targetCamDistance);
+            this.camera.pinchZoom3d(scale, getMinZoom(this.activeLock));
           }
         }
 
@@ -991,12 +950,7 @@ export class App {
         if (this.viewMode === ViewMode.VIEW_3D) {
           const panDx = centerX - this.lastTwoTouchCenter.x;
           const panDy = centerY - this.lastTwoTouchCenter.y;
-          const forward = new THREE.Vector3().subVectors(this.target3d, this.camera3d.position).normalize();
-          const right = new THREE.Vector3().crossVectors(forward, this.camera3d.up).normalize();
-          const upVec = new THREE.Vector3().crossVectors(right, forward).normalize();
-          const panSpeed = this.targetCamDistance * 0.001;
-          this.targetTarget3d.add(right.multiplyScalar(-panDx * panSpeed));
-          this.targetTarget3d.add(upVec.multiplyScalar(panDy * panSpeed));
+          this.camera.pan3d(panDx, panDy);
           this.activeLock = TargetLock.NONE;
         }
 
@@ -1137,58 +1091,28 @@ export class App {
 
     // Target lock
     if (this.activeLock === TargetLock.EARTH) {
-      if (this.viewMode === ViewMode.VIEW_2D) this.targetCam2dTarget.set(0, 0);
-      else this.targetTarget3d.set(0, 0, 0);
+      if (this.viewMode === ViewMode.VIEW_2D) this.camera.setTarget2dXY(0, 0);
+      else this.camera.setTarget3dXYZ(0, 0, 0);
     } else if (this.activeLock === TargetLock.MOON) {
       if (this.viewMode === ViewMode.VIEW_2D) {
         const mc = getMapCoordinates(this.moonScene.drawPos.clone().multiplyScalar(DRAW_SCALE), gmstDeg, this.cfg.earthRotationOffset);
-        this.targetCam2dTarget.set(mc.x, mc.y);
+        this.camera.setTarget2dXY(mc.x, mc.y);
       } else {
-        this.targetTarget3d.copy(this.moonScene.drawPos);
+        this.camera.setTarget3d(this.moonScene.drawPos);
       }
     } else if (this.activeLock === TargetLock.SUN) {
       if (this.viewMode === ViewMode.VIEW_3D) {
-        this.targetTarget3d.copy(this.sunScene.disc.position);
+        this.camera.setTarget3d(this.sunScene.disc.position);
       }
     } else if (this.activeLock === TargetLock.PLANET && this.promotedPlanet) {
       const pos = this.orrery?.getBodyPosition(this.promotedPlanet.body.id);
-      if (pos) this.targetTarget3d.copy(pos);
+      if (pos) this.camera.setTarget3d(pos);
     }
 
-    // Smooth camera lerp
-    const smooth = Math.min(1.0, 10.0 * dt);
-
-    this.cam2dZoom += (this.targetCam2dZoom - this.cam2dZoom) * smooth;
-    this.cam2dTarget.lerp(this.targetCam2dTarget, smooth);
-
-    this.camAngleX += (this.targetCamAngleX - this.camAngleX) * smooth;
-    this.camAngleY += (this.targetCamAngleY - this.camAngleY) * smooth;
-    this.camDistance += (this.targetCamDistance - this.camDistance) * smooth;
-    this.target3d.lerp(this.targetTarget3d, smooth);
-
-    // Update 3D camera position (co-rotate with Earth so it appears stationary)
+    // Smooth camera lerp + update camera transforms
     const earthRotRad = (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD;
-    // Don't co-rotate with Earth when viewing a planet or in orrery mode
-    const camAX = this.camAngleX + (this.activeLock === TargetLock.PLANET || this.orreryMode ? 0 : earthRotRad);
-    this.camera3d.position.set(
-      this.target3d.x + this.camDistance * Math.cos(this.camAngleY) * Math.sin(camAX),
-      this.target3d.y + this.camDistance * Math.sin(this.camAngleY),
-      this.target3d.z + this.camDistance * Math.cos(this.camAngleY) * Math.cos(camAX)
-    );
-    this.camera3d.lookAt(this.target3d);
-
-    // Clamp 2D target Y so map doesn't scroll beyond bounds
-    this.targetCam2dTarget.y = Math.max(-MAP_H / 2, Math.min(MAP_H / 2, this.targetCam2dTarget.y));
-
-    // Update 2D camera
-    const aspect = window.innerWidth / window.innerHeight;
-    const halfH = MAP_H / 2 / this.cam2dZoom;
-    const halfW = halfH * aspect;
-    this.camera2d.left = this.cam2dTarget.x - halfW;
-    this.camera2d.right = this.cam2dTarget.x + halfW;
-    this.camera2d.top = this.cam2dTarget.y + halfH;
-    this.camera2d.bottom = this.cam2dTarget.y - halfH;
-    this.camera2d.updateProjectionMatrix();
+    const isOrreryOrPlanet = this.activeLock === TargetLock.PLANET || this.orreryMode;
+    this.camera.updateFrame(dt, earthRotRad, isOrreryOrPlanet);
 
     // Hover detection (skip in planet/orrery view)
     this.hoveredSat = null;
@@ -1200,7 +1124,7 @@ export class App {
       if (this.viewMode === ViewMode.VIEW_3D) {
         this.detectHover3D();
       } else {
-        this.hoveredSat = this.mapRenderer.detectHover(this.mousePos, this.camera2d, this.satellites, this.timeSystem.getGmstDeg(), this.cfg, this.hideUnselected, this.selectedSats, this.cam2dZoom, this.touchCount);
+        this.hoveredSat = this.mapRenderer.detectHover(this.mousePos, this.camera2d, this.satellites, this.timeSystem.getGmstDeg(), this.cfg, this.hideUnselected, this.selectedSats, this.camera.zoom2d, this.touchCount);
       }
     }
 
@@ -1242,7 +1166,7 @@ export class App {
           this.promotedPlanet.body.mesh.rotation.y += this.promotedPlanet.rotationSpeed * dt * this.timeSystem.timeMultiplier;
           // Swap hi-res texture only after camera zoom has fully settled
           if (this.pendingHiTex) {
-            const zoomRatio = Math.abs(this.camDistance - this.targetCamDistance) / this.targetCamDistance;
+            const zoomRatio = this.camera.zoomSettleRatio;
             if (zoomRatio < 0.005) {
               this.promotedPlanet.material.uniforms.map.value = this.pendingHiTex;
               this.pendingHiTex = null;
@@ -1292,7 +1216,7 @@ export class App {
         }
         this.footprintRenderer.update(fpEntries);
 
-        this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camDistance);
+        this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camera.distance);
       }
 
       const bloomForBody = this.activeLock === TargetLock.PLANET
@@ -1309,7 +1233,7 @@ export class App {
       }
     } else {
       // Update 2D map
-      this.mapRenderer.update({ epoch, gmstDeg, cfg: this.cfg, satellites: this.satellites, hoveredSat: this.hoveredSat, selectedSats: this.selectedSats, cam2dZoom: this.cam2dZoom, camera2d: this.camera2d });
+      this.mapRenderer.update({ epoch, gmstDeg, cfg: this.cfg, satellites: this.satellites, hoveredSat: this.hoveredSat, selectedSats: this.selectedSats, cam2dZoom: this.camera.zoom2d, camera2d: this.camera2d });
       this.markerManager.hide();
       this.orbitRenderer.clear();
       this.footprintRenderer.clear();
