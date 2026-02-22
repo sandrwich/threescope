@@ -109,7 +109,7 @@ export class CameraController {
   pan2d(dx: number, dy: number): void {
     const scale = 1.0 / this._targetCam2dZoom;
     this._targetCam2dTarget.x -= dx * scale;
-    this._targetCam2dTarget.y -= dy * scale;
+    this._targetCam2dTarget.y += dy * scale;
   }
 
   /** Apply 3D scroll zoom to targetCamDistance with min-zoom clamping. */
