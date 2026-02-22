@@ -761,6 +761,7 @@ export class App {
     this.cfg.showClouds = uiStore.showClouds;
     this.cfg.showNightLights = uiStore.showNightLights;
     this.moonScene.setShowNight(uiStore.showNightLights);
+    if (!uiStore.showSkybox) this.scene3d.background = new THREE.Color(this.cfg.bgColor);
 
     // Apply initial marker visibility
     for (const g of this.cfg.markerGroups) {
@@ -787,6 +788,9 @@ export class App {
         case 'showNightLights':
           this.cfg.showNightLights = value;
           this.moonScene.setShowNight(value);
+          break;
+        case 'showSkybox':
+          this.scene3d.background = value ? this.starTex : new THREE.Color(this.cfg.bgColor);
           break;
       }
     };

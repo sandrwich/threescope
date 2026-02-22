@@ -72,7 +72,7 @@
 </script>
 
 {#snippet settIcon()}<span class="title-icon">{@html ICON_SETTINGS}</span>{/snippet}
-<DraggableWindow title="Settings" icon={settIcon} bind:open={uiStore.settingsOpen} initialX={10} initialY={470}>
+<DraggableWindow title="Settings" icon={settIcon} bind:open={uiStore.settingsOpen} initialX={10} initialY={490}>
   <h4 class="section-header">Graphics</h4>
   <div class="row">
     <label>Preset</label>

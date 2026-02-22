@@ -36,6 +36,11 @@
         <input type="checkbox" checked={rtxChecked} disabled={isCustomized} onchange={toggleRtx}>
         {isCustomized ? 'Customized' : 'RTX'}
       </label>
+      <label class="toggle-label" title="Show star skybox background">
+          <input type="checkbox" bind:checked={uiStore.showSkybox}
+            onchange={() => uiStore.setToggle('showSkybox', uiStore.showSkybox)}>
+          Skybox
+        </label>
       {#if uiStore.nightToggleVisible}
         <label class="toggle-label" title="Show city lights on dark side">
           <input type="checkbox" bind:checked={uiStore.showNightLights}
