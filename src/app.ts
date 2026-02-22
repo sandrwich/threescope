@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Satellite } from './types';
 import { TargetLock, ViewMode } from './types';
 import { defaultConfig } from './config';
-import { DRAW_SCALE, EARTH_RADIUS_KM, MOON_RADIUS_KM, DEG2RAD, MAP_H } from './constants';
+import { DRAW_SCALE, EARTH_RADIUS_KM, MOON_RADIUS_KM, DEG2RAD, RAD2DEG, MAP_W, MAP_H } from './constants';
 import { TimeSystem } from './simulation/time-system';
 import { Earth } from './scene/earth';
 import { CloudLayer } from './scene/cloud-layer';
@@ -301,6 +301,7 @@ export class App {
       this.hoveredSat = null;
       this.orbitRenderer.precomputeOrbits([], this.timeSystem.currentEpoch);
       uiStore.satStatusText = '0 sats';
+      uiStore.tleLoadState = 'none';
       return;
     }
     try {
@@ -320,10 +321,12 @@ export class App {
       }
       if (result.rateLimited) info += ' — rate limited';
       uiStore.satStatusText = info;
+      uiStore.tleLoadState = result.source === 'network' ? 'fresh' : result.source === 'cache' ? 'cached' : 'stale';
     } catch (e) {
       console.error('Failed to load TLE data:', e);
       const rl = (e as any)?.rateLimited === true;
       uiStore.satStatusText = rl ? 'Rate limited' : 'Load failed';
+      uiStore.tleLoadState = 'failed';
     }
   }
 
@@ -533,6 +536,9 @@ export class App {
       }
     };
 
+    // TLE refresh/retry
+    uiStore.onRefreshTLE = () => this.loadTLEGroup(this.currentGroup, true);
+
     // Mini planet renderer — wait for Svelte to mount the canvas
     this.orreryCtrl.initMiniRenderer();
 
@@ -717,6 +723,39 @@ export class App {
     const activeSat = this.hoveredSat ?? firstSelected;
 
     const earthMode = this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON && !this.orreryCtrl.isOrreryMode;
+
+    // Cursor lat/lon
+    if (earthMode) {
+      if (this.viewMode === ViewMode.VIEW_3D) {
+        this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
+        const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
+        this.tmpSphere.set(this.tmpVec3.set(0, 0, 0), earthR);
+        const hit = this.raycaster.ray.intersectSphere(this.tmpSphere, this.tmpVec3);
+        if (hit) {
+          this.tmpVec3.applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
+          const r = this.tmpVec3.length();
+          uiStore.cursorLatLon = {
+            lat: Math.asin(this.tmpVec3.y / r) * RAD2DEG,
+            lon: Math.atan2(-this.tmpVec3.z, this.tmpVec3.x) * RAD2DEG,
+          };
+        } else {
+          uiStore.cursorLatLon = null;
+        }
+      } else {
+        const wx = (this.input.mouseNDC.x + 1) / 2 * (this.camera2d.right - this.camera2d.left) + this.camera2d.left;
+        const wy = (this.input.mouseNDC.y + 1) / 2 * (this.camera2d.top - this.camera2d.bottom) + this.camera2d.bottom;
+        if (Math.abs(wy) <= MAP_H / 2) {
+          let lon = (wx / MAP_W) * 360;
+          while (lon > 180) lon -= 360;
+          while (lon < -180) lon += 360;
+          uiStore.cursorLatLon = { lat: (wy / MAP_H) * 180, lon };
+        } else {
+          uiStore.cursorLatLon = null;
+        }
+      }
+    } else {
+      uiStore.cursorLatLon = null;
+    }
 
     if (this.viewMode === ViewMode.VIEW_3D) {
       // Update 3D scene

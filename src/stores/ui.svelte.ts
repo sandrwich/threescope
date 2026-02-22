@@ -7,6 +7,8 @@ class UIStore {
   fpsDisplay = $state(0);
   fpsColor = $state('#00ff00');
   satStatusText = $state('');
+  tleLoadState = $state<'fresh' | 'cached' | 'stale' | 'failed' | 'none'>('none');
+  cursorLatLon = $state<{ lat: number; lon: number } | null>(null);
 
   // View
   viewMode = $state(ViewMode.VIEW_3D);
@@ -77,6 +79,7 @@ class UIStore {
   getSatelliteNames: (() => string[]) | null = null;
   getSelectedSatelliteNames: (() => string[]) | null = null;
   onSelectSatelliteByName: ((name: string) => void) | null = null;
+  onRefreshTLE: (() => void) | null = null;
 
   loadToggles() {
     const load = (key: string, defaultVal: boolean): boolean => {
