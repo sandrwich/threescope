@@ -14,3 +14,7 @@ export const ICON_TIME = '<svg viewBox="0 0 16 16" fill="none" stroke="currentCo
 export const ICON_SETTINGS = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.8.5h2.4l.3 1.8.8.3 1.5-1 1.7 1.7-1 1.5.3.8 1.8.3v2.4l-1.8.3-.3.8 1 1.5-1.7 1.7-1.5-1-.8.3-.3 1.8H6.8l-.3-1.8-.8-.3-1.5 1-1.7-1.7 1-1.5-.3-.8L1.4 9.2V6.8l1.8-.3.3-.8-1-1.5 1.7-1.7 1.5 1 .8-.3z"/><circle cx="8" cy="8" r="2.5" fill="var(--ui-bg)"/></svg>';
 
 export const ICON_HELP = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M6 6.5a2 2 0 0 1 3.9.5c0 1.5-2 1.5-2 3" stroke-linecap="round"/><circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none"/></svg>';
+
+export const ICON_3D = '<svg viewBox="0 0 16 16" fill="currentColor" stroke="none"><text x="8" y="12" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">3D</text></svg>';
+
+export const ICON_2D = '<svg viewBox="0 0 16 16" fill="currentColor" stroke="none"><text x="8" y="12" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">2D</text></svg>';

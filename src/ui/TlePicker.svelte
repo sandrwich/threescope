@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { TLE_SOURCES } from '../data/tle-sources';
-  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_HELP } from './shared/icons';
+  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_HELP, ICON_2D, ICON_3D } from './shared/icons';
+  import { ViewMode } from '../types';
 
   let customVisible = $state(false);
   let urlValue = $state('');
@@ -70,6 +71,15 @@
       </button>
       <button class="icon-btn" title="Command Palette (Ctrl+K)" onclick={() => uiStore.commandPaletteOpen = true}>
         {@html ICON_COMMAND}
+      </button>
+    </div>
+
+    <div class="separator"></div>
+
+    <!-- View toggle -->
+    <div class="btn-group">
+      <button class="icon-btn" title="Toggle 2D / 3D (M)" disabled={uiStore.orreryMode} onclick={() => uiStore.onToggleViewMode?.()}>
+        {@html uiStore.viewMode === ViewMode.VIEW_3D ? ICON_2D : ICON_3D}
       </button>
     </div>
 
@@ -148,6 +158,8 @@
     cursor: pointer;
   }
   .icon-btn:hover { color: var(--text-dim); border-color: var(--border); }
+  .icon-btn:disabled { color: var(--text-ghost); cursor: default; opacity: 0.4; }
+  .icon-btn:disabled:hover { color: var(--text-ghost); border-color: transparent; }
   .icon-btn :global(svg) { width: 13px; height: 13px; }
   .text-btn {
     width: auto;

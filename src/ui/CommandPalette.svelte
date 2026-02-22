@@ -51,7 +51,9 @@
     actions.push({ id: 'view-orbits', category: 'View', label: 'Toggle Orbits', keywords: 'trajectories paths', execute: () => { uiStore.setToggle('showOrbits', !uiStore.showOrbits); close(); } });
     actions.push({ id: 'view-clouds', category: 'View', label: 'Toggle Clouds', execute: () => { uiStore.setToggle('showClouds', !uiStore.showClouds); close(); } });
     actions.push({ id: 'view-night', category: 'View', label: 'Toggle Dark Side', keywords: 'night lights cities', execute: () => { uiStore.setToggle('showNightLights', !uiStore.showNightLights); close(); } });
-    actions.push({ id: 'view-2d3d', category: 'View', label: 'Toggle 2D / 3D', shortcut: 'M', keywords: 'map globe', execute: () => { uiStore.onToggleViewMode?.(); close(); } });
+    if (!uiStore.orreryMode) {
+      actions.push({ id: 'view-2d3d', category: 'View', label: 'Toggle 2D / 3D', shortcut: 'M', keywords: 'map globe', execute: () => { uiStore.onToggleViewMode?.(); close(); } });
+    }
 
     // Marker groups
     for (const group of defaultConfig.markerGroups) {

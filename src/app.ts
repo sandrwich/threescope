@@ -669,6 +669,8 @@ export class App {
 
   private enterOrrery() {
     if (this.orreryMode) return;
+    this.viewMode = ViewMode.VIEW_3D;
+    uiStore.viewMode = ViewMode.VIEW_3D;
     this.orreryMode = true;
     this.activePlanet = null;
     this.promotedPlanet = null;
@@ -902,7 +904,9 @@ export class App {
 
     // Command palette: toggle 2D/3D
     uiStore.onToggleViewMode = () => {
+      if (this.orreryMode) return;
       this.viewMode = this.viewMode === ViewMode.VIEW_3D ? ViewMode.VIEW_2D : ViewMode.VIEW_3D;
+      uiStore.viewMode = this.viewMode;
     };
 
     // Command palette: get satellite names for search
@@ -1126,7 +1130,10 @@ export class App {
           break;
         case 'm':
         case 'M':
-          this.viewMode = this.viewMode === ViewMode.VIEW_3D ? ViewMode.VIEW_2D : ViewMode.VIEW_3D;
+          if (!this.orreryMode) {
+            this.viewMode = this.viewMode === ViewMode.VIEW_3D ? ViewMode.VIEW_2D : ViewMode.VIEW_3D;
+            uiStore.viewMode = this.viewMode;
+          }
           break;
       }
     });
