@@ -3,7 +3,8 @@
   import { uiStore } from '../stores/ui.svelte';
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
-  import { ICON_PASSES } from './shared/icons';
+  import { ICON_PASSES, ICON_DOPPLER } from './shared/icons';
+  import { SAT_COLORS } from '../constants';
   import { epochToDate } from '../astro/epoch';
   import type { SatellitePass } from '../passes/pass-types';
 
@@ -75,16 +76,17 @@
     uiStore.polarPlotOpen = true;
   }
 
+  function openDoppler(pass: SatellitePass, idx: number) {
+    uiStore.selectedPassIdx = idx;
+    uiStore.dopplerWindowOpen = true;
+  }
+
   function openSettings() {
     uiStore.settingsOpen = true;
   }
 
   function satColor(colorIndex: number): string {
-    const COLORS = [
-      [228, 3, 3], [255, 140, 0], [255, 237, 0], [0, 128, 38],
-      [37, 77, 197], [115, 42, 130], [191, 191, 191], [91, 206, 250], [245, 169, 184],
-    ];
-    const c = COLORS[colorIndex % COLORS.length];
+    const c = SAT_COLORS[colorIndex % SAT_COLORS.length];
     return `rgb(${c[0]},${c[1]},${c[2]})`;
   }
 
@@ -131,7 +133,7 @@
           <span class="th th-time">Time</span>
           <span class="th th-dur">Dur</span>
           <span class="th th-el">Max El</span>
-          <span class="th th-skip"></span>
+          <span class="th th-actions"></span>
         </div>
         {#each uiStore.passes as pass, i}
           {#if i === 0 || dayKey(pass.aosEpoch) !== dayKey(uiStore.passes[i - 1].aosEpoch)}
@@ -146,8 +148,9 @@
             <span class="td td-time">{formatTime(pass.aosEpoch)} <span class="arrow">&rarr;</span> {formatTime(pass.losEpoch)}</span>
             <span class="td td-dur">{formatDuration(pass.durationSec)}</span>
             <span class="td td-el {elClass(pass.maxEl)}">{pass.maxEl.toFixed(1)}&deg;</span>
-            <span class="td td-skip">
-              <button class="skip-btn" onclick={(e) => { e.stopPropagation(); skipTo(pass, i); }} title="Skip to pass">&#9654;</button>
+            <span class="td td-actions">
+              <button class="action-icon" onclick={(e) => { e.stopPropagation(); openDoppler(pass, i); }} title="Doppler analysis">{@html ICON_DOPPLER}</button>
+              <button class="action-icon" onclick={(e) => { e.stopPropagation(); skipTo(pass, i); }} title="Skip to pass">&#9654;</button>
             </span>
             {#if isActive(pass)}
               <div class="pass-progress" style="width:{progress(pass) * 100}%"></div>
@@ -279,7 +282,7 @@
   .th-time, .td-time { width: 140px; text-align: center; flex-shrink: 0; }
   .th-dur, .td-dur { width: 52px; text-align: right; flex-shrink: 0; }
   .th-el,  .td-el  { width: 48px; text-align: right; flex-shrink: 0; }
-  .th-skip, .td-skip { width: 22px; text-align: center; flex-shrink: 0; }
+  .th-actions, .td-actions { width: 38px; text-align: center; flex-shrink: 0; display: flex; gap: 2px; justify-content: flex-end; }
 
   .arrow {
     color: var(--text-ghost);
@@ -329,15 +332,18 @@
   .el-mid { color: #ffaa00; }
   .el-high { color: #44ff44; }
 
-  .skip-btn {
+  .action-icon {
     background: none;
     border: none;
     color: var(--text-ghost);
     cursor: pointer;
     font-size: 9px;
-    padding: 2px 4px;
+    padding: 2px 3px;
+    display: flex;
+    align-items: center;
   }
-  .skip-btn:hover { color: var(--text-dim); }
+  .action-icon:hover { color: var(--text-dim); }
+  .action-icon :global(svg) { width: 11px; height: 11px; }
 
   .pass-progress {
     position: absolute;

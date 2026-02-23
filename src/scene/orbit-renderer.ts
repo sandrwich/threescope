@@ -1,22 +1,12 @@
 import * as THREE from 'three';
 import type { Satellite } from '../types';
-import { DRAW_SCALE, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S } from '../constants';
+import { DRAW_SCALE, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, SAT_COLORS } from '../constants';
 import { parseHexColor } from '../config';
 import { calculatePosition } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
 
-// Progress Pride flag palette — rainbow + trans flag colors
-export const ORBIT_COLORS = [
-  [0.894, 0.012, 0.012], // Red        #E40303
-  [1.000, 0.553, 0.000], // Orange     #FF8C00
-  [1.000, 0.929, 0.000], // Yellow     #FFED00
-  [0.000, 0.502, 0.149], // Green      #008026
-  [0.145, 0.302, 0.773], // Blue       #254DC5
-  [0.451, 0.165, 0.510], // Violet     #732A82
-  [0.750, 0.750, 0.750], // White      (dimmed below bloom)
-  [0.357, 0.808, 0.980], // Light Blue #5BCEFA
-  [0.961, 0.663, 0.722], // Pink       #F5A9B8
-];
+// SAT_COLORS as 0–1 floats for WebGL
+export const ORBIT_COLORS = SAT_COLORS.map(c => [c[0] / 255, c[1] / 255, c[2] / 255]);
 
 // Default segment counts for orbit visualization
 const SEGMENTS_NORMAL = 90;

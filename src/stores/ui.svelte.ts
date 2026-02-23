@@ -44,6 +44,7 @@ class UIStore {
   selectedSatCount = $state(0);
   passesWindowOpen = $state(false);
   polarPlotOpen = $state(false);
+  dopplerWindowOpen = $state(false);
   passes = $state<SatellitePass[]>([]);
   passesComputing = $state(false);
   passesProgress = $state(0);
@@ -89,6 +90,7 @@ class UIStore {
   onSelectSatelliteByName: ((name: string) => void) | null = null;
   onRefreshTLE: (() => void) | null = null;
   onRequestPasses: (() => void) | null = null;
+  getSatTLE: ((name: string) => { line1: string; line2: string } | null) | null = null;
 
   loadToggles() {
     const load = (key: string, defaultVal: boolean): boolean => {

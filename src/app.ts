@@ -588,6 +588,12 @@ export class App {
       }
     };
 
+    // Doppler: get TLE lines by satellite name
+    uiStore.getSatTLE = (name: string) => {
+      const sat = this.satellites.find(s => s.name === name);
+      return sat ? { line1: sat.tleLine1, line2: sat.tleLine2 } : null;
+    };
+
     // TLE refresh/retry
     uiStore.onRefreshTLE = async () => {
       // Force refetch all enabled CelesTrak sources

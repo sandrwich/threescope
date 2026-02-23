@@ -13,6 +13,7 @@
   import CommandPalette from './CommandPalette.svelte';
   import PassesWindow from './PassesWindow.svelte';
   import PolarPlot from './PolarPlot.svelte';
+  import DopplerWindow from './DopplerWindow.svelte';
   import DataSourcesWindow from './DataSourcesWindow.svelte';
 </script>
 
@@ -31,6 +32,7 @@
   <DataSourcesWindow />
   <PassesWindow />
   <PolarPlot />
+  <DopplerWindow />
   <CommandPalette />
 </div>
 

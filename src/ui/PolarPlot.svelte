@@ -3,16 +3,12 @@
   import { uiStore } from '../stores/ui.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { ICON_POLAR } from './shared/icons';
+  import { SAT_COLORS } from '../constants';
 
   const SIZE = 280;
   const CX = SIZE / 2;
   const CY = SIZE / 2 + 12;
   const R_MAX = (SIZE - 50) / 2;
-
-  const COLORS = [
-    [228, 3, 3], [255, 140, 0], [255, 237, 0], [0, 128, 38],
-    [37, 77, 197], [115, 42, 130], [191, 191, 191], [91, 206, 250], [245, 169, 184],
-  ];
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
   let ctx: CanvasRenderingContext2D | null = null;
@@ -82,7 +78,7 @@
 
     if (selectedPass) {
       const pass = selectedPass;
-      const c = COLORS[pass.satColorIndex % COLORS.length];
+      const c = SAT_COLORS[pass.satColorIndex % SAT_COLORS.length];
       const cssColor = `rgb(${c[0]},${c[1]},${c[2]})`;
 
       // Sky track
@@ -98,26 +94,53 @@
         ctx.stroke();
         ctx.globalAlpha = 1;
 
-        // AOS marker (green square)
+        // AOS marker (cyan square)
         const aos = azElToXY(pass.skyPath[0].az, pass.skyPath[0].el);
-        ctx.fillStyle = '#44ff44';
+        ctx.fillStyle = '#00ffcc';
         ctx.fillRect(aos.x - 3, aos.y - 3, 6, 6);
 
-        // LOS marker (red square)
+        // LOS marker (gray square)
         const los = azElToXY(pass.skyPath[pass.skyPath.length - 1].az, pass.skyPath[pass.skyPath.length - 1].el);
-        ctx.fillStyle = '#ff4444';
+        ctx.fillStyle = '#666666';
         ctx.fillRect(los.x - 3, los.y - 3, 6, 6);
       }
 
-      // Live dot during active pass
+      // Live dot during active pass (pulsating)
       const epoch = timeStore.epoch;
       const live = uiStore.livePassAzEl;
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 250);
       if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch && live) {
         const { x, y } = azElToXY(live.az, live.el);
-        ctx.fillStyle = '#ff0000';
+        ctx.fillStyle = '#44ff44';
+        ctx.globalAlpha = 0.6 + pulse * 0.4;
         ctx.beginPath();
         ctx.arc(x, y, 5, 0, 2 * Math.PI);
         ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // Legend (top-left)
+      ctx.font = `9px ${font}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      let ly = 8;
+      ctx.fillStyle = '#00ffcc';
+      ctx.fillRect(6, ly, 5, 5);
+      ctx.fillStyle = '#666';
+      ctx.fillText('AOS', 14, ly + 3);
+      ly += 10;
+      ctx.fillStyle = '#666666';
+      ctx.fillRect(6, ly, 5, 5);
+      ctx.fillStyle = '#666';
+      ctx.fillText('LOS', 14, ly + 3);
+      if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch) {
+        ly += 10;
+        ctx.fillStyle = '#44ff44';
+        ctx.beginPath();
+        ctx.arc(8, ly + 3, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = '#666';
+        ctx.fillText('Live', 14, ly + 3);
       }
 
       // --- Info panel below plot ---
@@ -127,8 +150,12 @@
 
       // Row 1: sat name (left) + max el (right)
       ctx.fillStyle = cssColor;
+      ctx.beginPath();
+      ctx.arc(12, infoY + 6, 3.5, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.fillStyle = '#999';
       ctx.textAlign = 'left';
-      ctx.fillText(pass.satName, 8, infoY);
+      ctx.fillText(pass.satName, 20, infoY);
       ctx.fillStyle = '#666';
       ctx.textAlign = 'right';
       ctx.fillText(`Max ${pass.maxEl.toFixed(0)}\u00B0`, SIZE - 8, infoY);

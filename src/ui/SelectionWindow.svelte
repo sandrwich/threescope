@@ -1,7 +1,7 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import { uiStore } from '../stores/ui.svelte';
-  import { ICON_SELECTION } from './shared/icons';
+  import { ICON_SELECTION, ICON_PASSES } from './shared/icons';
 
   let expandedSats = $state(new Set<string>());
   let searchQuery = $state('');
@@ -75,6 +75,11 @@
     uiStore.onDeselectAll?.();
   }
 
+  function togglePasses() {
+    uiStore.passesWindowOpen = !uiStore.passesWindowOpen;
+    if (uiStore.passesWindowOpen) uiStore.onRequestPasses?.();
+  }
+
   function colorStyle(c: [number, number, number]) {
     return `background: rgb(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)})`;
   }
@@ -121,6 +126,7 @@
     {:else}
       <div class="header-row">
         <span class="count">{uiStore.selectedSatData.length} selected</span>
+        <button class="passes-btn" onclick={togglePasses} title="Predict passes">{@html ICON_PASSES} Passes</button>
         <button class="clear-btn" onclick={clearAll}>Clear</button>
       </div>
       <div class="sat-list">
@@ -227,6 +233,7 @@
     letter-spacing: 0.5px;
   }
   .clear-btn {
+    margin-left: 6px;
     background: none;
     border: 1px solid var(--border);
     color: var(--text-ghost);
@@ -237,6 +244,23 @@
     text-transform: uppercase;
     letter-spacing: 0.3px;
   }
+  .passes-btn {
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-ghost);
+    font-size: 10px;
+    font-family: inherit;
+    padding: 1px 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .passes-btn:hover { color: var(--text-dim); border-color: var(--border-hover); }
+  .passes-btn :global(svg) { width: 10px; height: 10px; }
   .clear-btn:hover { color: var(--text-dim); border-color: var(--border-hover); }
 
   .sat-list {
