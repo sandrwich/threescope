@@ -125,7 +125,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    min-width: 220px;
+    width: 280px;
   }
   .section {
     display: flex;
@@ -144,6 +144,7 @@
     gap: 2px;
     max-height: 280px;
     overflow-y: auto;
+    padding-right: 10px;
   }
   .custom-list {
     max-height: 120px;
@@ -181,6 +182,7 @@
 
   .source-name {
     flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
