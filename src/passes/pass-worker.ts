@@ -52,11 +52,12 @@ function computePassesForSat(
   name: string, line1: string, line2: string, colorIndex: number,
   obsLat: number, obsLon: number, obsAlt: number,
   startEpoch: number, durationDays: number, minEl: number,
+  stepMinutes: number = 1,
 ): SatellitePass[] {
   const satrec = twoline2satrec(line1, line2);
   const passes: SatellitePass[] = [];
-  const minuteStep = 1.0 / 1440.0; // 1 minute in epoch days
-  const totalSteps = Math.round(durationDays * 1440);
+  const minuteStep = stepMinutes / 1440.0;
+  const totalSteps = Math.round(durationDays * 1440 / stepMinutes);
 
   let t = startEpoch;
 
@@ -157,6 +158,7 @@ self.onmessage = (e: MessageEvent<PassRequest>) => {
   const req = e.data;
   if (req.type !== 'compute') return;
 
+  const step = req.stepMinutes ?? 1;
   const allPasses: SatellitePass[] = [];
 
   for (let i = 0; i < req.satellites.length; i++) {
@@ -165,6 +167,7 @@ self.onmessage = (e: MessageEvent<PassRequest>) => {
       sat.name, sat.line1, sat.line2, sat.colorIndex,
       req.observerLat, req.observerLon, req.observerAlt,
       req.startEpoch, req.durationDays, req.minElevation,
+      step,
     );
     allPasses.push(...passes);
 

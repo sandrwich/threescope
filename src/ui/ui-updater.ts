@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Satellite, SelectedSatInfo } from '../types';
 import { ViewMode } from '../types';
 import { DRAW_SCALE, EARTH_RADIUS_KM, MU, RAD2DEG, DEG2RAD, MAP_W, TWO_PI } from '../constants';
+import { getCorrectedElements } from '../astro/propagator';
 import { ORBIT_COLORS } from '../scene/orbit-renderer';
 import { computeApsis, computeApsis2D } from '../astro/apsis';
 import { getMapCoordinates } from '../astro/coordinates';
@@ -55,7 +56,7 @@ export class UIUpdater {
         lonDeg,
         incDeg: sat.inclination * RAD2DEG,
         eccen: sat.eccentricity,
-        raanDeg: sat.raan * RAD2DEG,
+        raanDeg: getCorrectedElements(sat, currentEpoch).raan * RAD2DEG,
         periodMin: (TWO_PI / sat.meanMotion) / 60,
       });
       selIdx++;

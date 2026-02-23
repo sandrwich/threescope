@@ -7,6 +7,7 @@
   let {
     title = '',
     icon = undefined as any,
+    headerExtra = undefined as any,
     open = $bindable(true),
     initialX = 10,
     initialY = 50,
@@ -14,6 +15,7 @@
   }: {
     title?: string;
     icon?: any;
+    headerExtra?: any;
     open?: boolean;
     initialX?: number;
     initialY?: number;
@@ -113,6 +115,7 @@
         {#if icon}{@render icon()}{/if}
         {title}
       </span>
+      {#if headerExtra}{@render headerExtra()}{/if}
       <button class="window-close" onclick={() => open = false}>&times;</button>
     </div>
     <div class="window-body">

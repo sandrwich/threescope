@@ -51,6 +51,19 @@ class UIStore {
   selectedPassIdx = $state(-1);
   livePassAzEl = $state<{ az: number; el: number } | null>(null);
 
+  // Nearby passes tab
+  passesTab = $state<'selected' | 'nearby'>('selected');
+  nearbyPasses = $state<SatellitePass[]>([]);
+  nearbyComputing = $state(false);
+  nearbyProgress = $state(0);
+  nearbyPhase = $state<'idle' | 'quick' | 'full' | 'done'>('idle');
+  nearbyFilteredCount = $state(0);
+  nearbyTotalCount = $state(0);
+
+  get activePassList(): SatellitePass[] {
+    return this.passesTab === 'selected' ? this.passes : this.nearbyPasses;
+  }
+
   // Hover tooltip — content set via store, position set via direct DOM
   satInfoVisible = $state(false);
   satInfoName = $state('');
@@ -90,6 +103,8 @@ class UIStore {
   onSelectSatelliteByName: ((name: string) => void) | null = null;
   onRefreshTLE: (() => void) | null = null;
   onRequestPasses: (() => void) | null = null;
+  onRequestNearbyPasses: (() => void) | null = null;
+  onSelectSatFromNearbyPass: ((name: string) => void) | null = null;
   getSatTLE: ((name: string) => { line1: string; line2: string } | null) | null = null;
 
   loadToggles() {

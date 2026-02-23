@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Satellite } from '../types';
 import { DRAW_SCALE, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, SAT_COLORS } from '../constants';
 import { parseHexColor } from '../config';
-import { calculatePosition } from '../astro/propagator';
+import { calculatePosition, getCorrectedElements } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
 
 // SAT_COLORS as 0–1 floats for WebGL
@@ -196,18 +196,15 @@ export class OrbitRenderer {
     const periVertsPerOrbit = this.perifocalVertsPerOrbit;
     const periFloatsPerOrbit = periVertsPerOrbit * 2;
     const eciFloatsPerOrbit = this.precomputedFloatsPerOrbit;
-    const currentUnix = epochToUnix(currentEpoch);
 
     for (let s = 0; s < sats.length; s++) {
       const sat = sats[s];
 
-      // Time delta from TLE epoch (seconds)
-      const deltaS = currentUnix - epochToUnix(sat.epochDays);
-
       // Orientation angles (with or without J2 secular correction)
-      const raan = this.j2Enabled ? sat.raan + sat.raanRate * deltaS : sat.raan;
-      const w = this.j2Enabled ? sat.argPerigee + sat.argPerigeeRate * deltaS : sat.argPerigee;
-      const inc = sat.inclination; // no secular J2 change
+      const corrected = this.j2Enabled ? getCorrectedElements(sat, currentEpoch) : null;
+      const raan = corrected ? corrected.raan : sat.raan;
+      const w = corrected ? corrected.argPerigee : sat.argPerigee;
+      const inc = sat.inclination;
 
       // Build rotation matrix R = Rz(-Ω) · Rx(-i) · Rz(-ω)
       const cosO = Math.cos(raan), sinO = Math.sin(raan);

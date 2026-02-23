@@ -26,6 +26,7 @@ export interface PassRequest {
   startEpoch: number;     // TLE epoch
   durationDays: number;
   minElevation: number;   // degrees
+  stepMinutes?: number;   // scan step size (default 1)
 }
 
 export interface PassResponse {

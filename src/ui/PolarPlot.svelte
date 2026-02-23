@@ -15,8 +15,8 @@
   let animFrameId = 0;
 
   let selectedPass = $derived(
-    uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.passes.length
-      ? uiStore.passes[uiStore.selectedPassIdx]
+    uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.activePassList.length
+      ? uiStore.activePassList[uiStore.selectedPassIdx]
       : null
   );
 

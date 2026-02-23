@@ -36,8 +36,8 @@
   let hoverX = -1; // CSS-pixel x relative to canvas, -1 = not hovering
 
   let selectedPass = $derived(
-    uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.passes.length
-      ? uiStore.passes[uiStore.selectedPassIdx]
+    uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.activePassList.length
+      ? uiStore.activePassList[uiStore.selectedPassIdx]
       : null
   );
 

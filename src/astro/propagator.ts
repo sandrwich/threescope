@@ -1,7 +1,7 @@
 import * as satellite from 'satellite.js';
 import * as THREE from 'three';
 import type { Satellite } from '../types';
-import { normalizeEpoch } from './epoch';
+import { normalizeEpoch, epochToUnix } from './epoch';
 import { J2, EARTH_RADIUS_EQ_KM } from '../constants';
 
 /**
@@ -72,6 +72,18 @@ export function parseTLE(name: string, line1: string, line2: string): Satellite 
   } catch {
     return null;
   }
+}
+
+/**
+ * Return J2-corrected RAAN and argument of perigee at the given epoch.
+ * Uses precomputed secular rates on the Satellite object.
+ */
+export function getCorrectedElements(sat: Satellite, currentEpoch: number): { raan: number; argPerigee: number } {
+  const deltaS = epochToUnix(currentEpoch) - epochToUnix(sat.epochDays);
+  return {
+    raan: sat.raan + sat.raanRate * deltaS,
+    argPerigee: sat.argPerigee + sat.argPerigeeRate * deltaS,
+  };
 }
 
 export function calculatePosition(sat: Satellite, currentEpoch: number): THREE.Vector3 {

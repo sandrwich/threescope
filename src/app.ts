@@ -84,6 +84,9 @@ export class App {
   private prevSelectedSats = new Set<Satellite>();
   private cfg = { ...defaultConfig };
   private passPredictor = new PassPredictor();
+  private nearbyPredictor = new PassPredictor();
+  private nearbyPhase: 'idle' | 'quick' | 'full' | 'done' = 'idle';
+  private nearbySatsSnapshot: { name: string; line1: string; line2: string; colorIndex: number }[] = [];
   private lastPassSatsVersion = -1;
   private overlayEl!: HTMLElement;
 
@@ -402,6 +405,15 @@ export class App {
     this.satellites = deduped;
     this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
 
+    // Invalidate nearby passes when satellite data changes
+    if (this.nearbyPhase !== 'idle') {
+      uiStore.nearbyPasses = [];
+      uiStore.nearbyPhase = 'idle';
+      uiStore.nearbyComputing = false;
+      this.nearbyPhase = 'idle';
+      this.nearbyPredictor.dispose();
+    }
+
     sourcesStore.totalSats = deduped.length;
     sourcesStore.dupsRemoved = dupsRemoved;
     let statusText = `${deduped.length} sats`;
@@ -614,8 +626,48 @@ export class App {
       uiStore.passesProgress = pct;
     };
     uiStore.onRequestPasses = () => this.requestPasses();
+
+    // Nearby pass predictor
+    this.nearbyPredictor.onResult = (passes) => {
+      if (this.nearbyPhase === 'quick') {
+        uiStore.nearbyPasses = passes;
+        uiStore.nearbyPhase = 'full';
+        this.nearbyPhase = 'full';
+        uiStore.nearbyProgress = 0;
+        this.nearbyPredictor.compute({
+          type: 'compute',
+          satellites: this.nearbySatsSnapshot,
+          observerLat: observerStore.location.lat,
+          observerLon: observerStore.location.lon,
+          observerAlt: observerStore.location.alt,
+          startEpoch: timeStore.epoch,
+          durationDays: 1,
+          minElevation: 0,
+          stepMinutes: 3,
+        });
+      } else if (this.nearbyPhase === 'full') {
+        uiStore.nearbyPasses = passes;
+        uiStore.nearbyComputing = false;
+        uiStore.nearbyPhase = 'done';
+        this.nearbyPhase = 'done';
+        uiStore.nearbyProgress = 0;
+      }
+    };
+    this.nearbyPredictor.onProgress = (pct) => {
+      uiStore.nearbyProgress = pct;
+    };
+    uiStore.onRequestNearbyPasses = () => this.requestNearbyPasses();
+    uiStore.onSelectSatFromNearbyPass = (name: string) => {
+      const sat = this.satellites.find(s => s.name === name);
+      if (sat && !this.selectedSats.has(sat)) {
+        this.selectedSats.add(sat);
+        this.selectedSatsVersion++;
+      }
+    };
+
     observerStore.onLocationChange = () => {
-      if (uiStore.passesWindowOpen) this.requestPasses();
+      if (uiStore.passesWindowOpen && uiStore.passesTab === 'selected') this.requestPasses();
+      if (uiStore.passesWindowOpen && uiStore.passesTab === 'nearby') this.requestNearbyPasses();
       this.updateObserverMarker();
     };
     // Load elevation grid in background
@@ -687,6 +739,58 @@ export class App {
       minElevation: 0,
     });
     this.lastPassSatsVersion = this.selectedSatsVersion;
+  }
+
+  private filterByInclination(sats: Satellite[], observerLatDeg: number): Satellite[] {
+    const obsLatRad = Math.abs(observerLatDeg) * DEG2RAD;
+    return sats.filter(sat => {
+      // Use apogee distance for conservative bound (satellite is highest → largest footprint)
+      const apogee = sat.semiMajorAxis * (1 + sat.eccentricity);
+      const reachAngle = Math.acos(Math.min(1, EARTH_RADIUS_KM / apogee));
+      return sat.inclination + reachAngle >= obsLatRad;
+    });
+  }
+
+  private requestNearbyPasses() {
+    if (!observerStore.isSet || this.satellites.length === 0) {
+      uiStore.nearbyPasses = [];
+      uiStore.nearbyComputing = false;
+      uiStore.nearbyPhase = 'idle';
+      return;
+    }
+
+    const filtered = this.filterByInclination(this.satellites, observerStore.location.lat);
+    uiStore.nearbyFilteredCount = filtered.length;
+    uiStore.nearbyTotalCount = this.satellites.length;
+
+    if (filtered.length === 0) {
+      uiStore.nearbyPasses = [];
+      uiStore.nearbyComputing = false;
+      uiStore.nearbyPhase = 'done';
+      return;
+    }
+
+    const sats = filtered.map((sat, idx) => ({
+      name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx,
+    }));
+    this.nearbySatsSnapshot = sats;
+
+    this.nearbyPhase = 'quick';
+    uiStore.nearbyComputing = true;
+    uiStore.nearbyProgress = 0;
+    uiStore.nearbyPhase = 'quick';
+
+    this.nearbyPredictor.compute({
+      type: 'compute',
+      satellites: sats,
+      observerLat: observerStore.location.lat,
+      observerLon: observerStore.location.lon,
+      observerAlt: observerStore.location.alt,
+      startEpoch: timeStore.epoch,
+      durationDays: 4 / 24,
+      minElevation: 0,
+      stepMinutes: 3,
+    });
   }
 
   private updateObserverMarker() {
@@ -1049,8 +1153,8 @@ export class App {
     }
 
     // Pass predictor: compute live az/el for polar plot
-    if (uiStore.polarPlotOpen && uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.passes.length) {
-      const pass = uiStore.passes[uiStore.selectedPassIdx];
+    if (uiStore.polarPlotOpen && uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.activePassList.length) {
+      const pass = uiStore.activePassList[uiStore.selectedPassIdx];
       if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch) {
         const sat = this.satellites.find(s => s.name === pass.satName);
         if (sat) {

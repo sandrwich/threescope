@@ -64,12 +64,20 @@
     return (timeStore.epoch - pass.aosEpoch) / (pass.losEpoch - pass.aosEpoch);
   }
 
+  function autoSelect(pass: SatellitePass) {
+    if (uiStore.passesTab === 'nearby') {
+      uiStore.onSelectSatFromNearbyPass?.(pass.satName);
+    }
+  }
+
   function openPolar(pass: SatellitePass, idx: number) {
+    autoSelect(pass);
     uiStore.selectedPassIdx = idx;
     uiStore.polarPlotOpen = true;
   }
 
   function skipTo(pass: SatellitePass, idx: number) {
+    autoSelect(pass);
     const target = pass.aosEpoch - (30 / 86400);
     timeStore.warpToEpoch(target);
     uiStore.selectedPassIdx = idx;
@@ -77,6 +85,7 @@
   }
 
   function openDoppler(pass: SatellitePass, idx: number) {
+    autoSelect(pass);
     uiStore.selectedPassIdx = idx;
     uiStore.dopplerWindowOpen = true;
   }
@@ -90,75 +99,151 @@
     return `rgb(${c[0]},${c[1]},${c[2]})`;
   }
 
+  function switchTab(tab: 'selected' | 'nearby') {
+    uiStore.passesTab = tab;
+    uiStore.selectedPassIdx = -1;
+    if (tab === 'nearby' && uiStore.nearbyPhase === 'idle') {
+      uiStore.onRequestNearbyPasses?.();
+    }
+    if (tab === 'selected') {
+      uiStore.onRequestPasses?.();
+    }
+  }
+
   let hasSelectedSats = $derived(uiStore.selectedSatCount > 0);
   let passCount = $derived(uiStore.passes.length);
+  let nearbyCount = $derived(uiStore.nearbyPasses.length);
+  let isNearby = $derived(uiStore.passesTab === 'nearby');
   let headerEl: HTMLDivElement | undefined = $state();
   let headerH = $derived(headerEl?.offsetHeight ?? 0);
 </script>
 
 {#snippet passesIcon()}<span class="title-icon">{@html ICON_PASSES}</span>{/snippet}
-<DraggableWindow title="Passes" icon={passesIcon} bind:open={uiStore.passesWindowOpen} initialX={9999} initialY={450}>
+
+{#snippet passTable(passes: SatellitePass[])}
+  <div class="table-wrap">
+    <div class="table-header" bind:this={headerEl}>
+      <span class="th th-sat">Satellite</span>
+      <span class="th th-time">Time</span>
+      <span class="th th-dur">Dur</span>
+      <span class="th th-el">Max El</span>
+      <span class="th th-actions"></span>
+    </div>
+    {#each passes as pass, i}
+      {#if i === 0 || dayKey(pass.aosEpoch) !== dayKey(passes[i - 1].aosEpoch)}
+        <div class="day-header" style="top:{headerH}px">{dayLabel(pass.aosEpoch)}</div>
+      {/if}
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
+      <div class="pass-row" class:active={isActive(pass)} onclick={() => openPolar(pass, i)}>
+        <span class="td td-sat">
+          <span class="color-dot" style="background:{satColor(pass.satColorIndex)}"></span>
+          <span class="sat-name" title={pass.satName}>{pass.satName}</span>
+        </span>
+        <span class="td td-time">{formatTime(pass.aosEpoch)} <span class="arrow">&rarr;</span> {formatTime(pass.losEpoch)}</span>
+        <span class="td td-dur">{formatDuration(pass.durationSec)}</span>
+        <span class="td td-el {elClass(pass.maxEl)}">{pass.maxEl.toFixed(1)}&deg;</span>
+        <span class="td td-actions">
+          <button class="action-icon" onclick={(e) => { e.stopPropagation(); openDoppler(pass, i); }} title="Doppler analysis">{@html ICON_DOPPLER}</button>
+          <button class="action-icon" onclick={(e) => { e.stopPropagation(); skipTo(pass, i); }} title="Skip to pass">&#9654;</button>
+        </span>
+        {#if isActive(pass)}
+          <div class="pass-progress" style="width:{progress(pass) * 100}%"></div>
+        {/if}
+      </div>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet headerTabs()}
+  {#if observerStore.isSet}
+    <div class="tab-bar">
+      <button class="tab-btn" class:active={!isNearby} onclick={() => switchTab('selected')}>Selected</button>
+      <button class="tab-btn" class:active={isNearby} onclick={() => switchTab('nearby')}>All Nearby</button>
+    </div>
+  {/if}
+{/snippet}
+
+<DraggableWindow title="Passes" icon={passesIcon} headerExtra={headerTabs} bind:open={uiStore.passesWindowOpen} initialX={9999} initialY={450}>
   <div class="pw">
     {#if !observerStore.isSet}
       <div class="prompt">
         <p>Set your observer location to predict satellite passes.</p>
         <button class="action-btn" onclick={openSettings}>Open Settings</button>
       </div>
-    {:else if !hasSelectedSats}
-      <div class="prompt">
-        <p>Select satellites to predict passes.</p>
-      </div>
-    {:else if uiStore.passesComputing}
-      <div class="computing">
-        <div class="progress-track">
-          <div class="progress-fill" style="width:{uiStore.passesProgress}%"></div>
-        </div>
-        <span class="computing-label">Computing passes...</span>
-      </div>
-    {:else if passCount === 0}
-      <div class="prompt">
-        <p>No passes in the next 3 days.</p>
-      </div>
-    {:else}
-      <div class="top-bar">
-        <span class="observer-loc">
-          {observerStore.displayName}{#if observerStore.location.alt > 0}, {observerStore.location.alt}m{/if}
-          <button class="edit-btn" onclick={openSettings} title="Edit observer">&#9998;</button>
-        </span>
-        <span class="pass-count">{passCount} pass{passCount !== 1 ? 'es' : ''}</span>
-      </div>
-      <div class="table-wrap">
-        <div class="table-header" bind:this={headerEl}>
-          <span class="th th-sat">Satellite</span>
-          <span class="th th-time">Time</span>
-          <span class="th th-dur">Dur</span>
-          <span class="th th-el">Max El</span>
-          <span class="th th-actions"></span>
-        </div>
-        {#each uiStore.passes as pass, i}
-          {#if i === 0 || dayKey(pass.aosEpoch) !== dayKey(uiStore.passes[i - 1].aosEpoch)}
-            <div class="day-header" style="top:{headerH}px">{dayLabel(pass.aosEpoch)}</div>
-          {/if}
-          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
-          <div class="pass-row" class:active={isActive(pass)} onclick={() => openPolar(pass, i)}>
-            <span class="td td-sat">
-              <span class="color-dot" style="background:{satColor(pass.satColorIndex)}"></span>
-              <span class="sat-name" title={pass.satName}>{pass.satName}</span>
+    {:else if !isNearby}
+        <!-- Selected tab -->
+        {#if !hasSelectedSats}
+          <div class="prompt"><p>Select satellites to predict passes.</p></div>
+        {:else if uiStore.passesComputing}
+          <div class="computing">
+            <div class="progress-track">
+              <div class="progress-fill" style="width:{uiStore.passesProgress}%"></div>
+            </div>
+            <span class="computing-label">Computing passes...</span>
+          </div>
+        {:else if passCount === 0}
+          <div class="prompt"><p>No passes in the next 3 days.</p></div>
+        {:else}
+          <div class="top-bar">
+            <span class="observer-loc">
+              {observerStore.displayName}{#if observerStore.location.alt > 0}, {observerStore.location.alt}m{/if}
+              <button class="edit-btn" onclick={openSettings} title="Edit observer">&#9998;</button>
             </span>
-            <span class="td td-time">{formatTime(pass.aosEpoch)} <span class="arrow">&rarr;</span> {formatTime(pass.losEpoch)}</span>
-            <span class="td td-dur">{formatDuration(pass.durationSec)}</span>
-            <span class="td td-el {elClass(pass.maxEl)}">{pass.maxEl.toFixed(1)}&deg;</span>
-            <span class="td td-actions">
-              <button class="action-icon" onclick={(e) => { e.stopPropagation(); openDoppler(pass, i); }} title="Doppler analysis">{@html ICON_DOPPLER}</button>
-              <button class="action-icon" onclick={(e) => { e.stopPropagation(); skipTo(pass, i); }} title="Skip to pass">&#9654;</button>
+            <span class="pass-count">{passCount} pass{passCount !== 1 ? 'es' : ''}</span>
+          </div>
+          {@render passTable(uiStore.passes)}
+        {/if}
+
+      {:else}
+        <!-- All Nearby tab -->
+        {#if uiStore.nearbyComputing && uiStore.nearbyPhase === 'quick' && nearbyCount === 0}
+          <div class="computing">
+            <div class="progress-track">
+              <div class="progress-fill" style="width:{uiStore.nearbyProgress}%"></div>
+            </div>
+            <span class="computing-label">Scanning {uiStore.nearbyFilteredCount} satellites (4h)...</span>
+            <span class="filter-info">{uiStore.nearbyFilteredCount} of {uiStore.nearbyTotalCount} visible from observer</span>
+          </div>
+        {:else if nearbyCount > 0 || uiStore.nearbyPhase === 'done'}
+          <div class="top-bar">
+            <span class="observer-loc">
+              {observerStore.displayName}{#if observerStore.location.alt > 0}, {observerStore.location.alt}m{/if}
+              <button class="edit-btn" onclick={openSettings} title="Edit observer">&#9998;</button>
             </span>
-            {#if isActive(pass)}
-              <div class="pass-progress" style="width:{progress(pass) * 100}%"></div>
+            {#if uiStore.nearbyComputing}
+              <span class="pass-count phase-label">Extending to 24h...</span>
+            {:else}
+              <span class="pass-count">{nearbyCount} pass{nearbyCount !== 1 ? 'es' : ''}</span>
             {/if}
           </div>
-        {/each}
-      </div>
-    {/if}
+          {#if uiStore.nearbyComputing}
+            <div class="progress-track narrow"><div class="progress-fill" style="width:{uiStore.nearbyProgress}%"></div></div>
+          {/if}
+          {#if nearbyCount > 0}
+            {@render passTable(uiStore.nearbyPasses)}
+          {:else}
+            <div class="prompt">
+              <p>No nearby passes in the next 24 hours.</p>
+              <span class="filter-info">{uiStore.nearbyFilteredCount} of {uiStore.nearbyTotalCount} satellites checked</span>
+            </div>
+          {/if}
+        {:else if uiStore.nearbyPhase === 'idle'}
+          <div class="prompt"><p>Loading...</p></div>
+        {:else}
+          <div class="computing">
+            <div class="progress-track">
+              <div class="progress-fill" style="width:{uiStore.nearbyProgress}%"></div>
+            </div>
+            <span class="computing-label">
+              {#if uiStore.nearbyPhase === 'full'}
+                Extending to 24h ({nearbyCount} passes so far)...
+              {:else}
+                Scanning {uiStore.nearbyFilteredCount} satellites...
+              {/if}
+            </span>
+          </div>
+        {/if}
+      {/if}
   </div>
 </DraggableWindow>
 
@@ -166,6 +251,31 @@
   .pw {
     min-width: 400px;
     max-width: 520px;
+  }
+
+  /* Tab bar (lives in titlebar via headerExtra) */
+  .tab-bar {
+    display: flex;
+    gap: 1px;
+    margin-left: auto;
+    margin-right: 6px;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    color: var(--text-ghost);
+    font-size: 10px;
+    font-family: inherit;
+    padding: 1px 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    opacity: 0.5;
+  }
+  .tab-btn:hover { opacity: 0.8; }
+  .tab-btn.active {
+    color: var(--text-muted);
+    opacity: 1;
   }
 
   /* Empty-state prompts */
@@ -204,10 +314,26 @@
     width: 100%;
     margin-bottom: 4px;
   }
+  .progress-track.narrow {
+    margin-bottom: 6px;
+  }
   .progress-fill {
     height: 100%;
     background: var(--text-ghost);
     transition: width 0.15s;
+  }
+  .filter-info {
+    font-size: 10px;
+    color: var(--text-ghost);
+    display: block;
+    margin-top: 4px;
+  }
+  .phase-label {
+    animation: pulse-dim 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-dim {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
   }
 
   /* Top bar: observer + count */
