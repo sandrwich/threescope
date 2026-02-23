@@ -35,6 +35,29 @@ export function createPinTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+/** Generate a diamond/rhombus marker texture on a canvas (replaces smallmark.png). */
+export function createDiamondTexture(): THREE.CanvasTexture {
+  const S = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+
+  const cx = S / 2, cy = S / 2, r = S * 0.42;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r, cy);
+  ctx.lineTo(cx, cy + r);
+  ctx.lineTo(cx - r, cy);
+  ctx.closePath();
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 interface GroupEntry {
   group: MarkerGroup;
   sprites: THREE.Sprite[];

@@ -11,13 +11,12 @@ import { epochToGmst } from '../astro/epoch';
 import { calculateSunPosition } from '../astro/sun';
 import { computeApsis2D } from '../astro/apsis';
 import { uiStore } from '../stores/ui.svelte';
-import { createPinTexture } from './marker-manager';
+import { createPinTexture, createDiamondTexture } from './marker-manager';
 
 export interface MapRendererInit {
   dayTex: THREE.Texture;
   nightTex: THREE.Texture;
   satTex: THREE.Texture;
-  smallmarkTex: THREE.Texture;
   markerGroups: MarkerGroup[];
   overlay: HTMLElement;
   cfg: AppConfig;
@@ -66,7 +65,7 @@ export class MapRenderer {
   private apsisColorBuffer2d!: THREE.BufferAttribute;
 
   constructor(scene2d: THREE.Scene, init: MapRendererInit) {
-    const { dayTex, nightTex, satTex, smallmarkTex, markerGroups, overlay, cfg } = init;
+    const { dayTex, nightTex, satTex, markerGroups, overlay, cfg } = init;
 
     // 2D map plane
     this.mapMaterial = new THREE.ShaderMaterial({
@@ -264,8 +263,10 @@ export class MapRenderer {
     apsisGeo2d.setAttribute('position', this.apsisPosBuffer2d);
     apsisGeo2d.setAttribute('color', this.apsisColorBuffer2d);
     apsisGeo2d.setDrawRange(0, 0);
+    const diamondTex = createDiamondTexture();
     this.apsisPoints2d = new THREE.Points(apsisGeo2d, new THREE.PointsMaterial({
-      size: 10, sizeAttenuation: false, vertexColors: true, transparent: true, depthTest: false,
+      size: 12, sizeAttenuation: false, vertexColors: true, transparent: true, depthTest: false,
+      map: diamondTex, alphaTest: 0.1,
     }));
     this.apsisPoints2d.frustumCulled = false;
     scene2d.add(this.apsisPoints2d);

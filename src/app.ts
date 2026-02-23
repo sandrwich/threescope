@@ -11,7 +11,7 @@ import { SunScene } from './scene/sun-scene';
 import { SatelliteManager } from './scene/satellite-manager';
 import { OrbitRenderer, ORBIT_COLORS } from './scene/orbit-renderer';
 import { FootprintRenderer, type FootprintEntry } from './scene/footprint-renderer';
-import { MarkerManager } from './scene/marker-manager';
+import { MarkerManager, createDiamondTexture } from './scene/marker-manager';
 import { PostProcessing } from './scene/post-processing';
 import { getMinZoom, BODIES, PLANETS, type PlanetDef } from './bodies';
 import { type GraphicsSettings, DEFAULT_PRESET, getPresetSettings } from './graphics';
@@ -98,7 +98,6 @@ export class App {
   // 3D apsis sprites
   private periSprite3d!: THREE.Sprite;
   private apoSprite3d!: THREE.Sprite;
-  private smallmarkTex!: THREE.Texture;
 
   // Input handler (mouse/touch/keyboard events)
   private input!: InputHandler;
@@ -218,16 +217,14 @@ export class App {
       loader.load(url, resolve, undefined, () => resolve(new THREE.Texture()));
     });
 
-    const [dayTex, nightTex, cloudTex, moonTex, satTex, starTex, smallmarkTex] = await Promise.all([
+    const [dayTex, nightTex, cloudTex, moonTex, satTex, starTex] = await Promise.all([
       load('/textures/earth/color.webp'),
       load('/textures/earth/night.webp'),
       load('/textures/earth/clouds.webp'),
       load('/textures/moon/color.webp'),
       load('/textures/ui/sat_icon.png'),
       load('/textures/stars.webp'),
-      load('/textures/ui/smallmark.png'),
     ]);
-    this.smallmarkTex = smallmarkTex;
 
     for (const tex of [dayTex, nightTex, cloudTex, moonTex]) {
       tex.flipY = false;
@@ -279,20 +276,21 @@ export class App {
     this.geoOverlay.setCountriesUrl('/data/countries-110m.json');
 
     this.mapRenderer = new MapRenderer(this.scene2d, {
-      dayTex, nightTex, satTex, smallmarkTex,
+      dayTex, nightTex, satTex,
       markerGroups: this.cfg.markerGroups,
       overlay,
       cfg: this.cfg,
     });
 
     // 3D apsis sprites (diamond icons at periapsis/apoapsis)
-    const periMat = new THREE.SpriteMaterial({ map: smallmarkTex, color: 0x87ceeb, depthTest: false, transparent: true });
+    const diamondTex = createDiamondTexture();
+    const periMat = new THREE.SpriteMaterial({ map: diamondTex, color: 0x87ceeb, depthTest: false, transparent: true, alphaTest: 0.1 });
     this.periSprite3d = new THREE.Sprite(periMat);
     this.periSprite3d.scale.set(0.03, 0.03, 1);
     this.periSprite3d.visible = false;
     this.scene3d.add(this.periSprite3d);
 
-    const apoMat = new THREE.SpriteMaterial({ map: smallmarkTex, color: 0xffa500, depthTest: false, transparent: true });
+    const apoMat = new THREE.SpriteMaterial({ map: diamondTex, color: 0xffa500, depthTest: false, transparent: true, alphaTest: 0.1 });
     this.apoSprite3d = new THREE.Sprite(apoMat);
     this.apoSprite3d.scale.set(0.03, 0.03, 1);
     this.apoSprite3d.visible = false;
