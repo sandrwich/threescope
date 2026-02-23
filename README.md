@@ -4,6 +4,10 @@ A Three.js port of [TLEscope](https://github.com/aweeri/TLEscope) by [aweeri](ht
 
 This version runs entirely in the browser as a static web app with PWA support, making it installable and usable offline on any device.
 
+![Main view](docs/screenshots/main.webp)
+![Moon view](docs/screenshots/moon.webp)
+![Solar system orrery](docs/screenshots/orrery.webp)
+
 ## Attribution
 
 Threescope is a derivative work of **TLEscope**, originally developed in C with Raylib by **aweeri**. The original project's design, algorithms, and visual style are the foundation of this port.
