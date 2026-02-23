@@ -23,8 +23,8 @@ import { InputHandler } from './interaction/input-handler';
 import { OrreryController } from './scene/orrery-controller';
 import { getMapCoordinates, latLonToSurface } from './astro/coordinates';
 import { calculateSunPosition } from './astro/sun';
-import { fetchTLEData, parseTLEText, type FetchResult } from './data/tle-loader';
-import { DEFAULT_GROUP } from './data/tle-sources';
+import { fetchTLEData, parseTLEText } from './data/tle-loader';
+import { sourcesStore, type TLESourceConfig } from './stores/sources.svelte';
 import { timeStore } from './stores/time.svelte';
 import { uiStore } from './stores/ui.svelte';
 import { settingsStore } from './stores/settings.svelte';
@@ -172,9 +172,9 @@ export class App {
       },
     });
 
-    const savedGroup = localStorage.getItem('threescope_tle_group') || 'none';
+    sourcesStore.load();
     this.setLoading(0.6, 'Fetching satellite data...');
-    await this.loadTLEGroup(savedGroup);
+    await this.loadSources();
 
     this.setLoading(0.9, 'Setting up...');
     this.wireStores();
@@ -299,55 +299,123 @@ export class App {
     this.scene3d.add(this.apoSprite3d);
   }
 
-  private currentGroup = DEFAULT_GROUP;
+  private sourceData = new Map<string, Satellite[]>();
 
-  async loadTLEGroup(group: string, forceRetry = false) {
-    this.currentGroup = group;
-    if (group === 'none') {
+  async loadSources() {
+    const enabled = sourcesStore.enabledSources;
+    const enabledIdSet = new Set(enabled.map(s => s.id));
+
+    // Remove cached data for disabled sources
+    for (const id of this.sourceData.keys()) {
+      if (!enabledIdSet.has(id)) this.sourceData.delete(id);
+    }
+
+    if (enabled.length === 0) {
       this.satellites = [];
       this.selectedSats.clear(); this.selectedSatsVersion++;
       this.hoveredSat = null;
       this.orbitRenderer.precomputeOrbits([], this.timeSystem.currentEpoch);
+      sourcesStore.totalSats = 0;
+      sourcesStore.dupsRemoved = 0;
       uiStore.satStatusText = '0 sats';
       uiStore.tleLoadState = 'none';
       return;
     }
-    try {
-      const result = await fetchTLEData(group, (msg) => {
-        uiStore.satStatusText = msg;
-      }, forceRetry);
-      this.satellites = result.satellites;
-      this.selectedSats.clear(); this.selectedSatsVersion++;
-      this.hoveredSat = null;
-      this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
 
-      let info = `${this.satellites.length} sats`;
-      if (result.source === 'cache' && result.cacheAge != null) {
-        info += ` (${formatAge(result.cacheAge)})`;
-      } else if (result.source === 'stale-cache' && result.cacheAge != null) {
-        info += ` (offline, ${formatAge(result.cacheAge)})`;
+    // Fetch sources not yet loaded
+    const toFetch = enabled.filter(s => !this.sourceData.has(s.id));
+    if (toFetch.length > 0) {
+      sourcesStore.loading = true;
+      uiStore.satStatusText = 'Loading...';
+
+      const fetches = toFetch.map(src => this.fetchSource(src));
+      await Promise.allSettled(fetches);
+      sourcesStore.loading = false;
+    }
+
+    this.mergeAndApply(enabledIdSet);
+  }
+
+  private async fetchSource(src: TLESourceConfig) {
+    sourcesStore.setLoadState(src.id, { satCount: 0, status: 'loading' });
+    try {
+      let satellites: Satellite[];
+      if (src.type === 'celestrak') {
+        const result = await fetchTLEData(src.group!);
+        satellites = result.satellites;
+        const age = result.cacheAge;
+        sourcesStore.setLoadState(src.id, { satCount: satellites.length, status: 'loaded', cacheAge: age });
+      } else if (src.type === 'url') {
+        const resp = await fetch(src.url!);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const text = await resp.text();
+        satellites = parseTLEText(text);
+        try {
+          localStorage.setItem('tlescope_tle_custom_' + src.id, JSON.stringify({ ts: Date.now(), data: text }));
+        } catch { /* localStorage full */ }
+        sourcesStore.setLoadState(src.id, { satCount: satellites.length, status: 'loaded' });
+      } else {
+        const text = sourcesStore.getCustomText(src.id);
+        satellites = parseTLEText(text);
+        sourcesStore.setLoadState(src.id, { satCount: satellites.length, status: 'loaded' });
       }
-      if (result.rateLimited) info += ' — rate limited';
-      uiStore.satStatusText = info;
-      uiStore.tleLoadState = result.source === 'network' ? 'fresh' : result.source === 'cache' ? 'cached' : 'stale';
+      this.sourceData.set(src.id, satellites);
     } catch (e) {
-      console.error('Failed to load TLE data:', e);
-      const rl = (e as any)?.rateLimited === true;
-      uiStore.satStatusText = rl ? 'Rate limited' : 'Load failed';
-      uiStore.tleLoadState = 'failed';
+      console.error(`Failed to load source "${src.name}":`, e);
+      sourcesStore.setLoadState(src.id, { satCount: 0, status: 'error', error: String(e) });
     }
   }
 
-  private loadCustomTLE(text: string, label: string) {
-    try {
-      this.satellites = parseTLEText(text);
-      this.selectedSats.clear(); this.selectedSatsVersion++;
-      this.hoveredSat = null;
-      this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
-      uiStore.satStatusText = `${this.satellites.length} Sats (${label})`;
-    } catch (e) {
-      console.error('Failed to parse TLE data:', e);
-      uiStore.satStatusText = 'Parse failed';
+  private mergeAndApply(enabledIds: Set<string>) {
+    const byNorad = new Map<string, Satellite>();
+    let total = 0;
+
+    for (const id of enabledIds) {
+      const sats = this.sourceData.get(id) ?? [];
+      for (const sat of sats) {
+        total++;
+        const norad = sat.tleLine1.substring(2, 7).trim();
+        const existing = byNorad.get(norad);
+        if (!existing || sat.epochDays > existing.epochDays) {
+          byNorad.set(norad, sat);
+        }
+      }
+    }
+
+    const deduped = Array.from(byNorad.values());
+    const dupsRemoved = total - deduped.length;
+
+    // Preserve selection by NORAD ID
+    const oldSelectedNorads = new Set<string>();
+    for (const sat of this.selectedSats) {
+      oldSelectedNorads.add(sat.tleLine1.substring(2, 7).trim());
+    }
+    this.selectedSats.clear();
+    for (const sat of deduped) {
+      if (oldSelectedNorads.has(sat.tleLine1.substring(2, 7).trim())) {
+        this.selectedSats.add(sat);
+      }
+    }
+    this.selectedSatsVersion++;
+    this.hoveredSat = null;
+
+    this.satellites = deduped;
+    this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
+
+    sourcesStore.totalSats = deduped.length;
+    sourcesStore.dupsRemoved = dupsRemoved;
+    let statusText = `${deduped.length} sats`;
+    if (dupsRemoved > 0) statusText += ` (${dupsRemoved} dups)`;
+    uiStore.satStatusText = statusText;
+
+    // Set load state for StatsPanel refresh button visibility
+    // Show refresh button whenever we have CelesTrak sources loaded
+    const hasCelestrak = [...enabledIds].some(id => id.startsWith('celestrak:'));
+    if (deduped.length === 0) {
+      const hasError = [...enabledIds].some(id => sourcesStore.loadStates.get(id)?.status === 'error');
+      uiStore.tleLoadState = hasError ? 'failed' : 'none';
+    } else {
+      uiStore.tleLoadState = hasCelestrak ? 'cached' : 'fresh';
     }
   }
 
@@ -441,33 +509,9 @@ export class App {
       this.fpsLimit = limit;
     };
 
-    // TLE group changed from TlePicker
-    uiStore.onTLEGroupChange = async (group: string) => {
-      this.setLoading(0.5, 'Loading satellite data...');
-      this.loadingScreen.style.display = 'flex';
-      await this.loadTLEGroup(group);
-      this.loadingScreen.style.display = 'none';
-    };
-
-    // Custom TLE file loaded
-    uiStore.onCustomTLELoad = (text: string, name: string) => {
-      this.loadCustomTLE(text, name);
-    };
-
-    // Custom TLE URL
-    uiStore.onCustomTLEUrl = async (url: string) => {
-      this.setLoading(0.5, 'Fetching TLE from URL...');
-      this.loadingScreen.style.display = 'flex';
-      try {
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const text = await resp.text();
-        this.loadCustomTLE(text, 'URL');
-      } catch (e) {
-        console.error('Failed to fetch TLE URL:', e);
-        uiStore.satStatusText = 'URL fetch failed';
-      }
-      this.loadingScreen.style.display = 'none';
+    // Multi-source loading
+    sourcesStore.onSourcesChange = async () => {
+      await this.loadSources();
     };
 
     // Planet button clicked
@@ -545,7 +589,13 @@ export class App {
     };
 
     // TLE refresh/retry
-    uiStore.onRefreshTLE = () => this.loadTLEGroup(this.currentGroup, true);
+    uiStore.onRefreshTLE = async () => {
+      // Force refetch all enabled CelesTrak sources
+      for (const src of sourcesStore.enabledSources) {
+        if (src.type === 'celestrak') this.sourceData.delete(src.id);
+      }
+      await this.loadSources();
+    };
 
     // Pass predictor
     observerStore.load();

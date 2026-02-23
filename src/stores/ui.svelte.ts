@@ -69,8 +69,8 @@ class UIStore {
   apoLabelEl: HTMLDivElement | null = null;
   planetCanvasEl: HTMLCanvasElement | null = null;
 
-  // TLE group (shared between TlePicker and CommandPalette)
-  currentTleGroup = $state(localStorage.getItem('threescope_tle_group') || 'none');
+  // Data sources window
+  dataSourcesOpen = $state(false);
 
   // Earth-specific toggles visibility (hidden in orrery/planet mode)
   earthTogglesVisible = $state(true);
@@ -79,9 +79,6 @@ class UIStore {
   // Callbacks registered by App
   onToggleChange: ((key: string, value: boolean) => void) | null = null;
   onMarkerGroupChange: ((groupId: string, visible: boolean) => void) | null = null;
-  onTLEGroupChange: ((group: string) => Promise<void>) | null = null;
-  onCustomTLELoad: ((text: string, name: string) => void) | null = null;
-  onCustomTLEUrl: ((url: string) => Promise<void>) | null = null;
   onPlanetButtonClick: (() => void) | null = null;
   onNavigateTo: ((id: string) => void) | null = null;
   onDeselectAll: (() => void) | null = null;

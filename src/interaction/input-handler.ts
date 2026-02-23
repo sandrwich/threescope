@@ -221,6 +221,10 @@ export class InputHandler {
         case 'P':
           uiStore.passesWindowOpen = !uiStore.passesWindowOpen;
           break;
+        case 'd':
+        case 'D':
+          uiStore.dataSourcesOpen = !uiStore.dataSourcesOpen;
+          break;
       }
     });
 

@@ -13,6 +13,7 @@
   import CommandPalette from './CommandPalette.svelte';
   import PassesWindow from './PassesWindow.svelte';
   import PolarPlot from './PolarPlot.svelte';
+  import DataSourcesWindow from './DataSourcesWindow.svelte';
 </script>
 
 <div id="ui-overlay">
@@ -27,6 +28,7 @@
   <TimeWindow />
   <ViewWindow />
   <SelectionWindow />
+  <DataSourcesWindow />
   <PassesWindow />
   <PolarPlot />
   <CommandPalette />

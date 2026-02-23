@@ -32,8 +32,6 @@ export const TLE_SOURCES: TLESource[] = [
   { name: 'CubeSats', group: 'cubesat' },
 ];
 
-export const DEFAULT_GROUP = 'visual';
-
 export function getCelestrakUrl(group: string): string {
   return `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`;
 }

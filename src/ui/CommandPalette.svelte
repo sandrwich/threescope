@@ -5,6 +5,7 @@
   import { getPresetSettings } from '../graphics';
   import { getSimPresetSettings } from '../simulation';
   import { TLE_SOURCES } from '../data/tle-sources';
+  import { sourcesStore } from '../stores/sources.svelte';
   import { PLANETS } from '../bodies';
   import { defaultConfig } from '../config';
   import { observerStore } from '../stores/observer.svelte';
@@ -101,14 +102,30 @@
       });
     }
 
-    // Data (TLE groups)
+    // Data sources
+    actions.push({
+      id: 'data-sources-window',
+      category: 'Data',
+      label: 'Toggle Data Sources',
+      shortcut: 'D',
+      keywords: 'tle satellite source celestrak custom',
+      execute: () => { uiStore.dataSourcesOpen = !uiStore.dataSourcesOpen; close(); },
+    });
+    actions.push({
+      id: 'data-refresh',
+      category: 'Data',
+      label: 'Refresh All Sources',
+      keywords: 'reload fetch tle update',
+      execute: () => { uiStore.onRefreshTLE?.(); close(); },
+    });
     for (const src of TLE_SOURCES) {
+      if (src.group === 'none') continue;
       actions.push({
-        id: `data-${src.group}`,
+        id: `data-toggle-${src.group}`,
         category: 'Data',
-        label: `Load ${src.name}`,
-        keywords: 'tle satellite group',
-        execute: () => { uiStore.currentTleGroup = src.group; localStorage.setItem('threescope_tle_group', src.group); uiStore.onTLEGroupChange?.(src.group); close(); },
+        label: `Toggle ${src.name}`,
+        keywords: 'tle satellite group source',
+        execute: () => { sourcesStore.toggleSource(`celestrak:${src.group}`); close(); },
       });
     }
 

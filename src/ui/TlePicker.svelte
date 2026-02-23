@@ -1,49 +1,20 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { uiStore } from '../stores/ui.svelte';
-  import { TLE_SOURCES } from '../data/tle-sources';
-  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_HELP, ICON_2D, ICON_3D, ICON_PASSES } from './shared/icons';
+  import { sourcesStore } from '../stores/sources.svelte';
+  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_HELP, ICON_2D, ICON_3D, ICON_PASSES, ICON_DATA_SOURCES } from './shared/icons';
   import { ViewMode } from '../types';
 
-  let customVisible = $state(false);
-  let urlValue = $state('');
-  let fileInput: HTMLInputElement | undefined = $state();
   let canvasEl: HTMLCanvasElement | undefined = $state();
 
   onMount(() => { uiStore.planetCanvasEl = canvasEl; });
 
-  async function onSelectChange(e: Event) {
-    const val = (e.target as HTMLSelectElement).value;
-    if (val === '__custom__') {
-      customVisible = true;
-      return;
-    }
-    customVisible = false;
-    uiStore.currentTleGroup = val;
-    localStorage.setItem('threescope_tle_group', val);
-    await uiStore.onTLEGroupChange?.(val);
-  }
-
-  async function loadUrl() {
-    const url = urlValue.trim();
-    if (!url) return;
-    await uiStore.onCustomTLEUrl?.(url);
-  }
-
-  function onFileChange() {
-    const file = fileInput?.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      uiStore.onCustomTLELoad?.(reader.result as string, file.name);
-    };
-    reader.readAsText(file);
-    fileInput.value = '';
-  }
-
-  function onKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') loadUrl();
-  }
+  let sourceLabel = $derived.by(() => {
+    const n = sourcesStore.enabledSources.length;
+    if (n === 0) return 'No sources';
+    if (n === 1) return sourcesStore.enabledSources[0].name;
+    return `${n} sources`;
+  });
 </script>
 
 <div class="toolbar">
@@ -52,14 +23,12 @@
   </button>
 
   <div class="toolbar-row">
-    <!-- Data group -->
+    <!-- Data sources -->
     <div class="btn-group">
-      <select value={uiStore.currentTleGroup} onchange={onSelectChange}>
-        <option value="__custom__">Custom...</option>
-        {#each TLE_SOURCES as src}
-          <option value={src.group}>{src.name}</option>
-        {/each}
-      </select>
+      <button class="source-btn" title="Data Sources (D)" onclick={() => uiStore.dataSourcesOpen = !uiStore.dataSourcesOpen}>
+        <span class="source-icon">{@html ICON_DATA_SOURCES}</span>
+        <span class="source-label">{sourceLabel}</span>
+      </button>
     </div>
 
     <div class="separator"></div>
@@ -107,15 +76,6 @@
       </button>
     </div>
   </div>
-
-  {#if customVisible}
-    <div class="custom-row">
-      <input type="text" class="url-input" placeholder="TLE URL..." bind:value={urlValue} onkeydown={onKeydown}>
-      <button class="icon-btn text-btn" onclick={loadUrl}>Load</button>
-      <button class="icon-btn text-btn" onclick={() => fileInput.click()}>File</button>
-      <input type="file" bind:this={fileInput} accept=".tle,.txt,.3le" style="display:none" onchange={onFileChange}>
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -164,12 +124,24 @@
   .icon-btn:disabled { color: var(--text-ghost); cursor: default; opacity: 0.4; }
   .icon-btn:disabled:hover { color: var(--text-ghost); border-color: transparent; }
   .icon-btn :global(svg) { width: 13px; height: 13px; }
-  .text-btn {
-    width: auto;
+
+  .source-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-faint);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 25px;
     padding: 0 6px;
+    cursor: pointer;
     font-size: 12px;
     font-family: inherit;
   }
+  .source-btn:hover { color: var(--text-dim); border-color: var(--border); }
+  .source-icon { display: flex; align-items: center; }
+  .source-icon :global(svg) { width: 13px; height: 13px; }
+  .source-label { white-space: nowrap; }
 
   .planet-btn {
     background: none;
@@ -193,42 +165,7 @@
   }
   .planet-btn:hover canvas { filter: brightness(1.4); }
 
-  .toolbar select {
-    background: transparent;
-    color: var(--text-faint);
-    border: 1px solid transparent;
-    padding: 2px 4px;
-    font-size: 12px;
-    font-family: inherit;
-    cursor: pointer;
-    height: 25px;
-  }
-  .toolbar select:hover { color: var(--text-dim); border-color: var(--border); }
-  .toolbar select option {
-    background: var(--modal-bg);
-    color: var(--text);
-  }
-
-  .custom-row {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-  }
-  .url-input {
-    background: var(--ui-bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    padding: 3px 6px;
-    font-size: 12px;
-    font-family: inherit;
-    width: 220px;
-    cursor: text;
-  }
-  .url-input:hover { border-color: var(--border-hover); }
-  .url-input::placeholder { color: var(--text-ghost); }
-
   @media (max-width: 600px) {
-    .url-input { width: 130px; }
-    .custom-row { flex-wrap: wrap; justify-content: flex-end; }
+    .source-label { display: none; }
   }
 </style>
