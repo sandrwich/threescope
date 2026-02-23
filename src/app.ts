@@ -929,6 +929,12 @@ export class App {
       uiStore.cursorLatLon = null;
     }
 
+    // Propagate satellite positions (batched SGP4) — shared across 3D and 2D
+    this.satManager.propagatePositions(
+      this.satellites, epoch, this.hoveredSat, this.selectedSats,
+      this.timeSystem.timeMultiplier, dt, this.maxBatch
+    );
+
     if (this.viewMode === ViewMode.VIEW_3D) {
       // Update 3D scene
       if (!this.orreryCtrl.isOrreryMode) {
@@ -965,10 +971,10 @@ export class App {
       uiStore.nightToggleVisible = showNight;
       if (earthMode) {
         this.satManager.update(
-          this.satellites, epoch, this.camera3d.position,
+          this.satellites, this.camera3d.position,
           this.hoveredSat, this.selectedSats, this.unselectedFade, this.hideUnselected,
           { normal: this.cfg.satNormal, highlighted: this.cfg.satHighlighted, selected: this.cfg.satSelected },
-          this.timeSystem.timeMultiplier, dt, this.maxBatch, this.bloomEnabled, this.fadingInSats
+          this.bloomEnabled, this.fadingInSats
         );
 
         this.orbitRenderer.update(
@@ -999,39 +1005,6 @@ export class App {
         this.footprintRenderer.update(fpEntries);
 
         this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camera.distance);
-      }
-
-      // Keep reactive sat count in sync for UI components
-      uiStore.selectedSatCount = this.selectedSats.size;
-
-      // Pass predictor: auto-trigger when selection changes and window is open
-      if (uiStore.passesWindowOpen && this.lastPassSatsVersion !== this.selectedSatsVersion && !this.passPredictor.isComputing()) {
-        this.requestPasses();
-      }
-
-      // Pass predictor: compute live az/el for polar plot
-      if (uiStore.polarPlotOpen && uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.passes.length) {
-        const pass = uiStore.passes[uiStore.selectedPassIdx];
-        if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch) {
-          // Find the satellite by name
-          const sat = this.satellites.find(s => s.name === pass.satName);
-          if (sat) {
-            const date = new Date(epochToUnix(epoch) * 1000);
-            const result = propagate(sat.satrec, date);
-            if (result.position && typeof result.position !== 'boolean') {
-              const eci = result.position as { x: number; y: number; z: number };
-              const gmstRad = gmstDeg * DEG2RAD;
-              const obs = observerStore.location;
-              uiStore.livePassAzEl = getAzEl(eci.x, eci.y, eci.z, gmstRad, obs.lat, obs.lon, obs.alt);
-            } else {
-              uiStore.livePassAzEl = null;
-            }
-          } else {
-            uiStore.livePassAzEl = null;
-          }
-        } else {
-          uiStore.livePassAzEl = null;
-        }
       }
 
       const activePlanet = this.orreryCtrl.currentActivePlanet;
@@ -1066,6 +1039,38 @@ export class App {
 
     // Mini planet spinner
     this.orreryCtrl.renderMini(dt);
+
+    // Keep reactive sat count in sync for UI components (view-independent)
+    uiStore.selectedSatCount = this.selectedSats.size;
+
+    // Pass predictor: auto-trigger when selection changes and window is open
+    if (uiStore.passesWindowOpen && this.lastPassSatsVersion !== this.selectedSatsVersion && !this.passPredictor.isComputing()) {
+      this.requestPasses();
+    }
+
+    // Pass predictor: compute live az/el for polar plot
+    if (uiStore.polarPlotOpen && uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.passes.length) {
+      const pass = uiStore.passes[uiStore.selectedPassIdx];
+      if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch) {
+        const sat = this.satellites.find(s => s.name === pass.satName);
+        if (sat) {
+          const date = new Date(epochToUnix(epoch) * 1000);
+          const result = propagate(sat.satrec, date);
+          if (result.position && typeof result.position !== 'boolean') {
+            const eci = result.position as { x: number; y: number; z: number };
+            const gmstRad = gmstDeg * DEG2RAD;
+            const obs = observerStore.location;
+            uiStore.livePassAzEl = getAzEl(eci.x, eci.y, eci.z, gmstRad, obs.lat, obs.lon, obs.alt);
+          } else {
+            uiStore.livePassAzEl = null;
+          }
+        } else {
+          uiStore.livePassAzEl = null;
+        }
+      } else {
+        uiStore.livePassAzEl = null;
+      }
+    }
 
     this.uiUpdater.update({
       activeSat,

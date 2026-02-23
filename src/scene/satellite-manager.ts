@@ -93,18 +93,53 @@ export class SatelliteManager {
     this.points.visible = visible;
   }
 
-  update(
+  /**
+   * Batched SGP4 position propagation — view-independent.
+   * Call once per frame before the 3D/2D render branch.
+   * Mutates sat.currentPos in place.
+   */
+  propagatePositions(
     satellites: Satellite[],
     currentEpoch: number,
+    hoveredSat: Satellite | null,
+    selectedSats: Set<Satellite>,
+    timeMultiplier: number,
+    dt: number,
+    maxBatch: number,
+  ) {
+    // Delta-based SGP4 batching: only propagate 1/N satellites per frame.
+    // N is derived from sim-time per frame to keep max position staleness under ~1s
+    // of sim-time. At 1s staleness, LEO error ≈ 7.5km ≈ 2px at maximum zoom.
+    //
+    // batchCount = floor(1s / simTimePerFrame), clamped to [1, 64]
+    //   1x @ 60fps  → simDt=0.016s → batch 62→capped by maxBatch setting
+    //   10x @ 60fps → simDt=0.16s  → batch 6
+    //   100x @ 60fps→ simDt=1.6s   → batch 1 → all sats every frame
+    //
+    // Adapts to both speed AND framerate: lower FPS means fewer but larger batches.
+    // Hovered/selected satellites always update for responsive interaction.
+    const simDtPerFrame = dt * Math.abs(timeMultiplier);
+    const batchCount = Math.max(1, Math.min(maxBatch, Math.floor(1.0 / Math.max(simDtPerFrame, 0.001))));
+    const batch = this.updateFrame++ % batchCount;
+    const count = Math.min(satellites.length, this.maxSats);
+
+    for (let i = 0; i < count; i++) {
+      const sat = satellites[i];
+      if (i % batchCount === batch || sat === hoveredSat || selectedSats.has(sat)) {
+        sat.currentPos = calculatePosition(sat, currentEpoch);
+      }
+    }
+  }
+
+  /** Update 3D point cloud visuals (geometry, colors, alpha, occlusion). */
+  update(
+    satellites: Satellite[],
     cameraPos: THREE.Vector3,
     hoveredSat: Satellite | null,
     selectedSats: Set<Satellite>,
     unselectedFade: number,
     hideUnselected: boolean,
     colorConfig: { normal: string; highlighted: string; selected: string },
-    timeMultiplier = 1.0,
-    dt = 1 / 60,
-    maxBatch = 16,
     bloomEnabled = false,
     fadingInSats: Set<Satellite> = new Set()
   ) {
@@ -126,27 +161,8 @@ export class SatelliteManager {
     const drawRange = this.points.geometry.drawRange;
     drawRange.count = count;
 
-    // Delta-based SGP4 batching: only propagate 1/N satellites per frame.
-    // N is derived from sim-time per frame to keep max position staleness under ~1s
-    // of sim-time. At 1s staleness, LEO error ≈ 7.5km ≈ 2px at maximum zoom.
-    //
-    // batchCount = floor(1s / simTimePerFrame), clamped to [1, 64]
-    //   1x @ 60fps  → simDt=0.016s → batch 62→capped by maxBatch setting
-    //   10x @ 60fps → simDt=0.16s  → batch 6
-    //   100x @ 60fps→ simDt=1.6s   → batch 1 → all sats every frame
-    //
-    // Adapts to both speed AND framerate: lower FPS means fewer but larger batches.
-    // Hovered/selected satellites always update for responsive interaction.
-    const simDtPerFrame = dt * Math.abs(timeMultiplier);
-    const batchCount = Math.max(1, Math.min(maxBatch, Math.floor(1.0 / Math.max(simDtPerFrame, 0.001))));
-    const batch = this.updateFrame++ % batchCount;
-
     for (let i = 0; i < count; i++) {
       const sat = satellites[i];
-
-      if (i % batchCount === batch || sat === hoveredSat || selectedSats.has(sat)) {
-        sat.currentPos = calculatePosition(sat, currentEpoch);
-      }
 
       const dx = sat.currentPos.x / DRAW_SCALE;
       const dy = sat.currentPos.y / DRAW_SCALE;
