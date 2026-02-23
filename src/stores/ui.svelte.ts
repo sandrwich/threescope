@@ -95,8 +95,8 @@ class UIStore {
       const saved = localStorage.getItem(key);
       return saved !== null ? (defaultVal ? saved !== 'false' : saved === 'true') : defaultVal;
     };
-    this.hideUnselected = load('threescope_spotlight', true);
-    this.showOrbits = load('threescope_orbits', true);
+    this.hideUnselected = load('threescope_spotlight', false);
+    this.showOrbits = load('threescope_orbits', false);
     this.showClouds = load('threescope_clouds', true);
     this.showNightLights = load('threescope_night', true);
     this.showSkybox = load('threescope_skybox', true);
