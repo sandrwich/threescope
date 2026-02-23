@@ -32,7 +32,9 @@ import { observerStore } from './stores/observer.svelte';
 import { UIUpdater } from './ui/ui-updater';
 import { GeoOverlay } from './scene/geo-overlay';
 import { PassPredictor } from './passes/pass-predictor';
-import { getAzEl, renderToEci } from './astro/az-el';
+import { getAzEl } from './astro/az-el';
+import { propagate } from 'satellite.js';
+import { epochToUnix } from './astro/epoch';
 import { loadElevation, getElevation, isElevationLoaded } from './astro/elevation';
 
 function formatAge(ms: number): string {
@@ -1008,10 +1010,16 @@ export class App {
           // Find the satellite by name
           const sat = this.satellites.find(s => s.name === pass.satName);
           if (sat) {
-            const eci = renderToEci(sat.currentPos.x, sat.currentPos.y, sat.currentPos.z);
-            const gmstRad = gmstDeg * DEG2RAD;
-            const obs = observerStore.location;
-            uiStore.livePassAzEl = getAzEl(eci.x, eci.y, eci.z, gmstRad, obs.lat, obs.lon, obs.alt);
+            const date = new Date(epochToUnix(epoch) * 1000);
+            const result = propagate(sat.satrec, date);
+            if (result.position && typeof result.position !== 'boolean') {
+              const eci = result.position as { x: number; y: number; z: number };
+              const gmstRad = gmstDeg * DEG2RAD;
+              const obs = observerStore.location;
+              uiStore.livePassAzEl = getAzEl(eci.x, eci.y, eci.z, gmstRad, obs.lat, obs.lon, obs.alt);
+            } else {
+              uiStore.livePassAzEl = null;
+            }
           } else {
             uiStore.livePassAzEl = null;
           }
