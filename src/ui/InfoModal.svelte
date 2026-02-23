@@ -32,6 +32,8 @@
         <span class="ctrl-key"><kbd>.</kbd> <kbd>,</kbd></span><span class="ctrl-desc">Speed up / slow down</span>
         <span class="ctrl-key"><kbd>/</kbd></span><span class="ctrl-desc">Reset speed</span>
         <span class="ctrl-key"><kbd>M</kbd></span><span class="ctrl-desc">Toggle 2D / 3D map</span>
+        <span class="ctrl-key"><kbd>D</kbd></span><span class="ctrl-desc">Data sources</span>
+        <span class="ctrl-key"><kbd>P</kbd></span><span class="ctrl-desc">Pass predictor</span>
         <span class="ctrl-key"><kbd>Ctrl</kbd>+<kbd>K</kbd></span><span class="ctrl-desc">Command palette</span>
         <span class="ctrl-key"><kbd>Ctrl</kbd>+<kbd>F</kbd></span><span class="ctrl-desc">Search satellite</span>
         <span class="ctrl-key"><kbd>?</kbd></span><span class="ctrl-desc">Show help</span>
