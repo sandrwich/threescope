@@ -56,9 +56,10 @@ class UIStore {
   nearbyPasses = $state<SatellitePass[]>([]);
   nearbyComputing = $state(false);
   nearbyProgress = $state(0);
-  nearbyPhase = $state<'idle' | 'quick' | 'full' | 'done'>('idle');
+  nearbyPhase = $state<'idle' | 'computing' | 'done'>('idle');
   nearbyFilteredCount = $state(0);
   nearbyTotalCount = $state(0);
+  passListEpoch = $state(0);
 
   get activePassList(): SatellitePass[] {
     return this.passesTab === 'selected' ? this.passes : this.nearbyPasses;

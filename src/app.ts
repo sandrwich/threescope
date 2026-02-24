@@ -34,7 +34,7 @@ import { GeoOverlay } from './scene/geo-overlay';
 import { PassPredictor } from './passes/pass-predictor';
 import { getAzEl } from './astro/az-el';
 import { propagate } from 'satellite.js';
-import { epochToUnix } from './astro/epoch';
+import { epochToUnix, epochToGmst } from './astro/epoch';
 import { loadElevation, getElevation, isElevationLoaded } from './astro/elevation';
 
 function formatAge(ms: number): string {
@@ -85,8 +85,6 @@ export class App {
   private cfg = { ...defaultConfig };
   private passPredictor = new PassPredictor();
   private nearbyPredictor = new PassPredictor();
-  private nearbyPhase: 'idle' | 'quick' | 'full' | 'done' = 'idle';
-  private nearbySatsSnapshot: { name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[] = [];
   private lastPassSatsVersion = -1;
   private overlayEl!: HTMLElement;
 
@@ -406,11 +404,10 @@ export class App {
     this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
 
     // Invalidate nearby passes when satellite data changes
-    if (this.nearbyPhase !== 'idle') {
+    if (uiStore.nearbyPhase !== 'idle') {
       uiStore.nearbyPasses = [];
       uiStore.nearbyPhase = 'idle';
       uiStore.nearbyComputing = false;
-      this.nearbyPhase = 'idle';
       this.nearbyPredictor.dispose();
     }
 
@@ -628,30 +625,14 @@ export class App {
     uiStore.onRequestPasses = () => this.requestPasses();
 
     // Nearby pass predictor
+    this.nearbyPredictor.onPartial = (passes) => {
+      uiStore.nearbyPasses = passes;
+    };
     this.nearbyPredictor.onResult = (passes) => {
-      if (this.nearbyPhase === 'quick') {
-        uiStore.nearbyPasses = passes;
-        uiStore.nearbyPhase = 'full';
-        this.nearbyPhase = 'full';
-        uiStore.nearbyProgress = 0;
-        this.nearbyPredictor.compute({
-          type: 'compute',
-          satellites: this.nearbySatsSnapshot,
-          observerLat: observerStore.location.lat,
-          observerLon: observerStore.location.lon,
-          observerAlt: observerStore.location.alt,
-          startEpoch: timeStore.epoch,
-          durationDays: 1,
-          minElevation: 0,
-          stepMinutes: 3,
-        });
-      } else if (this.nearbyPhase === 'full') {
-        uiStore.nearbyPasses = passes;
-        uiStore.nearbyComputing = false;
-        uiStore.nearbyPhase = 'done';
-        this.nearbyPhase = 'done';
-        uiStore.nearbyProgress = 0;
-      }
+      uiStore.nearbyPasses = passes;
+      uiStore.nearbyComputing = false;
+      uiStore.nearbyPhase = 'done';
+      uiStore.nearbyProgress = 0;
     };
     this.nearbyPredictor.onProgress = (pct) => {
       uiStore.nearbyProgress = pct;
@@ -773,12 +754,11 @@ export class App {
     const sats = filtered.map((sat, idx) => ({
       name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag,
     }));
-    this.nearbySatsSnapshot = sats;
 
-    this.nearbyPhase = 'quick';
+    uiStore.nearbyPasses = [];
     uiStore.nearbyComputing = true;
     uiStore.nearbyProgress = 0;
-    uiStore.nearbyPhase = 'quick';
+    uiStore.nearbyPhase = 'computing';
 
     this.nearbyPredictor.compute({
       type: 'compute',
@@ -787,7 +767,7 @@ export class App {
       observerLon: observerStore.location.lon,
       observerAlt: observerStore.location.alt,
       startEpoch: timeStore.epoch,
-      durationDays: 4 / 24,
+      durationDays: 1,
       minElevation: 0,
       stepMinutes: 3,
     });
@@ -862,6 +842,7 @@ export class App {
 
   private fpsLimit = -1; // -1 = vsync (rAF), 0 = unlocked, >0 = FPS cap
   private maxBatch = 16;
+  private passListFrame = 0;
   private mcChannel = new MessageChannel();
   private lastFrameTime = 0;
 
@@ -1152,9 +1133,37 @@ export class App {
       this.requestPasses();
     }
 
-    // Pass predictor: compute live az/el for polar plot
+    // Throttle pass-list epoch updates using updateQuality setting
+    if (this.passListFrame++ % Math.max(1, this.maxBatch) === 0) {
+      uiStore.passListEpoch = epoch;
+    }
+
+    // Pass predictor: compute sky path on-demand + live az/el for polar plot
     if (uiStore.polarPlotOpen && uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.activePassList.length) {
       const pass = uiStore.activePassList[uiStore.selectedPassIdx];
+      // Lazy sky path: compute 100-point track on first view (cached on pass object)
+      if (pass.skyPath.length === 0) {
+        const sat = this.satellites.find(s => s.name === pass.satName);
+        if (sat) {
+          const pathStep = (pass.losEpoch - pass.aosEpoch) / 99;
+          if (pathStep > 0) {
+            const path: { az: number; el: number; t: number }[] = [];
+            const obs = observerStore.location;
+            for (let k = 0; k < 100; k++) {
+              const pt = pass.aosEpoch + k * pathStep;
+              const date = new Date(epochToUnix(pt) * 1000);
+              const result = propagate(sat.satrec, date);
+              if (result.position && typeof result.position !== 'boolean') {
+                const eci = result.position as { x: number; y: number; z: number };
+                const g = epochToGmst(pt) * (Math.PI / 180);
+                const ae = getAzEl(eci.x, eci.y, eci.z, g, obs.lat, obs.lon, obs.alt);
+                path.push({ az: ae.az, el: ae.el, t: pt });
+              }
+            }
+            pass.skyPath = path;
+          }
+        }
+      }
       if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch) {
         const sat = this.satellites.find(s => s.name === pass.satName);
         if (sat) {

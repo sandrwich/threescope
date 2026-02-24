@@ -38,6 +38,11 @@ export interface PassResponse {
   passes: SatellitePass[];
 }
 
+export interface PassPartial {
+  type: 'partial';
+  passes: SatellitePass[];
+}
+
 export interface PassProgress {
   type: 'progress';
   percent: number;

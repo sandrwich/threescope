@@ -7,7 +7,7 @@ import { normalizeEpoch, epochToUnix, epochToGmst } from '../astro/epoch';
 import { getAzEl } from '../astro/az-el';
 import { sunDirectionECI, isEclipsed, sunAltitude, solarElongation } from '../astro/eclipse';
 import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } from '../astro/magnitude';
-import type { PassRequest, PassResponse, SatellitePass, PassSkyPoint, PassProgress } from './pass-types';
+import type { PassRequest, PassResponse, PassPartial, SatellitePass, PassProgress } from './pass-types';
 
 const DEG2RAD = Math.PI / 180;
 
@@ -114,19 +114,7 @@ function computePassesForSat(
         const losEpoch = refineCrossing(satrec, t - minuteStep, t, obsLat, obsLon, obsAlt, false);
 
         if (currentMaxEl >= minEl) {
-          // Build sky path (100 points)
-          const skyPath: PassSkyPoint[] = [];
-          const step = (losEpoch - currentAosEpoch) / 99;
-          if (step > 0) {
-            for (let k = 0; k < 100; k++) {
-              const pt = currentAosEpoch + k * step;
-              const pp = propagateAtEpoch(satrec, pt);
-              if (!pp) continue;
-              const pg = epochToGmst(pt) * DEG2RAD;
-              const pae = getAzEl(pp.x, pp.y, pp.z, pg, obsLat, obsLon, obsAlt);
-              skyPath.push({ az: pae.az, el: pae.el, t: pt });
-            }
-          }
+          // Sky path is computed on-demand by the main thread when the polar plot is opened
 
           // Get LOS azimuth
           const losPos = propagateAtEpoch(satrec, losEpoch);
@@ -168,7 +156,7 @@ function computePassesForSat(
             aosAz: currentAosAz,
             losAz,
             durationSec: (losEpoch - currentAosEpoch) * 86400,
-            skyPath,
+            skyPath: [],
             eclipsed,
             peakMag,
             sunAlt,
@@ -182,6 +170,9 @@ function computePassesForSat(
   return passes;
 }
 
+// Send partial results every N satellites so the UI populates progressively
+const PARTIAL_INTERVAL = 200;
+
 // Worker message handler
 self.onmessage = (e: MessageEvent<PassRequest>) => {
   const req = e.data;
@@ -189,6 +180,7 @@ self.onmessage = (e: MessageEvent<PassRequest>) => {
 
   const step = req.stepMinutes ?? 1;
   const allPasses: SatellitePass[] = [];
+  let lastPartialLen = 0;
 
   for (let i = 0; i < req.satellites.length; i++) {
     const sat = req.satellites[i];
@@ -205,6 +197,13 @@ self.onmessage = (e: MessageEvent<PassRequest>) => {
       type: 'progress',
       percent: ((i + 1) / req.satellites.length) * 100,
     } as PassProgress);
+
+    // Stream partial results periodically
+    if ((i + 1) % PARTIAL_INTERVAL === 0 && allPasses.length > lastPartialLen) {
+      allPasses.sort((a, b) => a.aosEpoch - b.aosEpoch);
+      self.postMessage({ type: 'partial', passes: allPasses } as PassPartial);
+      lastPartialLen = allPasses.length;
+    }
   }
 
   // Sort all passes by AOS time

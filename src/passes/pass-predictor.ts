@@ -1,10 +1,11 @@
-import type { PassRequest, PassResponse, SatellitePass, PassProgress } from './pass-types';
+import type { PassRequest, PassResponse, PassPartial, SatellitePass, PassProgress } from './pass-types';
 
 export class PassPredictor {
   private worker: Worker | null = null;
   private computing = false;
 
   onResult: ((passes: SatellitePass[]) => void) | null = null;
+  onPartial: ((passes: SatellitePass[]) => void) | null = null;
   onProgress: ((percent: number) => void) | null = null;
 
   private ensureWorker(): Worker {
@@ -13,10 +14,12 @@ export class PassPredictor {
         new URL('./pass-worker.ts', import.meta.url),
         { type: 'module' },
       );
-      this.worker.onmessage = (e: MessageEvent<PassResponse | PassProgress>) => {
+      this.worker.onmessage = (e: MessageEvent<PassResponse | PassPartial | PassProgress>) => {
         if (e.data.type === 'result') {
           this.computing = false;
           this.onResult?.(e.data.passes);
+        } else if (e.data.type === 'partial') {
+          this.onPartial?.(e.data.passes);
         } else if (e.data.type === 'progress') {
           this.onProgress?.(e.data.percent);
         }

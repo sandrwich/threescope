@@ -18,7 +18,7 @@
 
   function dayLabel(epoch: number): string {
     const d = epochToDate(epoch);
-    const now = epochToDate(timeStore.epoch);
+    const now = epochToDate(uiStore.passListEpoch);
     const todayKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
     const tomorrow = new Date(now.getTime() + 86400000);
     const tomorrowKey = `${tomorrow.getUTCFullYear()}-${tomorrow.getUTCMonth()}-${tomorrow.getUTCDate()}`;
@@ -84,13 +84,13 @@
   }
 
   function isActive(pass: SatellitePass): boolean {
-    return timeStore.epoch >= pass.aosEpoch && timeStore.epoch <= pass.losEpoch;
+    return uiStore.passListEpoch >= pass.aosEpoch && uiStore.passListEpoch <= pass.losEpoch;
   }
 
   function progress(pass: SatellitePass): number {
-    if (timeStore.epoch < pass.aosEpoch) return 0;
-    if (timeStore.epoch > pass.losEpoch) return 1;
-    return (timeStore.epoch - pass.aosEpoch) / (pass.losEpoch - pass.aosEpoch);
+    if (uiStore.passListEpoch < pass.aosEpoch) return 0;
+    if (uiStore.passListEpoch > pass.losEpoch) return 1;
+    return (uiStore.passListEpoch - pass.aosEpoch) / (pass.losEpoch - pass.aosEpoch);
   }
 
   function autoSelect(pass: SatellitePass) {
@@ -227,12 +227,14 @@
 
       {:else}
         <!-- All Nearby tab -->
-        {#if uiStore.nearbyComputing && uiStore.nearbyPhase === 'quick' && nearbyCount === 0}
+        {#if uiStore.nearbyPhase === 'idle'}
+          <div class="prompt"><p>Loading...</p></div>
+        {:else if uiStore.nearbyComputing && nearbyCount === 0}
           <div class="computing">
             <div class="progress-track">
               <div class="progress-fill" style="width:{uiStore.nearbyProgress}%"></div>
             </div>
-            <span class="computing-label">Scanning {uiStore.nearbyFilteredCount} satellites (4h)...</span>
+            <span class="computing-label">Scanning {uiStore.nearbyFilteredCount} satellites...</span>
             <span class="filter-info">{uiStore.nearbyFilteredCount} of {uiStore.nearbyTotalCount} visible from observer</span>
           </div>
         {:else if nearbyCount > 0 || uiStore.nearbyPhase === 'done'}
@@ -242,7 +244,7 @@
               <button class="edit-btn" onclick={openSettings} title="Edit observer">&#9998;</button>
             </span>
             {#if uiStore.nearbyComputing}
-              <span class="pass-count phase-label">Extending to 24h...</span>
+              <span class="pass-count phase-label">{nearbyCount} pass{nearbyCount !== 1 ? 'es' : ''} so far...</span>
             {:else}
               <span class="pass-count">{nearbyCount} pass{nearbyCount !== 1 ? 'es' : ''}</span>
             {/if}
@@ -258,21 +260,6 @@
               <span class="filter-info">{uiStore.nearbyFilteredCount} of {uiStore.nearbyTotalCount} satellites checked</span>
             </div>
           {/if}
-        {:else if uiStore.nearbyPhase === 'idle'}
-          <div class="prompt"><p>Loading...</p></div>
-        {:else}
-          <div class="computing">
-            <div class="progress-track">
-              <div class="progress-fill" style="width:{uiStore.nearbyProgress}%"></div>
-            </div>
-            <span class="computing-label">
-              {#if uiStore.nearbyPhase === 'full'}
-                Extending to 24h ({nearbyCount} passes so far)...
-              {:else}
-                Scanning {uiStore.nearbyFilteredCount} satellites...
-              {/if}
-            </span>
-          </div>
         {/if}
       {/if}
   </div>
