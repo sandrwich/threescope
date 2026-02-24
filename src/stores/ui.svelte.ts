@@ -43,7 +43,12 @@ class UIStore {
 
   // Pass predictor
   selectedSatCount = $state(0);
-  passesWindowOpen = $state(false);
+  _passesWindowOpen = $state(false);
+  get passesWindowOpen() { return this._passesWindowOpen; }
+  set passesWindowOpen(v: boolean) {
+    this._passesWindowOpen = v;
+    if (!v) this.passFilterWindowOpen = false;
+  }
   polarPlotOpen = $state(false);
   dopplerWindowOpen = $state(false);
   passes = $state<SatellitePass[]>([]);

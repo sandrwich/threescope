@@ -68,11 +68,11 @@
       <button class="icon-btn" class:active={uiStore.timeWindowOpen} title="Time Control" onclick={() => uiStore.timeWindowOpen = !uiStore.timeWindowOpen}>
         {@html ICON_TIME}
       </button>
-      <button class="icon-btn" class:active={uiStore.settingsOpen} title="Settings" onclick={() => uiStore.settingsOpen = !uiStore.settingsOpen}>
-        {@html ICON_SETTINGS}
-      </button>
       <button class="icon-btn" class:active={uiStore.observerWindowOpen} title="Observer (O)" onclick={() => uiStore.observerWindowOpen = !uiStore.observerWindowOpen}>
         {@html ICON_OBSERVER}
+      </button>
+      <button class="icon-btn" class:active={uiStore.settingsOpen} title="Settings" onclick={() => uiStore.settingsOpen = !uiStore.settingsOpen}>
+        {@html ICON_SETTINGS}
       </button>
       <button class="icon-btn" title="Help" onclick={() => uiStore.infoModalOpen = true}>
         {@html ICON_HELP}

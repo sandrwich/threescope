@@ -25,7 +25,7 @@ export const ICON_POLAR = '<svg viewBox="0 0 16 16" fill="none" stroke="currentC
 
 export const ICON_DOPPLER = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8c1.5-6 3-6 4.5 0s3 6 4.5 0 3-6 4.5 0"/></svg>';
 
-export const ICON_DATA_SOURCES = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13l4-4"/><circle cx="2.5" cy="13.5" r="1.5" fill="currentColor" stroke="none"/><path d="M5 9a4.5 4.5 0 0 1 6 0"/><path d="M3 6.5a8 8 0 0 1 10 0"/><path d="M1 4a11 11 0 0 1 14 0"/></svg>';
+export const ICON_DATA_SOURCES = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M1.5 4.5v8h13v-8h-6l-1.5-2h-5.5z"/></svg>';
 
 export const ICON_ECLIPSE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8s3-4.5 7-4.5 7 4.5 7 4.5-3 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/><line x1="3" y1="13" x2="13" y2="3"/></svg>';
 
