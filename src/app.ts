@@ -1196,7 +1196,7 @@ export class App {
     if (uiStore.polarPlotOpen && uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.activePassList.length) {
       const pass = uiStore.activePassList[uiStore.selectedPassIdx];
       // Lazy sky path: compute 100-point track on first view (cached on pass object)
-      if (pass.skyPath.length === 0) {
+      if (pass.skyPath.length < 50) {
         const sat = this.satellites.find(s => s.name === pass.satName);
         if (sat) {
           const pathStep = (pass.losEpoch - pass.aosEpoch) / 99;

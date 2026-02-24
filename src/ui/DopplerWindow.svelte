@@ -354,13 +354,59 @@
     return null;
   }
 
-  function onCanvasMouseMove(e: MouseEvent) {
-    if (!canvasEl) return;
-    const rect = canvasEl.getBoundingClientRect();
-    hoverX = e.clientX - rect.left;
+  // ── Time scrubbing via pointer interaction on the chart ──
+
+  let scrubbing = false;
+
+  function xToEpoch(cssX: number): number | null {
+    const pass = selectedPass;
+    if (!pass) return null;
+    const gx = G_LEFT;
+    const gw = CANVAS_W - G_LEFT - G_RIGHT;
+    const scaleX = CANVAS_W / (canvasEl?.getBoundingClientRect().width ?? CANVAS_W);
+    const lx = cssX * scaleX;
+    const t = Math.max(0, Math.min(1, (lx - gx) / gw));
+    return pass.aosEpoch + t * (pass.losEpoch - pass.aosEpoch);
   }
 
-  function onCanvasMouseLeave() {
+  function onCanvasPointerDown(e: PointerEvent) {
+    if (e.button !== 0 || !selectedPass || cachedData.length === 0) return;
+    const rect = canvasEl!.getBoundingClientRect();
+    const cssX = e.clientX - rect.left;
+    const scaleX = CANVAS_W / rect.width;
+    const lx = cssX * scaleX;
+    // Only start scrubbing if clicking within the graph area
+    if (lx < G_LEFT || lx > CANVAS_W - G_RIGHT) return;
+    scrubbing = true;
+    canvasEl!.setPointerCapture(e.pointerId);
+    const ep = xToEpoch(cssX);
+    if (ep !== null) {
+      timeStore.epoch = ep;
+      timeStore.paused = true;
+    }
+    e.preventDefault();
+  }
+
+  function onCanvasPointerMove(e: PointerEvent) {
+    if (!canvasEl) return;
+    const rect = canvasEl.getBoundingClientRect();
+    const cssX = e.clientX - rect.left;
+    if (scrubbing) {
+      const ep = xToEpoch(cssX);
+      if (ep !== null) timeStore.epoch = ep;
+    }
+    hoverX = cssX;
+    // Cursor feedback
+    const scaleX = CANVAS_W / rect.width;
+    const lx = cssX * scaleX;
+    canvasEl.style.cursor = (selectedPass && cachedData.length > 0 && lx >= G_LEFT && lx <= CANVAS_W - G_RIGHT) ? 'grab' : '';
+  }
+
+  function onCanvasPointerUp() {
+    scrubbing = false;
+  }
+
+  function onCanvasPointerLeave() {
     hoverX = -1;
   }
 
@@ -464,7 +510,13 @@
       </div>
     </div>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <canvas bind:this={canvasEl} onmousemove={onCanvasMouseMove} onmouseleave={onCanvasMouseLeave}></canvas>
+    <canvas
+      bind:this={canvasEl}
+      onpointerdown={onCanvasPointerDown}
+      onpointermove={onCanvasPointerMove}
+      onpointerup={onCanvasPointerUp}
+      onpointerleave={onCanvasPointerLeave}
+    ></canvas>
   </div>
 </DraggableWindow>
 

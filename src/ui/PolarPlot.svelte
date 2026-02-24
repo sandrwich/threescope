@@ -29,6 +29,65 @@
     };
   }
 
+  // ── Time scrubbing via pointer interaction on the track ──
+
+  let scrubbing = false;
+
+  function canvasToLogical(e: PointerEvent): { lx: number; ly: number } {
+    const rect = canvasEl!.getBoundingClientRect();
+    const scaleX = SIZE / rect.width;
+    const scaleY = (SIZE + 48) / rect.height;
+    return { lx: (e.clientX - rect.left) * scaleX, ly: (e.clientY - rect.top) * scaleY };
+  }
+
+  function findNearestSkyPoint(lx: number, ly: number): { idx: number; dist: number } | null {
+    const pass = selectedPass;
+    if (!pass || pass.skyPath.length === 0) return null;
+    let bestIdx = 0, bestDist = Infinity;
+    for (let i = 0; i < pass.skyPath.length; i++) {
+      const { x, y } = azElToXY(pass.skyPath[i].az, pass.skyPath[i].el);
+      const d = Math.hypot(x - lx, y - ly);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    return { idx: bestIdx, dist: bestDist };
+  }
+
+  function scrubToPoint(lx: number, ly: number) {
+    const hit = findNearestSkyPoint(lx, ly);
+    if (!hit) return;
+    const pass = selectedPass!;
+    timeStore.epoch = pass.skyPath[hit.idx].t;
+    timeStore.paused = true;
+  }
+
+  function onCanvasPointerDown(e: PointerEvent) {
+    if (e.button !== 0 || !selectedPass || selectedPass.skyPath.length === 0) return;
+    const { lx, ly } = canvasToLogical(e);
+    const hit = findNearestSkyPoint(lx, ly);
+    if (!hit || hit.dist > 20) return;
+    scrubbing = true;
+    canvasEl!.setPointerCapture(e.pointerId);
+    scrubToPoint(lx, ly);
+    e.preventDefault();
+  }
+
+  function onCanvasPointerMove(e: PointerEvent) {
+    if (!canvasEl) return;
+    if (scrubbing) {
+      const { lx, ly } = canvasToLogical(e);
+      scrubToPoint(lx, ly);
+    } else if (selectedPass && selectedPass.skyPath.length > 0) {
+      // Hover cursor feedback
+      const { lx, ly } = canvasToLogical(e);
+      const hit = findNearestSkyPoint(lx, ly);
+      canvasEl.style.cursor = hit && hit.dist < 20 ? 'grab' : '';
+    }
+  }
+
+  function onCanvasPointerUp() {
+    scrubbing = false;
+  }
+
   function drawFrame() {
     if (!ctx || !canvasEl) return;
     const dpr = window.devicePixelRatio || 1;
@@ -225,7 +284,13 @@
 {#snippet polarIcon()}<span class="title-icon">{@html ICON_POLAR}</span>{/snippet}
 <DraggableWindow id="polar-plot" title="Polar Plot" icon={polarIcon} bind:open={uiStore.polarPlotOpen} initialX={9999} initialY={100}>
   <div class="pp">
-    <canvas bind:this={canvasEl}></canvas>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <canvas
+      bind:this={canvasEl}
+      onpointerdown={onCanvasPointerDown}
+      onpointermove={onCanvasPointerMove}
+      onpointerup={onCanvasPointerUp}
+    ></canvas>
   </div>
 </DraggableWindow>
 
