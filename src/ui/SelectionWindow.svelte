@@ -154,6 +154,9 @@
                   <span class="dl">Period</span><span class="dv">{fmt(sat.periodMin, 1)} min</span>
                   <span class="dl">Latitude</span><span class="dv">{fmt(sat.latDeg, 2)}&deg;</span>
                   <span class="dl">Longitude</span><span class="dv">{fmt(sat.lonDeg, 2)}&deg;</span>
+                  {#if sat.magStr !== null}
+                    <span class="dl">Magnitude</span><span class="dv">{sat.magStr}</span>
+                  {/if}
                 </div>
               </div>
             {/if}

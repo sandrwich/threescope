@@ -7,7 +7,7 @@ import { ORBIT_COLORS } from '../scene/orbit-renderer';
 import { computeApsis, computeApsis2D } from '../astro/apsis';
 import { getMapCoordinates } from '../astro/coordinates';
 import { uiStore } from '../stores/ui.svelte';
-import { sunDirectionECI, isEclipsed, solarElongation } from '../astro/eclipse';
+import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
 import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } from '../astro/magnitude';
 import { epochToGmst } from '../astro/epoch';
 import { getAzEl } from '../astro/az-el';
@@ -46,12 +46,36 @@ export class UIUpdater {
 
     // Compute per-sat data for Selection Window
     const satDataArr: SelectedSatInfo[] = [];
+    const hasObs = observerStore.isSet;
+    const selGmstRad = gmstDeg * DEG2RAD;
+    const selSunDir = hasObs ? sunDirectionECI(currentEpoch) : null;
+    const selObs = hasObs ? observerStore.location : null;
+    const selObsPos = hasObs && selObs ? observerEci(selObs.lat, selObs.lon, selObs.alt, selGmstRad) : null;
+
     let selIdx = 0;
     for (const sat of selectedSats) {
       const rKm = sat.currentPos.length();
       let lonDeg = (Math.atan2(-sat.currentPos.z, sat.currentPos.x) - (gmstDeg + cfg.earthRotationOffset) * DEG2RAD) * RAD2DEG;
       while (lonDeg > 180) lonDeg -= 360;
       while (lonDeg < -180) lonDeg += 360;
+
+      // Magnitude for this satellite
+      let magStr: string | null = null;
+      if (hasObs && selSunDir && selObsPos && selObs) {
+        const satEci = { x: sat.currentPos.x, y: -sat.currentPos.z, z: sat.currentPos.y };
+        if (isEclipsed(satEci.x, satEci.y, satEci.z, selSunDir)) {
+          magStr = 'eclipsed';
+        } else if (sat.stdMag === null) {
+          magStr = 'unknown';
+        } else {
+          const range = slantRange(satEci, selObsPos);
+          const phase = computePhaseAngle(satEci, selSunDir, selObsPos);
+          const { el } = getAzEl(satEci.x, satEci.y, satEci.z, selGmstRad, selObs.lat, selObs.lon, selObs.alt);
+          const mag = estimateVisualMagnitude(sat.stdMag, range, phase, Math.max(0, el));
+          magStr = mag.toFixed(1);
+        }
+      }
+
       satDataArr.push({
         name: sat.name,
         color: ORBIT_COLORS[selIdx % ORBIT_COLORS.length] as [number, number, number],
@@ -63,6 +87,7 @@ export class UIUpdater {
         eccen: sat.eccentricity,
         raanDeg: getCorrectedElements(sat, currentEpoch).raan * RAD2DEG,
         periodMin: (TWO_PI / sat.meanMotion) / 60,
+        magStr,
       });
       selIdx++;
     }
@@ -100,10 +125,6 @@ export class UIUpdater {
           magStr = `<br>Mag: ${mag.toFixed(1)}`;
         }
 
-        // Sun context
-        const sunEl = getAzEl(sunDir.x * 1e6, sunDir.y * 1e6, sunDir.z * 1e6, gmstRad, obs.lat, obs.lon, obs.alt).el;
-        const elong = solarElongation(satEci, sunDir, obsPos);
-        magStr += `<br>Sun: ${sunEl.toFixed(1)}\u00b0 \u00b7 Elong: ${elong.toFixed(0)}\u00b0`;
       }
       uiStore.satInfoDetail = `Altitude: ${alt.toFixed(0)} km<br>Speed: ${speed.toFixed(2)} km/s${magStr}`;
       uiStore.satInfoHint = selectedSats.has(hSat) ? 'Click to deselect' : 'Click to select';

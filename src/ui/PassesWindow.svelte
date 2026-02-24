@@ -75,7 +75,7 @@
 
   function magTooltip(pass: SatellitePass): string {
     let tip = `Sun: ${pass.sunAlt.toFixed(1)}\u00b0 (${sunLabel(pass.sunAlt)})`;
-    tip += `\nElongation: ${pass.elongation.toFixed(0)}\u00b0`;
+    tip += `\nFrom sun: ${pass.elongation.toFixed(0)}\u00b0`;
     if (pass.sunAlt > 0) tip += '\nSky too bright for observation';
     else if (pass.eclipsed) tip += '\nSatellite in Earth\u2019s shadow';
     else if (pass.peakMag !== null) tip += `\nMagnitude: ${pass.peakMag.toFixed(2)}`;

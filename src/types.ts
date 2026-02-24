@@ -63,6 +63,8 @@ export interface SelectedSatInfo {
   eccen: number;
   raanDeg: number;
   periodMin: number;
+  // Magnitude (only populated when observer is set)
+  magStr: string | null;        // formatted magnitude or status string ("eclipsed" / "unknown" / "1.3")
 }
 
 export enum TargetLock { NONE, EARTH, MOON, SUN, PLANET }
