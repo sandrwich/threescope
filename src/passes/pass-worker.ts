@@ -151,6 +151,27 @@ function computePassesForSat(
         const losEpoch = refineCrossing(satrec, t - minuteStep, t, obsLat, obsLon, obsAlt, false);
 
         if (currentMaxEl >= minEl) {
+          // Re-sample sky path at ~10s intervals for accurate filtering
+          {
+            const subStep = 10 / 86400; // 10 seconds in days
+            const refined: { az: number; el: number; t: number }[] = [];
+            for (let st = currentAosEpoch; st <= losEpoch; st += subStep) {
+              const sp = propagateAtEpoch(satrec, st);
+              if (sp) {
+                const sg = epochToGmst(st) * DEG2RAD;
+                const sae = getAzEl(sp.x, sp.y, sp.z, sg, obsLat, obsLon, obsAlt);
+                refined.push({ az: sae.az, el: sae.el, t: st });
+              }
+            }
+            // Add exact LOS point
+            const lp = propagateAtEpoch(satrec, losEpoch);
+            if (lp) {
+              const lg = epochToGmst(losEpoch) * DEG2RAD;
+              const lae = getAzEl(lp.x, lp.y, lp.z, lg, obsLat, obsLon, obsAlt);
+              refined.push({ az: lae.az, el: lae.el, t: losEpoch });
+            }
+            currentSkyPath = refined;
+          }
           // Max elevation filter (discard low-peak passes early, before expensive sun calcs)
           if (filters && filters.maxElevation < 90 && currentMaxEl < filters.maxElevation) {
             // pass doesn't reach the required peak — skip
