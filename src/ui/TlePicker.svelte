@@ -25,7 +25,7 @@
   <div class="toolbar-row">
     <!-- Data sources -->
     <div class="btn-group">
-      <button class="source-btn" title="Data Sources (D)" onclick={() => uiStore.dataSourcesOpen = !uiStore.dataSourcesOpen}>
+      <button class="source-btn" class:active={uiStore.dataSourcesOpen} title="Data Sources (D)" onclick={() => uiStore.dataSourcesOpen = !uiStore.dataSourcesOpen}>
         <span class="source-icon">{@html ICON_DATA_SOURCES}</span>
         <span class="source-label">{sourceLabel}</span>
       </button>
@@ -56,22 +56,22 @@
 
     <!-- Windows group -->
     <div class="btn-group">
-      <button class="icon-btn" title="Selection" onclick={() => uiStore.selectionWindowOpen = !uiStore.selectionWindowOpen}>
+      <button class="icon-btn" class:active={uiStore.selectionWindowOpen} title="Selection" onclick={() => uiStore.selectionWindowOpen = !uiStore.selectionWindowOpen}>
         {@html ICON_SELECTION}
       </button>
-      <button class="icon-btn" title="Passes (P)" onclick={() => uiStore.passesWindowOpen = !uiStore.passesWindowOpen}>
+      <button class="icon-btn" class:active={uiStore.passesWindowOpen} title="Passes (P)" onclick={() => uiStore.passesWindowOpen = !uiStore.passesWindowOpen}>
         {@html ICON_PASSES}
       </button>
-      <button class="icon-btn" title="View" onclick={() => uiStore.viewWindowOpen = !uiStore.viewWindowOpen}>
+      <button class="icon-btn" class:active={uiStore.viewWindowOpen} title="View" onclick={() => uiStore.viewWindowOpen = !uiStore.viewWindowOpen}>
         {@html ICON_VIEW}
       </button>
-      <button class="icon-btn" title="Time Control" onclick={() => uiStore.timeWindowOpen = !uiStore.timeWindowOpen}>
+      <button class="icon-btn" class:active={uiStore.timeWindowOpen} title="Time Control" onclick={() => uiStore.timeWindowOpen = !uiStore.timeWindowOpen}>
         {@html ICON_TIME}
       </button>
-      <button class="icon-btn" title="Settings" onclick={() => uiStore.settingsOpen = !uiStore.settingsOpen}>
+      <button class="icon-btn" class:active={uiStore.settingsOpen} title="Settings" onclick={() => uiStore.settingsOpen = !uiStore.settingsOpen}>
         {@html ICON_SETTINGS}
       </button>
-      <button class="icon-btn" title="Observer (O)" onclick={() => uiStore.observerWindowOpen = !uiStore.observerWindowOpen}>
+      <button class="icon-btn" class:active={uiStore.observerWindowOpen} title="Observer (O)" onclick={() => uiStore.observerWindowOpen = !uiStore.observerWindowOpen}>
         {@html ICON_OBSERVER}
       </button>
       <button class="icon-btn" title="Help" onclick={() => uiStore.infoModalOpen = true}>
@@ -122,8 +122,21 @@
     height: 25px;
     padding: 0;
     cursor: pointer;
+    position: relative;
   }
   .icon-btn:hover { color: var(--text-dim); border-color: var(--border); }
+  .icon-btn.active { color: var(--text-dim); }
+  .icon-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: 1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 10px;
+    height: 2px;
+    background: var(--text-ghost);
+    border-radius: 1px;
+  }
   .icon-btn:disabled { color: var(--text-ghost); cursor: default; opacity: 0.4; }
   .icon-btn:disabled:hover { color: var(--text-ghost); border-color: transparent; }
   .icon-btn :global(svg) { width: 13px; height: 13px; }
@@ -140,8 +153,21 @@
     cursor: pointer;
     font-size: 12px;
     font-family: inherit;
+    position: relative;
   }
   .source-btn:hover { color: var(--text-dim); border-color: var(--border); }
+  .source-btn.active { color: var(--text-dim); }
+  .source-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: 1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 10px;
+    height: 2px;
+    background: var(--text-ghost);
+    border-radius: 1px;
+  }
   .source-icon { display: flex; align-items: center; }
   .source-icon :global(svg) { width: 13px; height: 13px; }
   .source-label { white-space: nowrap; }
