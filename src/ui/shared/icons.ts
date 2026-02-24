@@ -29,4 +29,6 @@ export const ICON_DATA_SOURCES = '<svg viewBox="0 0 16 16" fill="none" stroke="c
 
 export const ICON_ECLIPSE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8s3-4.5 7-4.5 7 4.5 7 4.5-3 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/><line x1="3" y1="13" x2="13" y2="3"/></svg>';
 
+export const ICON_SUN = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><line x1="8" y1="1.5" x2="8" y2="4"/><line x1="8" y1="12" x2="8" y2="14.5"/><line x1="1.5" y1="8" x2="4" y2="8"/><line x1="12" y1="8" x2="14.5" y2="8"/><line x1="3.4" y1="3.4" x2="5.2" y2="5.2"/><line x1="10.8" y1="10.8" x2="12.6" y2="12.6"/><line x1="3.4" y1="12.6" x2="5.2" y2="10.8"/><line x1="10.8" y1="5.2" x2="12.6" y2="3.4"/></svg>';
+
 export const ICON_CLOSE = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>';

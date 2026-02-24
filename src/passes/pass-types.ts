@@ -17,6 +17,8 @@ export interface SatellitePass {
   skyPath: PassSkyPoint[];
   eclipsed: boolean;        // satellite in Earth's shadow at max elevation
   peakMag: number | null;   // estimated visual magnitude at max elevation (null if eclipsed)
+  sunAlt: number;           // sun altitude at observer at max-el time (degrees, negative = below horizon)
+  elongation: number;       // solar elongation at max-el time (degrees, 0-180)
 }
 
 export interface PassRequest {

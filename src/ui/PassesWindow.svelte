@@ -3,7 +3,7 @@
   import { uiStore } from '../stores/ui.svelte';
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
-  import { ICON_PASSES, ICON_DOPPLER, ICON_ECLIPSE } from './shared/icons';
+  import { ICON_PASSES, ICON_DOPPLER, ICON_ECLIPSE, ICON_SUN } from './shared/icons';
   import { SAT_COLORS } from '../constants';
   import { epochToDate } from '../astro/epoch';
   import type { SatellitePass } from '../passes/pass-types';
@@ -55,11 +55,32 @@
   }
 
   function magClass(pass: SatellitePass): string {
+    if (pass.sunAlt > 0) return 'mag-daylight';
+    if (pass.sunAlt > -6 && !pass.eclipsed) return 'mag-twilight';
     if (pass.eclipsed) return 'mag-eclipsed';
     if (pass.peakMag === null) return 'mag-unknown';
+    if (pass.elongation < 20) return 'mag-nearsun';
     if (pass.peakMag < 2) return 'mag-bright';
     if (pass.peakMag <= 5) return 'mag-mid';
     return 'mag-faint';
+  }
+
+  function sunLabel(alt: number): string {
+    if (alt > 0) return 'Daylight';
+    if (alt > -6) return 'Civil twilight';
+    if (alt > -12) return 'Nautical twilight';
+    if (alt > -18) return 'Astronomical twilight';
+    return 'Night';
+  }
+
+  function magTooltip(pass: SatellitePass): string {
+    let tip = `Sun: ${pass.sunAlt.toFixed(1)}\u00b0 (${sunLabel(pass.sunAlt)})`;
+    tip += `\nElongation: ${pass.elongation.toFixed(0)}\u00b0`;
+    if (pass.sunAlt > 0) tip += '\nSky too bright for observation';
+    else if (pass.eclipsed) tip += '\nSatellite in Earth\u2019s shadow';
+    else if (pass.peakMag !== null) tip += `\nMagnitude: ${pass.peakMag.toFixed(2)}`;
+    if (!pass.eclipsed && pass.elongation < 20) tip += '\nClose to sun \u2014 observation difficult';
+    return tip;
   }
 
   function isActive(pass: SatellitePass): boolean {
@@ -151,7 +172,7 @@
         <span class="td td-time">{formatTime(pass.aosEpoch)} <span class="arrow">&rarr;</span> {formatTime(pass.losEpoch)}</span>
         <span class="td td-dur">{formatDuration(pass.durationSec)}</span>
         <span class="td td-el {elClass(pass.maxEl)}">{pass.maxEl.toFixed(1)}&deg;</span>
-        <span class="td td-mag {magClass(pass)}" title={pass.eclipsed ? 'In Earth\'s shadow' : pass.peakMag !== null ? `Estimated visual magnitude: ${pass.peakMag.toFixed(2)}` : 'No brightness data available'}>{#if pass.eclipsed}<span class="eclipse-icon">{@html ICON_ECLIPSE}</span>{:else if pass.peakMag !== null}{pass.peakMag.toFixed(1)}{:else}?{/if}</span>
+        <span class="td td-mag {magClass(pass)}" title={magTooltip(pass)}>{#if pass.sunAlt > 0 && !pass.eclipsed}<span class="sun-icon">{@html ICON_SUN}</span>{/if}{#if pass.eclipsed}<span class="eclipse-icon">{@html ICON_ECLIPSE}</span>{:else if pass.peakMag !== null}{pass.peakMag.toFixed(1)}{:else}?{/if}</span>
         <span class="td td-actions">
           <button class="action-icon" onclick={(e) => { e.stopPropagation(); openDoppler(pass, i); }} title="Doppler analysis">{@html ICON_DOPPLER}</button>
           <button class="action-icon" onclick={(e) => { e.stopPropagation(); skipTo(pass, i); }} title="Skip to pass">&#9654;</button>
@@ -419,7 +440,7 @@
   .th-time, .td-time { width: 140px; text-align: center; flex-shrink: 0; }
   .th-dur, .td-dur { width: 52px; text-align: right; flex-shrink: 0; }
   .th-el,  .td-el  { width: 48px; text-align: right; flex-shrink: 0; }
-  .th-mag, .td-mag { width: 36px; text-align: right; flex-shrink: 0; }
+  .th-mag, .td-mag { width: 46px; text-align: right; flex-shrink: 0; }
   .th-actions, .td-actions { width: 38px; text-align: center; flex-shrink: 0; display: flex; gap: 2px; justify-content: flex-end; }
 
   .arrow {
@@ -478,8 +499,13 @@
   .mag-faint { color: var(--text-ghost); }
   .mag-unknown { color: var(--text-ghost); opacity: 0.5; }
   .mag-eclipsed { color: var(--text-ghost); opacity: 0.35; }
+  .mag-daylight { color: #ffaa00; opacity: 0.35; }
+  .mag-twilight { color: #ffcc44; opacity: 0.7; }
+  .mag-nearsun { color: var(--text-muted); font-style: italic; }
   .td-mag .eclipse-icon { display: inline-flex; align-items: center; }
   .td-mag .eclipse-icon :global(svg) { width: 10px; height: 10px; display: block; opacity: 0.35; }
+  .td-mag .sun-icon { display: inline-flex; align-items: center; margin-right: 2px; }
+  .td-mag .sun-icon :global(svg) { width: 9px; height: 9px; display: block; }
 
   .action-icon {
     background: none;

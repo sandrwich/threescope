@@ -5,7 +5,7 @@
 import { twoline2satrec, propagate } from 'satellite.js';
 import { normalizeEpoch, epochToUnix, epochToGmst } from '../astro/epoch';
 import { getAzEl } from '../astro/az-el';
-import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
+import { sunDirectionECI, isEclipsed, sunAltitude, solarElongation } from '../astro/eclipse';
 import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } from '../astro/magnitude';
 import type { PassRequest, PassResponse, SatellitePass, PassSkyPoint, PassProgress } from './pass-types';
 
@@ -136,17 +136,22 @@ function computePassesForSat(
             losAz = getAzEl(losPos.x, losPos.y, losPos.z, losGmst, obsLat, obsLon, obsAlt).az;
           }
 
-          // Eclipse check and magnitude estimation at max elevation
+          // Eclipse check, sun context, and magnitude estimation at max elevation
           let eclipsed = false;
           let peakMag: number | null = null;
+          let sunAlt = 0;
+          let elongation = 180;
           const maxElPos = propagateAtEpoch(satrec, currentMaxElEpoch);
           if (maxElPos) {
             const sunDir = sunDirectionECI(currentMaxElEpoch);
+            const gmstMaxEl = epochToGmst(currentMaxElEpoch) * DEG2RAD;
+            const obsPos = observerEci(obsLat, obsLon, obsAlt, gmstMaxEl);
+
+            sunAlt = sunAltitude(currentMaxElEpoch, obsLat, obsLon, obsAlt, gmstMaxEl);
             eclipsed = isEclipsed(maxElPos.x, maxElPos.y, maxElPos.z, sunDir);
+            elongation = solarElongation(maxElPos, sunDir, obsPos);
 
             if (!eclipsed && stdMag !== null) {
-              const gmstMaxEl = epochToGmst(currentMaxElEpoch) * DEG2RAD;
-              const obsPos = observerEci(obsLat, obsLon, obsAlt, gmstMaxEl);
               const range = slantRange(maxElPos, obsPos);
               const phase = computePhaseAngle(maxElPos, sunDir, obsPos);
               peakMag = estimateVisualMagnitude(stdMag, range, phase, currentMaxEl);
@@ -166,6 +171,8 @@ function computePassesForSat(
             skyPath,
             eclipsed,
             peakMag,
+            sunAlt,
+            elongation,
           });
         }
       }

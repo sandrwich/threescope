@@ -3,8 +3,9 @@
  * Uses a cylindrical shadow model — accurate enough for LEO/MEO pass prediction.
  * No Three.js dependency so it can run in the pass Web Worker.
  */
-import { DEG2RAD, EARTH_RADIUS_KM } from '../constants';
+import { DEG2RAD, RAD2DEG, EARTH_RADIUS_KM } from '../constants';
 import { epochToJulianDate, normalizeEpoch } from './epoch';
+import { getAzEl } from './az-el';
 
 /**
  * Compute unit sun direction in standard ECI (Earth-Centered Inertial) coordinates.
@@ -76,4 +77,52 @@ export function isEclipsed(
 
   // If the satellite is closer to the axis than Earth's radius, it's in shadow.
   return perpDist < EARTH_RADIUS_KM;
+}
+
+/**
+ * Compute Sun elevation angle (degrees) at the observer's location.
+ * Positive = above horizon, negative = below.
+ *
+ * Uses the same low-precision ephemeris as sunDirectionECI(), scaled to a
+ * large distance so getAzEl()'s range math works correctly.
+ */
+export function sunAltitude(
+  epoch: number,
+  obsLatDeg: number, obsLonDeg: number, obsAltM: number,
+  gmstRad: number,
+): number {
+  const sunDir = sunDirectionECI(epoch);
+  // Sun at "infinity" — scale to 1e6 km
+  const { el } = getAzEl(
+    sunDir.x * 1e6, sunDir.y * 1e6, sunDir.z * 1e6,
+    gmstRad, obsLatDeg, obsLonDeg, obsAltM,
+  );
+  return el;
+}
+
+/**
+ * Compute solar elongation — angular distance (degrees) between the Sun
+ * and a satellite as seen from the observer. Low elongation (< ~20°) means
+ * the satellite is near the Sun in the sky, making observation difficult
+ * even during twilight.
+ *
+ * All positions in standard ECI (km). sunDir is a unit vector.
+ */
+export function solarElongation(
+  satEci: { x: number; y: number; z: number },
+  sunDir: { x: number; y: number; z: number },
+  obsEci: { x: number; y: number; z: number },
+): number {
+  // Vector from observer to satellite
+  const toSatX = satEci.x - obsEci.x;
+  const toSatY = satEci.y - obsEci.y;
+  const toSatZ = satEci.z - obsEci.z;
+  const toSatLen = Math.sqrt(toSatX * toSatX + toSatY * toSatY + toSatZ * toSatZ);
+  if (toSatLen === 0) return 0;
+
+  // cos(elongation) = dot(obsToSat_unit, sunDir_unit)
+  const dot = (toSatX / toSatLen) * sunDir.x
+            + (toSatY / toSatLen) * sunDir.y
+            + (toSatZ / toSatLen) * sunDir.z;
+  return Math.acos(Math.max(-1, Math.min(1, dot))) * RAD2DEG;
 }

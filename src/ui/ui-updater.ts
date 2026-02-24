@@ -7,7 +7,7 @@ import { ORBIT_COLORS } from '../scene/orbit-renderer';
 import { computeApsis, computeApsis2D } from '../astro/apsis';
 import { getMapCoordinates } from '../astro/coordinates';
 import { uiStore } from '../stores/ui.svelte';
-import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
+import { sunDirectionECI, isEclipsed, solarElongation } from '../astro/eclipse';
 import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } from '../astro/magnitude';
 import { epochToGmst } from '../astro/epoch';
 import { getAzEl } from '../astro/az-el';
@@ -84,20 +84,26 @@ export class UIUpdater {
         // Render coords → standard ECI: x=rx, y=-rz, z=ry
         const satEci = { x: hSat.currentPos.x, y: -hSat.currentPos.z, z: hSat.currentPos.y };
         const sunDir = sunDirectionECI(currentEpoch);
+        const gmstRad = gmstDeg * DEG2RAD;
+        const obs = observerStore.location;
+        const obsPos = observerEci(obs.lat, obs.lon, obs.alt, gmstRad);
+
         if (isEclipsed(satEci.x, satEci.y, satEci.z, sunDir)) {
           magStr = '<br>Mag: eclipsed';
         } else if (hSat.stdMag === null) {
           magStr = '<br>Mag: unknown';
         } else {
-          const gmstRad = gmstDeg * DEG2RAD;
-          const obs = observerStore.location;
-          const obsPos = observerEci(obs.lat, obs.lon, obs.alt, gmstRad);
           const range = slantRange(satEci, obsPos);
           const phase = computePhaseAngle(satEci, sunDir, obsPos);
           const { el } = getAzEl(satEci.x, satEci.y, satEci.z, gmstRad, obs.lat, obs.lon, obs.alt);
           const mag = estimateVisualMagnitude(hSat.stdMag, range, phase, Math.max(0, el));
           magStr = `<br>Mag: ${mag.toFixed(1)}`;
         }
+
+        // Sun context
+        const sunEl = getAzEl(sunDir.x * 1e6, sunDir.y * 1e6, sunDir.z * 1e6, gmstRad, obs.lat, obs.lon, obs.alt).el;
+        const elong = solarElongation(satEci, sunDir, obsPos);
+        magStr += `<br>Sun: ${sunEl.toFixed(1)}\u00b0 \u00b7 Elong: ${elong.toFixed(0)}\u00b0`;
       }
       uiStore.satInfoDetail = `Altitude: ${alt.toFixed(0)} km<br>Speed: ${speed.toFixed(2)} km/s${magStr}`;
       uiStore.satInfoHint = selectedSats.has(hSat) ? 'Click to deselect' : 'Click to select';
