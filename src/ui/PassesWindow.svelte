@@ -136,7 +136,7 @@
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
       <div class="pass-row" class:active={isActive(pass)} onclick={() => openPolar(pass, i)}>
         <span class="td td-sat">
-          <span class="color-dot" style="background:{satColor(pass.satColorIndex)}"></span>
+          <svg class="color-dot" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="{satColor(pass.satColorIndex)}"/></svg>
           <span class="sat-name" title={pass.satName}>{pass.satName}</span>
         </span>
         <span class="td td-time">{formatTime(pass.aosEpoch)} <span class="arrow">&rarr;</span> {formatTime(pass.losEpoch)}</span>
@@ -256,9 +256,10 @@
   /* Tab bar (lives in titlebar via headerExtra) */
   .tab-bar {
     display: flex;
+    align-items: center;
     gap: 1px;
     margin-left: auto;
-    margin-right: 6px;
+    margin-right: 8px;
   }
   .tab-btn {
     background: none;
@@ -441,9 +442,9 @@
   }
 
   .color-dot {
+    display: block;
     width: 7px;
     height: 7px;
-    border-radius: 50%;
     flex-shrink: 0;
   }
   .sat-name {
@@ -453,7 +454,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-
   .el-low { color: #ff4444; }
   .el-mid { color: #ffaa00; }
   .el-high { color: #44ff44; }

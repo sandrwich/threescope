@@ -151,7 +151,7 @@
       // Row 1: sat name (left) + max el (right)
       ctx.fillStyle = cssColor;
       ctx.beginPath();
-      ctx.arc(12, infoY + 6, 3.5, 0, 2 * Math.PI);
+      ctx.arc(12, infoY + 4, 3.5, 0, 2 * Math.PI);
       ctx.fill();
       ctx.fillStyle = '#999';
       ctx.textAlign = 'left';

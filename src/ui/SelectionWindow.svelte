@@ -80,8 +80,8 @@
     if (uiStore.passesWindowOpen) uiStore.onRequestPasses?.();
   }
 
-  function colorStyle(c: [number, number, number]) {
-    return `background: rgb(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)})`;
+  function colorRgb(c: [number, number, number]) {
+    return `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`;
   }
 
   const fmt = (n: number, d = 1) => n.toFixed(d);
@@ -133,7 +133,7 @@
         {#each uiStore.selectedSatData as sat}
           <div class="sat-row">
             <div class="sat-compact">
-              <span class="color-dot" style={colorStyle(sat.color)}></span>
+              <svg class="color-dot" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill={colorRgb(sat.color)}/></svg>
               <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
               <span class="sat-name" onclick={() => toggle(sat.name)}>{sat.name}</span>
               <span class="pill">{fmt(sat.altKm, 0)} km</span>
@@ -280,9 +280,9 @@
     padding: 3px 0;
   }
   .color-dot {
+    display: block;
     width: 8px;
     height: 8px;
-    border-radius: 50%;
     flex-shrink: 0;
   }
   .sat-name {
