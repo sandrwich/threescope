@@ -225,6 +225,10 @@ export class InputHandler {
         case 'D':
           uiStore.dataSourcesOpen = !uiStore.dataSourcesOpen;
           break;
+        case 'o':
+        case 'O':
+          uiStore.observerWindowOpen = !uiStore.observerWindowOpen;
+          break;
       }
     });
 

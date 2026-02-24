@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { sourcesStore } from '../stores/sources.svelte';
-  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_HELP, ICON_2D, ICON_3D, ICON_PASSES, ICON_DATA_SOURCES } from './shared/icons';
+  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_OBSERVER, ICON_HELP, ICON_2D, ICON_3D, ICON_PASSES, ICON_DATA_SOURCES } from './shared/icons';
   import { ViewMode } from '../types';
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -70,6 +70,9 @@
       </button>
       <button class="icon-btn" title="Settings" onclick={() => uiStore.settingsOpen = !uiStore.settingsOpen}>
         {@html ICON_SETTINGS}
+      </button>
+      <button class="icon-btn" title="Observer (O)" onclick={() => uiStore.observerWindowOpen = !uiStore.observerWindowOpen}>
+        {@html ICON_OBSERVER}
       </button>
       <button class="icon-btn" title="Help" onclick={() => uiStore.infoModalOpen = true}>
         {@html ICON_HELP}

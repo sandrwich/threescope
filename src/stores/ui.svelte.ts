@@ -31,6 +31,7 @@ class UIStore {
   // Window/modal visibility
   infoModalOpen = $state(false);
   settingsOpen = $state(false);
+  observerWindowOpen = $state(false);
   timeWindowOpen = $state(true);
   viewWindowOpen = $state(true);
   commandPaletteOpen = $state(false);

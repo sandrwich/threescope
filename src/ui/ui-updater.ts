@@ -114,15 +114,15 @@ export class UIUpdater {
         const obsPos = observerEci(obs.lat, obs.lon, obs.alt, gmstRad);
 
         if (isEclipsed(satEci.x, satEci.y, satEci.z, sunDir)) {
-          magStr = '<br>Mag: eclipsed';
+          magStr = '<br>Magnitude: eclipsed';
         } else if (hSat.stdMag === null) {
-          magStr = '<br>Mag: unknown';
+          magStr = '<br>Magnitude: unknown';
         } else {
           const range = slantRange(satEci, obsPos);
           const phase = computePhaseAngle(satEci, sunDir, obsPos);
           const { el } = getAzEl(satEci.x, satEci.y, satEci.z, gmstRad, obs.lat, obs.lon, obs.alt);
           const mag = estimateVisualMagnitude(hSat.stdMag, range, phase, Math.max(0, el));
-          magStr = `<br>Mag: ${mag.toFixed(1)}`;
+          magStr = `<br>Magnitude: ${mag.toFixed(1)}`;
         }
 
       }

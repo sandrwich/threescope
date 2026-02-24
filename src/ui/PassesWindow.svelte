@@ -119,8 +119,8 @@
     uiStore.dopplerWindowOpen = true;
   }
 
-  function openSettings() {
-    uiStore.settingsOpen = true;
+  function openObserver() {
+    uiStore.observerWindowOpen = true;
   }
 
   function satColor(colorIndex: number): string {
@@ -216,7 +216,7 @@
     {#if !observerStore.isSet}
       <div class="prompt">
         <p>Set your observer location to predict satellite passes.</p>
-        <button class="action-btn" onclick={openSettings}>Open Settings</button>
+        <button class="action-btn" onclick={openObserver}>Set Location</button>
       </div>
     {:else if !isNearby}
         <!-- Selected tab -->
@@ -235,7 +235,7 @@
           <div class="top-bar">
             <span class="observer-loc">
               {observerStore.displayName}{#if observerStore.location.alt > 0}, {observerStore.location.alt}m{/if}
-              <button class="edit-btn" onclick={openSettings} title="Edit observer">&#9998;</button>
+              <button class="edit-btn" onclick={openObserver} title="Edit observer">&#9998;</button>
             </span>
             <span class="pass-count">{passCount} pass{passCount !== 1 ? 'es' : ''}</span>
           </div>
@@ -258,7 +258,7 @@
           <div class="top-bar">
             <span class="observer-loc">
               {observerStore.displayName}{#if observerStore.location.alt > 0}, {observerStore.location.alt}m{/if}
-              <button class="edit-btn" onclick={openSettings} title="Edit observer">&#9998;</button>
+              <button class="edit-btn" onclick={openObserver} title="Edit observer">&#9998;</button>
             </span>
             {#if uiStore.nearbyComputing}
               <span class="pass-count phase-label">{nearbyCount} pass{nearbyCount !== 1 ? 'es' : ''} so far...</span>

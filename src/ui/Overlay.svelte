@@ -15,6 +15,7 @@
   import PolarPlot from './PolarPlot.svelte';
   import DopplerWindow from './DopplerWindow.svelte';
   import DataSourcesWindow from './DataSourcesWindow.svelte';
+  import ObserverWindow from './ObserverWindow.svelte';
 </script>
 
 <div id="ui-overlay">
@@ -26,6 +27,7 @@
   <BottomPanel />
   <InfoModal />
   <SettingsWindow />
+  <ObserverWindow />
   <TimeWindow />
   <ViewWindow />
   <SelectionWindow />

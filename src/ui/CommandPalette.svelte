@@ -143,6 +143,7 @@
     actions.push({ id: 'win-settings', category: 'Window', label: 'Toggle Settings', execute: () => { uiStore.settingsOpen = !uiStore.settingsOpen; close(); } });
     actions.push({ id: 'win-selection', category: 'Window', label: 'Toggle Selection', keywords: 'selected satellites panel', execute: () => { uiStore.selectionWindowOpen = !uiStore.selectionWindowOpen; close(); } });
     actions.push({ id: 'win-passes', category: 'Window', label: 'Toggle Passes', shortcut: 'P', keywords: 'pass predictor observer satellite', execute: () => { uiStore.passesWindowOpen = !uiStore.passesWindowOpen; close(); } });
+    actions.push({ id: 'win-observer', category: 'Window', label: 'Toggle Observer', shortcut: 'O', keywords: 'location gps coordinates sun moon twilight', execute: () => { uiStore.observerWindowOpen = !uiStore.observerWindowOpen; close(); } });
     actions.push({ id: 'win-polar', category: 'Window', label: 'Toggle Polar Plot', keywords: 'azimuth elevation tracking', execute: () => { uiStore.polarPlotOpen = !uiStore.polarPlotOpen; close(); } });
     actions.push({ id: 'win-help', category: 'Window', label: 'Show Help', keywords: 'info controls keyboard', execute: () => { uiStore.infoModalOpen = true; close(); } });
 
