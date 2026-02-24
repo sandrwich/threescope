@@ -131,6 +131,7 @@
   function switchTab(tab: 'selected' | 'nearby') {
     uiStore.passesTab = tab;
     uiStore.selectedPassIdx = -1;
+    tableScrollTop = 0;
     if (tab === 'nearby' && uiStore.nearbyPhase === 'idle') {
       uiStore.onRequestNearbyPasses?.();
     }
@@ -147,26 +148,22 @@
   let headerH = $derived(headerEl?.offsetHeight ?? 0);
 
   // Render cap: only mount a limited number of pass rows, expand on scroll
-  const RENDER_PAGE = 100;
-  let renderLimit = $state(RENDER_PAGE);
-
-  // Reset render limit on tab switch
-  $effect(() => {
-    uiStore.passesTab;
-    renderLimit = RENDER_PAGE;
-  });
+  // Virtual window: only render rows visible in the viewport + buffer.
+  // Spacers above and below keep the scrollbar proportional.
+  const ROW_HEIGHT = 27; // approximate px per pass row
+  const BUFFER = 30;     // extra rows above/below viewport
+  let tableScrollTop = $state(0);
 
   function onTableScroll(e: Event) {
-    const el = e.target as HTMLElement;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 50) {
-      renderLimit += RENDER_PAGE;
-    }
+    tableScrollTop = (e.target as HTMLElement).scrollTop;
   }
 </script>
 
 {#snippet passesIcon()}<span class="title-icon">{@html ICON_PASSES}</span>{/snippet}
 
 {#snippet passTable(passes: SatellitePass[])}
+  {@const winStart = Math.max(0, Math.floor(tableScrollTop / ROW_HEIGHT) - BUFFER)}
+  {@const winEnd = Math.min(passes.length, winStart + Math.ceil(370 / ROW_HEIGHT) + 2 * BUFFER)}
   <div class="table-wrap" onscroll={onTableScroll}>
     <div class="table-header" bind:this={headerEl}>
       <span class="th th-sat">Satellite</span>
@@ -176,8 +173,10 @@
       <span class="th th-mag">Mag</span>
       <span class="th th-actions"></span>
     </div>
-    {#each passes.slice(0, renderLimit) as pass, i}
-      {#if i === 0 || dayKey(pass.aosEpoch) !== dayKey(passes[i - 1].aosEpoch)}
+    {#if winStart > 0}<div style="height:{winStart * ROW_HEIGHT}px"></div>{/if}
+    {#each passes.slice(winStart, winEnd) as pass, j (winStart + j)}
+      {@const i = winStart + j}
+      {#if j === 0 || dayKey(pass.aosEpoch) !== dayKey(passes[i - 1].aosEpoch)}
         <div class="day-header" style="top:{headerH}px">{dayLabel(pass.aosEpoch)}</div>
       {/if}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
@@ -199,9 +198,7 @@
         {/if}
       </div>
     {/each}
-    {#if passes.length > renderLimit}
-      <div class="load-more">Showing {renderLimit} of {passes.length} — scroll for more</div>
-    {/if}
+    {#if winEnd < passes.length}<div style="height:{(passes.length - winEnd) * ROW_HEIGHT}px"></div>{/if}
   </div>
 {/snippet}
 
@@ -266,7 +263,7 @@
             {#if uiStore.nearbyComputing}
               <span class="pass-count phase-label">{nearbyCount} pass{nearbyCount !== 1 ? 'es' : ''} so far...</span>
             {:else}
-              <span class="pass-count">{nearbyCount} pass{nearbyCount !== 1 ? 'es' : ''}</span>
+              <span class="pass-count">{nearbyCount} pass{nearbyCount !== 1 ? 'es' : ''} in 24h</span>
             {/if}
           </div>
           {#if uiStore.nearbyComputing}
@@ -536,10 +533,4 @@
     pointer-events: none;
   }
 
-  .load-more {
-    font-size: 10px;
-    color: var(--text-ghost);
-    text-align: center;
-    padding: 6px 8px;
-  }
 </style>
