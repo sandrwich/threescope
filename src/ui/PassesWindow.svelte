@@ -145,12 +145,29 @@
   let isNearby = $derived(uiStore.passesTab === 'nearby');
   let headerEl: HTMLDivElement | undefined = $state();
   let headerH = $derived(headerEl?.offsetHeight ?? 0);
+
+  // Render cap: only mount a limited number of pass rows, expand on scroll
+  const RENDER_PAGE = 100;
+  let renderLimit = $state(RENDER_PAGE);
+
+  // Reset render limit on tab switch
+  $effect(() => {
+    uiStore.passesTab;
+    renderLimit = RENDER_PAGE;
+  });
+
+  function onTableScroll(e: Event) {
+    const el = e.target as HTMLElement;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 50) {
+      renderLimit += RENDER_PAGE;
+    }
+  }
 </script>
 
 {#snippet passesIcon()}<span class="title-icon">{@html ICON_PASSES}</span>{/snippet}
 
 {#snippet passTable(passes: SatellitePass[])}
-  <div class="table-wrap">
+  <div class="table-wrap" onscroll={onTableScroll}>
     <div class="table-header" bind:this={headerEl}>
       <span class="th th-sat">Satellite</span>
       <span class="th th-time">Time</span>
@@ -159,7 +176,7 @@
       <span class="th th-mag">Mag</span>
       <span class="th th-actions"></span>
     </div>
-    {#each passes as pass, i}
+    {#each passes.slice(0, renderLimit) as pass, i}
       {#if i === 0 || dayKey(pass.aosEpoch) !== dayKey(passes[i - 1].aosEpoch)}
         <div class="day-header" style="top:{headerH}px">{dayLabel(pass.aosEpoch)}</div>
       {/if}
@@ -182,6 +199,9 @@
         {/if}
       </div>
     {/each}
+    {#if passes.length > renderLimit}
+      <div class="load-more">Showing {renderLimit} of {passes.length} — scroll for more</div>
+    {/if}
   </div>
 {/snippet}
 
@@ -514,5 +534,12 @@
     height: 2px;
     background: #44ff44;
     pointer-events: none;
+  }
+
+  .load-more {
+    font-size: 10px;
+    color: var(--text-ghost);
+    text-align: center;
+    padding: 6px 8px;
   }
 </style>
