@@ -26,3 +26,5 @@ export const ICON_POLAR = '<svg viewBox="0 0 16 16" fill="none" stroke="currentC
 export const ICON_DOPPLER = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8c1.5-6 3-6 4.5 0s3 6 4.5 0 3-6 4.5 0"/></svg>';
 
 export const ICON_DATA_SOURCES = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13l4-4"/><circle cx="2.5" cy="13.5" r="1.5" fill="currentColor" stroke="none"/><path d="M5 9a4.5 4.5 0 0 1 6 0"/><path d="M3 6.5a8 8 0 0 1 10 0"/><path d="M1 4a11 11 0 0 1 14 0"/></svg>';
+
+export const ICON_CLOSE = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>';

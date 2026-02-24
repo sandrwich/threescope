@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { ICON_CLOSE } from './icons';
 
   // Shared z-index counter — each focus bumps this
   let topZ = 100;
@@ -116,7 +117,7 @@
         {title}
       </span>
       {#if headerExtra}{@render headerExtra()}{/if}
-      <button class="window-close" onclick={() => open = false}>&times;</button>
+      <button class="window-close" onclick={() => open = false}>{@html ICON_CLOSE}</button>
     </div>
     <div class="window-body">
       {@render children()}
@@ -160,11 +161,13 @@
     background: none;
     border: none;
     color: var(--text-ghost);
-    font-size: 16px;
     cursor: pointer;
-    padding: 0 2px;
-    line-height: 1;
+    padding: 0 0 0 4px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
+  .window-close :global(svg) { width: 10px; height: 10px; }
   .window-close:hover { color: var(--text-dim); }
   .window-title :global(.title-icon) {
     display: inline-flex;
