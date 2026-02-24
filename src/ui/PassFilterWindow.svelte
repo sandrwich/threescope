@@ -505,7 +505,7 @@
 
 {#snippet pfIcon()}<span class="title-icon">{@html ICON_FILTER}</span>{/snippet}
 
-<DraggableWindow title="Pass Filters" icon={pfIcon} {headerExtra} bind:open={uiStore.passFilterWindowOpen} initialX={9999} initialY={150}>
+<DraggableWindow id="pass-filters" title="Pass Filters" icon={pfIcon} {headerExtra} bind:open={uiStore.passFilterWindowOpen} initialX={9999} initialY={150}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="pf"
     onpointerdown={() => { uiStore.passFilterInteracting = true; }}

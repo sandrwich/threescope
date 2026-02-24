@@ -291,7 +291,7 @@
   {/if}
 {/snippet}
 
-<DraggableWindow title="Passes" icon={passesIcon} headerExtra={headerTabs} bind:open={uiStore.passesWindowOpen} initialX={9999} initialY={450}>
+<DraggableWindow id="passes" title="Passes" icon={passesIcon} headerExtra={headerTabs} bind:open={uiStore.passesWindowOpen} initialX={9999} initialY={450}>
   <div class="pw">
     {#if !observerStore.isSet}
       <div class="prompt">

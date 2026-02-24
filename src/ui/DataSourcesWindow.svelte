@@ -50,7 +50,7 @@
 </script>
 
 {#snippet dsIcon()}<span class="title-icon">{@html ICON_DATA_SOURCES}</span>{/snippet}
-<DraggableWindow title="Data Sources" icon={dsIcon} bind:open={uiStore.dataSourcesOpen} initialX={10} initialY={260}>
+<DraggableWindow id="data-sources" title="Data Sources" icon={dsIcon} bind:open={uiStore.dataSourcesOpen} initialX={10} initialY={260}>
   <div class="ds-content">
     <div class="section">
       <div class="section-header">CelesTrak</div>

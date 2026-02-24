@@ -169,7 +169,7 @@
 
 {#snippet obsIcon()}<span class="title-icon">{@html ICON_OBSERVER}</span>{/snippet}
 
-<DraggableWindow title="Observer" icon={obsIcon} bind:open={uiStore.observerWindowOpen} initialX={10} initialY={490}>
+<DraggableWindow id="observer" title="Observer" icon={obsIcon} bind:open={uiStore.observerWindowOpen} initialX={10} initialY={490}>
   <div class="ow">
     <!-- Location -->
     <h4 class="section-header">Location</h4>

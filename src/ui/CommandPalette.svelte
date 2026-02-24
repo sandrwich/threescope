@@ -12,6 +12,7 @@
   import { getElevation, isElevationLoaded } from '../astro/elevation';
   import { unixToEpoch } from '../astro/epoch';
   import { tick } from 'svelte';
+  import { resetWindowLayout } from './shared/DraggableWindow.svelte';
 
   interface PaletteAction {
     id: string;
@@ -146,6 +147,7 @@
     actions.push({ id: 'win-observer', category: 'Window', label: 'Toggle Observer', shortcut: 'O', keywords: 'location gps coordinates sun moon twilight', execute: () => { uiStore.observerWindowOpen = !uiStore.observerWindowOpen; close(); } });
     actions.push({ id: 'win-polar', category: 'Window', label: 'Toggle Polar Plot', keywords: 'azimuth elevation tracking', execute: () => { uiStore.polarPlotOpen = !uiStore.polarPlotOpen; close(); } });
     actions.push({ id: 'win-help', category: 'Window', label: 'Show Help', keywords: 'info controls keyboard', execute: () => { uiStore.infoModalOpen = true; close(); } });
+    actions.push({ id: 'win-reset-layout', category: 'Window', label: 'Reset Window Positions', keywords: 'layout default reset restore', execute: () => { close(); resetWindowLayout(); } });
 
     return actions;
   }

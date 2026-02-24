@@ -439,7 +439,7 @@
 </script>
 
 {#snippet dopplerIcon()}<span class="title-icon">{@html ICON_DOPPLER}</span>{/snippet}
-<DraggableWindow title="Doppler Shift" icon={dopplerIcon} bind:open={uiStore.dopplerWindowOpen} initialX={200} initialY={150}>
+<DraggableWindow id="doppler" title="Doppler Shift" icon={dopplerIcon} bind:open={uiStore.dopplerWindowOpen} initialX={200} initialY={150}>
   <div class="dw">
     <div class="controls">
       <label>

@@ -135,7 +135,7 @@
 {/snippet}
 
 {#snippet timeIcon()}<span class="title-icon">{@html ICON_TIME}</span>{/snippet}
-<DraggableWindow title="Time Control" icon={timeIcon} bind:open={uiStore.timeWindowOpen} initialX={10} initialY={34}>
+<DraggableWindow id="time-control" title="Time Control" icon={timeIcon} bind:open={uiStore.timeWindowOpen} initialX={10} initialY={34}>
   <div class="tc">
     <div class="transport-row">
       <button class="tb" title="Slower (,)" onclick={() => timeStore.stepBackward()}>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
+  import { resetWindowLayout } from './shared/DraggableWindow.svelte';
   import InfoTip from './shared/InfoTip.svelte';
   import Checkbox from './shared/Checkbox.svelte';
   import { uiStore } from '../stores/ui.svelte';
@@ -72,7 +73,7 @@
 </script>
 
 {#snippet settIcon()}<span class="title-icon">{@html ICON_SETTINGS}</span>{/snippet}
-<DraggableWindow title="Settings" icon={settIcon} bind:open={uiStore.settingsOpen} initialX={10} initialY={490}>
+<DraggableWindow id="settings" title="Settings" icon={settIcon} bind:open={uiStore.settingsOpen} initialX={10} initialY={490}>
   <h4 class="section-header">Graphics</h4>
   <div class="row">
     <label>Preset</label>
@@ -213,6 +214,9 @@
     <div class="warning">May reduce UI responsiveness</div>
   {/if}
 
+  <h4 class="section-header">Layout</h4>
+  <button class="reset-btn" onclick={resetWindowLayout}>Reset window positions</button>
+
 </DraggableWindow>
 
 <style>
@@ -280,5 +284,15 @@
     color: #cc6633;
     margin: -6px 0 8px;
   }
+  .reset-btn {
+    background: var(--ui-bg);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .reset-btn:hover { border-color: var(--border-hover); color: var(--text); }
 
 </style>

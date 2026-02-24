@@ -22,7 +22,7 @@
 </script>
 
 {#snippet viewIcon()}<span class="title-icon">{@html ICON_VIEW}</span>{/snippet}
-<DraggableWindow title="View" icon={viewIcon} bind:open={uiStore.viewWindowOpen} initialX={10} initialY={200}>
+<DraggableWindow id="view" title="View" icon={viewIcon} bind:open={uiStore.viewWindowOpen} initialX={10} initialY={200}>
   <div class="view-content">
     <div class="section">
       <div class="section-header">Rendering</div>

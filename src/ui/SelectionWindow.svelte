@@ -88,7 +88,7 @@
 </script>
 
 {#snippet selIcon()}<span class="title-icon">{@html ICON_SELECTION}</span>{/snippet}
-<DraggableWindow title="Selection" icon={selIcon} bind:open={uiStore.selectionWindowOpen} initialX={9999} initialY={200}>
+<DraggableWindow id="selection" title="Selection" icon={selIcon} bind:open={uiStore.selectionWindowOpen} initialX={9999} initialY={200}>
   <div class="sw">
     <div class="search-box">
       <input

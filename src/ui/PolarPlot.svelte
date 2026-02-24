@@ -223,7 +223,7 @@
 </script>
 
 {#snippet polarIcon()}<span class="title-icon">{@html ICON_POLAR}</span>{/snippet}
-<DraggableWindow title="Polar Plot" icon={polarIcon} bind:open={uiStore.polarPlotOpen} initialX={9999} initialY={100}>
+<DraggableWindow id="polar-plot" title="Polar Plot" icon={polarIcon} bind:open={uiStore.polarPlotOpen} initialX={9999} initialY={100}>
   <div class="pp">
     <canvas bind:this={canvasEl}></canvas>
   </div>
