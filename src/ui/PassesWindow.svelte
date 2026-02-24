@@ -3,7 +3,7 @@
   import { uiStore } from '../stores/ui.svelte';
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
-  import { ICON_PASSES, ICON_DOPPLER } from './shared/icons';
+  import { ICON_PASSES, ICON_DOPPLER, ICON_ECLIPSE } from './shared/icons';
   import { SAT_COLORS } from '../constants';
   import { epochToDate } from '../astro/epoch';
   import type { SatellitePass } from '../passes/pass-types';
@@ -138,6 +138,7 @@
         <span class="td td-sat">
           <svg class="color-dot" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="{satColor(pass.satColorIndex)}"/></svg>
           <span class="sat-name" title={pass.satName}>{pass.satName}</span>
+          {#if pass.eclipsed}<span class="eclipse-icon" title="In Earth's shadow">{@html ICON_ECLIPSE}</span>{/if}
         </span>
         <span class="td td-time">{formatTime(pass.aosEpoch)} <span class="arrow">&rarr;</span> {formatTime(pass.losEpoch)}</span>
         <span class="td td-dur">{formatDuration(pass.durationSec)}</span>
@@ -454,6 +455,14 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .eclipse-icon {
+    flex-shrink: 0;
+    color: #aaa;
+    display: inline-flex;
+    align-items: center;
+  }
+  .eclipse-icon :global(svg) { width: 10px; height: 10px; display: block; transform: translateY(-0.5px); }
+
   .el-low { color: #ff4444; }
   .el-mid { color: #ffaa00; }
   .el-high { color: #44ff44; }

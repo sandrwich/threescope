@@ -5,6 +5,7 @@
 import { twoline2satrec, propagate } from 'satellite.js';
 import { normalizeEpoch, epochToUnix, epochToGmst } from '../astro/epoch';
 import { getAzEl } from '../astro/az-el';
+import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
 import type { PassRequest, PassResponse, SatellitePass, PassSkyPoint, PassProgress } from './pass-types';
 
 const DEG2RAD = Math.PI / 180;
@@ -133,6 +134,14 @@ function computePassesForSat(
             losAz = getAzEl(losPos.x, losPos.y, losPos.z, losGmst, obsLat, obsLon, obsAlt).az;
           }
 
+          // Eclipse check at max elevation (most representative moment)
+          let eclipsed = false;
+          const maxElPos = propagateAtEpoch(satrec, currentMaxElEpoch);
+          if (maxElPos) {
+            const sunDir = sunDirectionECI(currentMaxElEpoch);
+            eclipsed = isEclipsed(maxElPos.x, maxElPos.y, maxElPos.z, sunDir);
+          }
+
           passes.push({
             satName: name,
             satColorIndex: colorIndex,
@@ -144,6 +153,7 @@ function computePassesForSat(
             losAz,
             durationSec: (losEpoch - currentAosEpoch) * 86400,
             skyPath,
+            eclipsed,
           });
         }
       }

@@ -15,6 +15,7 @@ export interface SatellitePass {
   losAz: number;          // azimuth at LOS (degrees)
   durationSec: number;
   skyPath: PassSkyPoint[];
+  eclipsed: boolean;        // satellite in Earth's shadow at max elevation
 }
 
 export interface PassRequest {
