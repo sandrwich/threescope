@@ -16,11 +16,12 @@ export interface SatellitePass {
   durationSec: number;
   skyPath: PassSkyPoint[];
   eclipsed: boolean;        // satellite in Earth's shadow at max elevation
+  peakMag: number | null;   // estimated visual magnitude at max elevation (null if eclipsed)
 }
 
 export interface PassRequest {
   type: 'compute';
-  satellites: { name: string; line1: string; line2: string; colorIndex: number }[];
+  satellites: { name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[];
   observerLat: number;
   observerLon: number;
   observerAlt: number;    // meters

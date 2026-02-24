@@ -86,7 +86,7 @@ export class App {
   private passPredictor = new PassPredictor();
   private nearbyPredictor = new PassPredictor();
   private nearbyPhase: 'idle' | 'quick' | 'full' | 'done' = 'idle';
-  private nearbySatsSnapshot: { name: string; line1: string; line2: string; colorIndex: number }[] = [];
+  private nearbySatsSnapshot: { name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[] = [];
   private lastPassSatsVersion = -1;
   private overlayEl!: HTMLElement;
 
@@ -720,10 +720,10 @@ export class App {
       uiStore.passesComputing = false;
       return;
     }
-    const sats: { name: string; line1: string; line2: string; colorIndex: number }[] = [];
+    const sats: { name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[] = [];
     let idx = 0;
     for (const sat of this.selectedSats) {
-      sats.push({ name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx });
+      sats.push({ name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag });
       idx++;
     }
     uiStore.passesComputing = true;
@@ -771,7 +771,7 @@ export class App {
     }
 
     const sats = filtered.map((sat, idx) => ({
-      name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx,
+      name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag,
     }));
     this.nearbySatsSnapshot = sats;
 

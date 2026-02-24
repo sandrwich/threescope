@@ -54,6 +54,14 @@
     return 'el-high';
   }
 
+  function magClass(pass: SatellitePass): string {
+    if (pass.eclipsed) return 'mag-eclipsed';
+    if (pass.peakMag === null) return 'mag-unknown';
+    if (pass.peakMag < 2) return 'mag-bright';
+    if (pass.peakMag <= 5) return 'mag-mid';
+    return 'mag-faint';
+  }
+
   function isActive(pass: SatellitePass): boolean {
     return timeStore.epoch >= pass.aosEpoch && timeStore.epoch <= pass.losEpoch;
   }
@@ -127,6 +135,7 @@
       <span class="th th-time">Time</span>
       <span class="th th-dur">Dur</span>
       <span class="th th-el">Max El</span>
+      <span class="th th-mag">Mag</span>
       <span class="th th-actions"></span>
     </div>
     {#each passes as pass, i}
@@ -138,11 +147,11 @@
         <span class="td td-sat">
           <svg class="color-dot" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="{satColor(pass.satColorIndex)}"/></svg>
           <span class="sat-name" title={pass.satName}>{pass.satName}</span>
-          {#if pass.eclipsed}<span class="eclipse-icon" title="In Earth's shadow">{@html ICON_ECLIPSE}</span>{/if}
         </span>
         <span class="td td-time">{formatTime(pass.aosEpoch)} <span class="arrow">&rarr;</span> {formatTime(pass.losEpoch)}</span>
         <span class="td td-dur">{formatDuration(pass.durationSec)}</span>
         <span class="td td-el {elClass(pass.maxEl)}">{pass.maxEl.toFixed(1)}&deg;</span>
+        <span class="td td-mag {magClass(pass)}" title={pass.eclipsed ? 'In Earth\'s shadow' : pass.peakMag !== null ? `Estimated visual magnitude: ${pass.peakMag.toFixed(2)}` : 'No brightness data available'}>{#if pass.eclipsed}<span class="eclipse-icon">{@html ICON_ECLIPSE}</span>{:else if pass.peakMag !== null}{pass.peakMag.toFixed(1)}{:else}?{/if}</span>
         <span class="td td-actions">
           <button class="action-icon" onclick={(e) => { e.stopPropagation(); openDoppler(pass, i); }} title="Doppler analysis">{@html ICON_DOPPLER}</button>
           <button class="action-icon" onclick={(e) => { e.stopPropagation(); skipTo(pass, i); }} title="Skip to pass">&#9654;</button>
@@ -410,6 +419,7 @@
   .th-time, .td-time { width: 140px; text-align: center; flex-shrink: 0; }
   .th-dur, .td-dur { width: 52px; text-align: right; flex-shrink: 0; }
   .th-el,  .td-el  { width: 48px; text-align: right; flex-shrink: 0; }
+  .th-mag, .td-mag { width: 36px; text-align: right; flex-shrink: 0; }
   .th-actions, .td-actions { width: 38px; text-align: center; flex-shrink: 0; display: flex; gap: 2px; justify-content: flex-end; }
 
   .arrow {
@@ -456,16 +466,20 @@
     white-space: nowrap;
   }
   .eclipse-icon {
-    flex-shrink: 0;
     color: #aaa;
-    display: inline-flex;
-    align-items: center;
   }
-  .eclipse-icon :global(svg) { width: 10px; height: 10px; display: block; transform: translateY(-0.5px); }
 
   .el-low { color: #ff4444; }
   .el-mid { color: #ffaa00; }
   .el-high { color: #44ff44; }
+
+  .mag-bright { color: #fff; text-shadow: 0 0 6px rgba(255, 255, 255, 0.9), 0 0 12px rgba(255, 255, 255, 0.4); }
+  .mag-mid { color: var(--text-muted); }
+  .mag-faint { color: var(--text-ghost); }
+  .mag-unknown { color: var(--text-ghost); opacity: 0.5; }
+  .mag-eclipsed { color: var(--text-ghost); opacity: 0.35; }
+  .td-mag .eclipse-icon { display: inline-flex; align-items: center; }
+  .td-mag .eclipse-icon :global(svg) { width: 10px; height: 10px; display: block; opacity: 0.35; }
 
   .action-icon {
     background: none;

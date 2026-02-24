@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { Satellite } from '../types';
 import { normalizeEpoch, epochToUnix } from './epoch';
 import { J2, EARTH_RADIUS_EQ_KM } from '../constants';
+import stdmagData from '../data/stdmag.json';
 
 /**
  * Compute J2 secular perturbation rates for RAAN and argument of perigee.
@@ -24,9 +25,15 @@ function computeJ2Rates(
   };
 }
 
+// Pre-index stdmag data for fast numeric lookup
+const stdmagLookup = stdmagData as Record<string, number>;
+
 export function parseTLE(name: string, line1: string, line2: string): Satellite | null {
   try {
     const satrec = satellite.twoline2satrec(line1, line2);
+
+    // Extract NORAD catalog number from TLE line 1 (columns 3-7, 1-indexed)
+    const noradId = parseInt(line1.substring(2, 7).trim(), 10);
 
     // Extract orbital elements from TLE lines
     const epochDays = parseFloat(line1.substring(18, 32));
@@ -68,6 +75,9 @@ export function parseTLE(name: string, line1: string, line2: string): Satellite 
       raanRate,
       argPerigeeRate,
       ndot,
+      stdMag: !isNaN(noradId) && String(noradId) in stdmagLookup
+        ? stdmagLookup[String(noradId)]
+        : null,
     };
   } catch {
     return null;
