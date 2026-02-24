@@ -58,9 +58,25 @@ class UIStore {
   nearbyComputing = $state(false);
   nearbyProgress = $state(0);
   nearbyPhase = $state<'idle' | 'computing' | 'done'>('idle');
+  // Computation timing (ms)
+  passesComputeTime = $state(0);
+  nearbyComputeTime = $state(0);
   nearbyFilteredCount = $state(0);
   nearbyTotalCount = $state(0);
   passListEpoch = $state(0);
+
+  // Pass filters (persisted to localStorage)
+  passMinEl = $state(0);         // degrees, sent to worker on change
+  passMaxEl = $state(90);        // degrees, client-side
+  passAzFrom = $state(0);       // degrees 0-360, supports wrap-around
+  passAzTo = $state(360);       // degrees 0-360
+  passVisibility = $state<'all' | 'observable' | 'visible'>('all');
+  passMinDuration = $state(0);  // seconds within observable window
+  passHiddenSats = $state(new Set<string>());
+  // Horizon mask: min elevation at 8 azimuths (N/NE/E/SE/S/SW/W/NW)
+  passHorizonMask = $state<{ az: number; minEl: number }[]>([]);
+  passFilterWindowOpen = $state(false);
+  passFilterInteracting = $state(false); // true while pointer held on filter controls
 
   get activePassList(): SatellitePass[] {
     return this.passesTab === 'selected' ? this.passes : this.nearbyPasses;
@@ -108,6 +124,8 @@ class UIStore {
   onRequestNearbyPasses: (() => void) | null = null;
   onSelectSatFromNearbyPass: ((name: string) => void) | null = null;
   getSatTLE: ((name: string) => { line1: string; line2: string } | null) | null = null;
+  onFiltersChanged: (() => void) | null = null;
+  onFilterInteractionEnd: (() => void) | null = null;
 
   loadToggles() {
     const load = (key: string, defaultVal: boolean): boolean => {
@@ -137,6 +155,94 @@ class UIStore {
     this.markerVisibility = { ...this.markerVisibility, [groupId]: visible };
     localStorage.setItem(`threescope_markers_${groupId}`, String(visible));
     this.onMarkerGroupChange?.(groupId, visible);
+  }
+
+  loadPassFilters() {
+    const num = (key: string, def: number): number => {
+      const v = localStorage.getItem(key);
+      return v !== null ? Number(v) : def;
+    };
+    this.passMinEl = num('threescope_pass_min_el', 0);
+    this.passMaxEl = num('threescope_pass_max_el', 90);
+    this.passAzFrom = num('threescope_pass_az_from', 0);
+    this.passAzTo = num('threescope_pass_az_to', 360);
+    this.passMinDuration = num('threescope_pass_min_dur', 0);
+    const vis = localStorage.getItem('threescope_pass_visibility');
+    if (vis === 'observable' || vis === 'visible') this.passVisibility = vis;
+    const mask = localStorage.getItem('threescope_pass_horizon_mask');
+    if (mask) {
+      try { this.passHorizonMask = JSON.parse(mask); } catch { /* use default */ }
+    }
+  }
+
+  savePassFilter(key: string, value: string | number) {
+    localStorage.setItem(`threescope_pass_${key}`, String(value));
+  }
+
+  setPassMinEl(v: number) {
+    if (v === this.passMinEl) return;
+    this.passMinEl = v;
+    this.savePassFilter('min_el', v);
+    this.onFiltersChanged?.();
+  }
+
+  setPassMaxEl(v: number) {
+    if (v === this.passMaxEl) return;
+    this.passMaxEl = v;
+    this.savePassFilter('max_el', v);
+    this.onFiltersChanged?.();
+  }
+
+  setPassAzRange(from: number, to: number) {
+    if (from === this.passAzFrom && to === this.passAzTo) return;
+    this.passAzFrom = from;
+    this.passAzTo = to;
+    this.savePassFilter('az_from', from);
+    this.savePassFilter('az_to', to);
+    this.onFiltersChanged?.();
+  }
+
+  setPassVisibility(v: 'all' | 'observable' | 'visible') {
+    if (v === this.passVisibility) return;
+    this.passVisibility = v;
+    this.savePassFilter('visibility', v);
+    this.onFiltersChanged?.();
+  }
+
+  setPassMinDuration(v: number) {
+    if (v === this.passMinDuration) return;
+    this.passMinDuration = v;
+    this.savePassFilter('min_dur', v);
+    this.onFiltersChanged?.();
+  }
+
+  setPassHorizonMask(mask: { az: number; minEl: number }[]) {
+    const same = mask.length === this.passHorizonMask.length &&
+      mask.every((m, i) => m.az === this.passHorizonMask[i].az && m.minEl === this.passHorizonMask[i].minEl);
+    if (same) return;
+    this.passHorizonMask = mask;
+    localStorage.setItem('threescope_pass_horizon_mask', JSON.stringify(mask));
+    this.onFiltersChanged?.();
+  }
+
+  get hasActivePassFilters(): boolean {
+    return this.passMinEl > 0 || this.passMaxEl < 90 ||
+      this.passAzFrom !== 0 || this.passAzTo !== 360 ||
+      this.passVisibility !== 'all' || this.passMinDuration > 0 ||
+      this.passHiddenSats.size > 0 || this.passHorizonMask.length > 0;
+  }
+
+  resetPassFilters() {
+    this.passMinEl = 0; this.passMaxEl = 90;
+    this.passAzFrom = 0; this.passAzTo = 360;
+    this.passVisibility = 'all';
+    this.passMinDuration = 0;
+    this.passHiddenSats = new Set();
+    this.passHorizonMask = [];
+    for (const k of ['min_el', 'max_el', 'az_from', 'az_to', 'visibility', 'min_dur', 'horizon_mask']) {
+      localStorage.removeItem(`threescope_pass_${k}`);
+    }
+    this.onFiltersChanged?.();
   }
 
   setToggle(key: string, value: boolean) {

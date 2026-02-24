@@ -404,11 +404,13 @@ export class App {
     this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
 
     // Invalidate nearby passes when satellite data changes
-    if (uiStore.nearbyPhase !== 'idle') {
-      uiStore.nearbyPasses = [];
-      uiStore.nearbyPhase = 'idle';
-      uiStore.nearbyComputing = false;
-      this.nearbyPredictor.dispose();
+    uiStore.nearbyPasses = [];
+    uiStore.nearbyPhase = 'idle';
+    uiStore.nearbyComputing = false;
+    this.nearbyPredictor.dispose();
+    // Auto-recompute if nearby tab is active
+    if (uiStore.passesWindowOpen && uiStore.passesTab === 'nearby') {
+      this.requestNearbyPasses();
     }
 
     sourcesStore.totalSats = deduped.length;
@@ -448,6 +450,7 @@ export class App {
     // --- Load persisted settings from localStorage ---
     settingsStore.load();
     uiStore.loadToggles();
+    uiStore.loadPassFilters();
     uiStore.loadMarkerGroups(this.cfg.markerGroups);
 
     // Apply initial toggle values
@@ -618,6 +621,7 @@ export class App {
       uiStore.passes = passes;
       uiStore.passesComputing = false;
       uiStore.passesProgress = 0;
+      uiStore.passesComputeTime = performance.now() - this.passStartTime;
     };
     this.passPredictor.onProgress = (pct) => {
       uiStore.passesProgress = pct;
@@ -633,11 +637,40 @@ export class App {
       uiStore.nearbyComputing = false;
       uiStore.nearbyPhase = 'done';
       uiStore.nearbyProgress = 0;
+      uiStore.nearbyComputeTime = performance.now() - this.nearbyStartTime;
     };
     this.nearbyPredictor.onProgress = (pct) => {
       uiStore.nearbyProgress = pct;
     };
     uiStore.onRequestNearbyPasses = () => this.requestNearbyPasses();
+    let filterDebounce: ReturnType<typeof setTimeout> | null = null;
+    let filterDirty = false;
+    const fireFilterRecompute = () => {
+      filterDirty = false;
+      if (filterDebounce) clearTimeout(filterDebounce);
+      filterDebounce = null;
+      if (uiStore.passesTab === 'nearby') this.requestNearbyPasses();
+      else this.requestPasses();
+    };
+    uiStore.onFiltersChanged = () => {
+      if (!uiStore.passesWindowOpen) return;
+      if (uiStore.passFilterInteracting) {
+        // Pointer held — just mark dirty, recompute on release
+        filterDirty = true;
+        if (filterDebounce) clearTimeout(filterDebounce);
+        filterDebounce = null;
+        return;
+      }
+      filterDirty = false;
+      if (filterDebounce) clearTimeout(filterDebounce);
+      filterDebounce = setTimeout(fireFilterRecompute, 500);
+    };
+    uiStore.onFilterInteractionEnd = () => {
+      if (filterDirty) {
+        if (filterDebounce) clearTimeout(filterDebounce);
+        filterDebounce = setTimeout(fireFilterRecompute, 500);
+      }
+    };
     uiStore.onSelectSatFromNearbyPass = (name: string) => {
       const sat = this.satellites.find(s => s.name === name);
       if (sat && !this.selectedSats.has(sat)) {
@@ -695,12 +728,27 @@ export class App {
     this.maxBatch = s.updateQuality;
   }
 
+  private passFilterParams() {
+    return {
+      maxElevation: uiStore.passMaxEl < 90 ? uiStore.passMaxEl : undefined,
+      visibility: uiStore.passVisibility !== 'all' ? uiStore.passVisibility : undefined,
+      azFrom: uiStore.passAzFrom !== 0 ? uiStore.passAzFrom : undefined,
+      azTo: uiStore.passAzTo !== 360 ? uiStore.passAzTo : undefined,
+      horizonMask: uiStore.passHorizonMask.length > 0 ? uiStore.passHorizonMask.map(m => ({ az: m.az, minEl: m.minEl })) : undefined,
+      minDuration: uiStore.passMinDuration > 0 ? uiStore.passMinDuration : undefined,
+    };
+  }
+
+  private passStartTime = 0;
+  private nearbyStartTime = 0;
+
   private requestPasses() {
     if (!observerStore.isSet || this.selectedSats.size === 0) {
       uiStore.passes = [];
       uiStore.passesComputing = false;
       return;
     }
+    this.passStartTime = performance.now();
     const sats: { name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[] = [];
     let idx = 0;
     for (const sat of this.selectedSats) {
@@ -717,7 +765,8 @@ export class App {
       observerAlt: observerStore.location.alt,
       startEpoch: timeStore.epoch,
       durationDays: 3,
-      minElevation: 0,
+      minElevation: uiStore.passMinEl,
+      ...this.passFilterParams(),
     });
     this.lastPassSatsVersion = this.selectedSatsVersion;
   }
@@ -739,6 +788,7 @@ export class App {
       uiStore.nearbyPhase = 'idle';
       return;
     }
+    this.nearbyStartTime = performance.now();
 
     const filtered = this.filterByInclination(this.satellites, observerStore.location.lat);
     uiStore.nearbyFilteredCount = filtered.length;
@@ -755,7 +805,7 @@ export class App {
       name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag,
     }));
 
-    uiStore.nearbyPasses = [];
+    // Keep old results visible until new ones arrive
     uiStore.nearbyComputing = true;
     uiStore.nearbyProgress = 0;
     uiStore.nearbyPhase = 'computing';
@@ -768,8 +818,9 @@ export class App {
       observerAlt: observerStore.location.alt,
       startEpoch: timeStore.epoch,
       durationDays: 1,
-      minElevation: 0,
+      minElevation: uiStore.passMinEl,
       stepMinutes: 3,
+      ...this.passFilterParams(),
     });
   }
 
@@ -1129,8 +1180,11 @@ export class App {
     uiStore.selectedSatCount = this.selectedSats.size;
 
     // Pass predictor: auto-trigger when selection changes and window is open
-    if (uiStore.passesWindowOpen && this.lastPassSatsVersion !== this.selectedSatsVersion && !this.passPredictor.isComputing()) {
-      this.requestPasses();
+    if (uiStore.passesWindowOpen && this.lastPassSatsVersion !== this.selectedSatsVersion) {
+      // Always allow clearing (0 sats); only gate recomputation on not-busy
+      if (this.selectedSats.size === 0 || !this.passPredictor.isComputing()) {
+        this.requestPasses();
+      }
     }
 
     // Throttle pass-list epoch updates using updateQuality setting

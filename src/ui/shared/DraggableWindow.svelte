@@ -9,6 +9,7 @@
     title = '',
     icon = undefined as any,
     headerExtra = undefined as any,
+    footer = undefined as any,
     open = $bindable(true),
     initialX = 10,
     initialY = 50,
@@ -17,6 +18,7 @@
     title?: string;
     icon?: any;
     headerExtra?: any;
+    footer?: any;
     open?: boolean;
     initialX?: number;
     initialY?: number;
@@ -78,8 +80,9 @@
       y = initialY;
       initialized = true;
     }
-    bringToFront();
-    requestAnimationFrame(clampToViewport);
+    // Defer so newly opened windows always appear above the window whose
+    // button was clicked (that window's mousedown bringToFront fires first).
+    requestAnimationFrame(() => { bringToFront(); clampToViewport(); });
 
     ro?.disconnect();
     ro = new ResizeObserver(clampToViewport);
@@ -119,9 +122,14 @@
       {#if headerExtra}{@render headerExtra()}{/if}
       <button class="window-close" onclick={() => open = false}>{@html ICON_CLOSE}</button>
     </div>
-    <div class="window-body">
+    <div class="window-body" class:has-footer={!!footer}>
       {@render children()}
     </div>
+    {#if footer}
+      <div class="window-footer">
+        {@render footer()}
+      </div>
+    {/if}
   </div>
 {/if}
 
@@ -181,5 +189,12 @@
   }
   .window-body {
     padding: 12px 14px;
+  }
+  .window-footer {
+    border-top: 1px solid var(--border);
+    padding: 4px 14px 3px;
+  }
+  .window-footer:not(:has(*)) {
+    display: none;
   }
 </style>

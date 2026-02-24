@@ -3,7 +3,7 @@
   import { uiStore } from '../stores/ui.svelte';
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
-  import { ICON_PASSES, ICON_DOPPLER, ICON_ECLIPSE, ICON_SUN } from './shared/icons';
+  import { ICON_PASSES, ICON_DOPPLER, ICON_ECLIPSE, ICON_SUN, ICON_FILTER } from './shared/icons';
   import { SAT_COLORS } from '../constants';
   import { epochToDate } from '../astro/epoch';
   import type { SatellitePass } from '../passes/pass-types';
@@ -140,10 +140,58 @@
     }
   }
 
+  function fmtMs(ms: number): string {
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+
+  // --- Filter summary for inline bar ---
+  let filterSummary = $derived.by(() => {
+    const parts: string[] = [];
+    if (uiStore.passMinEl > 0 || uiStore.passMaxEl < 90) {
+      parts.push(`El ${uiStore.passMinEl}–${uiStore.passMaxEl}°`);
+    }
+    if (uiStore.passAzFrom !== 0 || uiStore.passAzTo !== 360) {
+      parts.push(`Az ${uiStore.passAzFrom}–${uiStore.passAzTo}°`);
+    }
+    if (uiStore.passHorizonMask.length > 0) {
+      const maxH = Math.max(...uiStore.passHorizonMask.map(p => p.minEl));
+      parts.push(`Horizon ≤${maxH}°`);
+    }
+    if (uiStore.passMinDuration > 0) parts.push(`≥${uiStore.passMinDuration}s`);
+    if (uiStore.passHiddenSats.size > 0) parts.push(`${uiStore.passHiddenSats.size} hidden`);
+    return parts.join(' · ');
+  });
+
+  // --- Filtered pass lists (worker handles most filters; client only hides per-sat) ---
+  let filteredSelectedPasses = $derived.by(() => filterBySat(uiStore.passes));
+  let filteredNearbyPasses = $derived.by(() => filterBySat(uiStore.nearbyPasses));
+
+  function filterBySat(list: SatellitePass[]): SatellitePass[] {
+    if (uiStore.passHiddenSats.size === 0) return list;
+    return list.filter(pass => !uiStore.passHiddenSats.has(pass.satName));
+  }
+
   let hasSelectedSats = $derived(uiStore.selectedSatCount > 0);
-  let passCount = $derived(uiStore.passes.length);
-  let nearbyCount = $derived(uiStore.nearbyPasses.length);
+  let rawPassCount = $derived(uiStore.passes.length);
+  let rawNearbyCount = $derived(uiStore.nearbyPasses.length);
+  let passCount = $derived(filteredSelectedPasses.length);
+  let nearbyCount = $derived(filteredNearbyPasses.length);
   let isNearby = $derived(uiStore.passesTab === 'nearby');
+  let computing = $derived((isNearby && uiStore.nearbyComputing) || (!isNearby && uiStore.passesComputing));
+
+  // Live elapsed time during computation
+  let elapsedMs = $state(0);
+  let elapsedTimer: ReturnType<typeof setInterval> | null = null;
+  $effect(() => {
+    if (computing) {
+      const start = performance.now();
+      elapsedMs = 0;
+      elapsedTimer = setInterval(() => { elapsedMs = performance.now() - start; }, 200);
+      return () => { if (elapsedTimer) clearInterval(elapsedTimer); };
+    }
+  });
+  let displayTime = $derived(computing ? elapsedMs : (isNearby ? uiStore.nearbyComputeTime : uiStore.passesComputeTime));
   let headerEl: HTMLDivElement | undefined = $state();
   let headerH = $derived(headerEl?.offsetHeight ?? 0);
 
@@ -160,6 +208,23 @@
 </script>
 
 {#snippet passesIcon()}<span class="title-icon">{@html ICON_PASSES}</span>{/snippet}
+
+{#snippet filterBar()}
+  <div class="filter-bar">
+    <div class="filter-bar-row">
+      <select class="filter-select" value={uiStore.passVisibility}
+        onchange={(e) => uiStore.setPassVisibility((e.target as HTMLSelectElement).value as 'all' | 'observable' | 'visible')}>
+        <option value="all">All passes</option>
+        <option value="observable">Observable</option>
+        <option value="visible">Visible (mag ≤ 5)</option>
+      </select>
+      {#if filterSummary}
+        <span class="filter-summary" title={filterSummary}>{filterSummary}</span>
+      {/if}
+      <button class="filter-window-btn" class:active={uiStore.passFilterWindowOpen} onclick={() => uiStore.passFilterWindowOpen = !uiStore.passFilterWindowOpen}>{@html ICON_FILTER} Filters</button>
+    </div>
+  </div>
+{/snippet}
 
 {#snippet passTable(passes: SatellitePass[])}
   {@const winStart = Math.max(0, Math.floor(tableScrollTop / ROW_HEIGHT) - BUFFER)}
@@ -211,6 +276,21 @@
   {/if}
 {/snippet}
 
+{#snippet passStats()}
+  {@const count = isNearby ? nearbyCount : passCount}
+  {@const rawCount = isNearby ? rawNearbyCount : rawPassCount}
+  {@const hasData = computing || count > 0 || rawCount > 0}
+  {#if hasData}
+    <span class="top-stats">
+      {#if computing}
+        {@const pct = isNearby ? uiStore.nearbyProgress : uiStore.passesProgress}
+        <span class="stats-progress"><span class="stats-progress-fill" style="width:{pct}%"></span></span>
+      {/if}
+      <span class="stats-label">{fmtMs(displayTime)} · {count}{count !== rawCount ? ` of ${rawCount}` : ''} passes</span>
+    </span>
+  {/if}
+{/snippet}
+
 <DraggableWindow title="Passes" icon={passesIcon} headerExtra={headerTabs} bind:open={uiStore.passesWindowOpen} initialX={9999} initialY={450}>
   <div class="pw">
     {#if !observerStore.isSet}
@@ -222,14 +302,9 @@
         <!-- Selected tab -->
         {#if !hasSelectedSats}
           <div class="prompt"><p>Select satellites to predict passes.</p></div>
-        {:else if uiStore.passesComputing}
-          <div class="computing">
-            <div class="progress-track">
-              <div class="progress-fill" style="width:{uiStore.passesProgress}%"></div>
-            </div>
-            <span class="computing-label">Computing passes...</span>
-          </div>
-        {:else if passCount === 0}
+        {:else if uiStore.passesComputing && rawPassCount === 0}
+          <div class="prompt"><p>Computing passes...</p></div>
+        {:else if rawPassCount === 0}
           <div class="prompt"><p>No passes in the next 3 days.</p></div>
         {:else}
           <div class="top-bar">
@@ -237,44 +312,37 @@
               {observerStore.displayName}{#if observerStore.location.alt > 0}, {observerStore.location.alt}m{/if}
               <button class="edit-btn" onclick={openObserver} title="Edit observer">&#9998;</button>
             </span>
-            <span class="pass-count">{passCount} pass{passCount !== 1 ? 'es' : ''}</span>
+            {@render passStats()}
           </div>
-          {@render passTable(uiStore.passes)}
+          {@render filterBar()}
+          {#if passCount > 0}
+            {@render passTable(filteredSelectedPasses)}
+          {:else}
+            <div class="prompt"><p>All passes filtered out.</p></div>
+          {/if}
         {/if}
 
       {:else}
         <!-- All Nearby tab -->
         {#if uiStore.nearbyPhase === 'idle'}
           <div class="prompt"><p>Loading...</p></div>
-        {:else if uiStore.nearbyComputing && nearbyCount === 0}
-          <div class="computing">
-            <div class="progress-track">
-              <div class="progress-fill" style="width:{uiStore.nearbyProgress}%"></div>
-            </div>
-            <span class="computing-label">Scanning {uiStore.nearbyFilteredCount} satellites...</span>
-            <span class="filter-info">{uiStore.nearbyFilteredCount} of {uiStore.nearbyTotalCount} visible from observer</span>
-          </div>
-        {:else if nearbyCount > 0 || uiStore.nearbyPhase === 'done'}
+        {:else}
           <div class="top-bar">
             <span class="observer-loc">
               {observerStore.displayName}{#if observerStore.location.alt > 0}, {observerStore.location.alt}m{/if}
               <button class="edit-btn" onclick={openObserver} title="Edit observer">&#9998;</button>
             </span>
-            {#if uiStore.nearbyComputing}
-              <span class="pass-count phase-label">{nearbyCount} pass{nearbyCount !== 1 ? 'es' : ''} so far...</span>
-            {:else}
-              <span class="pass-count">{nearbyCount} pass{nearbyCount !== 1 ? 'es' : ''} in 24h</span>
-            {/if}
+            {@render passStats()}
           </div>
-          {#if uiStore.nearbyComputing}
-            <div class="progress-track narrow"><div class="progress-fill" style="width:{uiStore.nearbyProgress}%"></div></div>
-          {/if}
+          {@render filterBar()}
           {#if nearbyCount > 0}
-            {@render passTable(uiStore.nearbyPasses)}
-          {:else}
+            {@render passTable(filteredNearbyPasses)}
+          {:else if !uiStore.nearbyComputing && rawNearbyCount > 0}
+            <div class="prompt"><p>All passes filtered out.</p></div>
+          {:else if !uiStore.nearbyComputing}
             <div class="prompt">
               <p>No nearby passes in the next 24 hours.</p>
-              <span class="filter-info">{uiStore.nearbyFilteredCount} of {uiStore.nearbyTotalCount} satellites checked</span>
+              <span class="filter-info">{uiStore.nearbyFilteredCount} of {uiStore.nearbyTotalCount} satellites scanned</span>
             </div>
           {/if}
         {/if}
@@ -333,30 +401,30 @@
   }
   .action-btn:hover { border-color: var(--border-hover); color: var(--text); }
 
-  /* Computing progress */
-  .computing {
-    padding: 12px 0;
-    text-align: center;
+  /* Inline pass stats (right side of top-bar) */
+  .top-stats {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
   }
-  .computing-label {
-    font-size: 11px;
+  .stats-label {
+    font-size: 10px;
     color: var(--text-ghost);
-    margin-top: 6px;
+    white-space: nowrap;
+  }
+  .stats-progress {
+    width: 40px;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+  .stats-progress-fill {
     display: block;
-  }
-  .progress-track {
-    height: 3px;
-    background: var(--ui-bg);
-    width: 100%;
-    margin-bottom: 4px;
-  }
-  .progress-track.narrow {
-    margin-bottom: 6px;
-  }
-  .progress-fill {
     height: 100%;
-    background: var(--text-ghost);
-    transition: width 0.15s;
+    background: rgba(255, 255, 255, 0.25);
+    transition: width 0.4s ease-out;
   }
   .filter-info {
     font-size: 10px;
@@ -401,6 +469,54 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
+  /* Filter bar (compact inline) */
+  .filter-bar {
+    margin-bottom: 8px;
+  }
+  .filter-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .filter-select {
+    background: var(--ui-bg);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-family: inherit;
+    padding: 2px 4px;
+    flex-shrink: 0;
+  }
+  .filter-select:focus { border-color: var(--border-hover); outline: none; }
+  .filter-summary {
+    font-size: 10px;
+    color: var(--text-ghost);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+  }
+  .filter-window-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-ghost);
+    font-size: 10px;
+    font-family: inherit;
+    padding: 1px 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+    margin-left: auto;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .filter-window-btn :global(svg) { width: 10px; height: 10px; }
+  .filter-window-btn:hover { border-color: var(--border-hover); color: var(--text-dim); }
+  .filter-window-btn.active { border-color: var(--text-ghost); color: var(--text-muted); }
 
   /* Table layout */
   .table-wrap {

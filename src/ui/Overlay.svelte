@@ -16,6 +16,7 @@
   import DopplerWindow from './DopplerWindow.svelte';
   import DataSourcesWindow from './DataSourcesWindow.svelte';
   import ObserverWindow from './ObserverWindow.svelte';
+  import PassFilterWindow from './PassFilterWindow.svelte';
 </script>
 
 <div id="ui-overlay">
@@ -36,6 +37,7 @@
   <PolarPlot />
   <DopplerWindow />
   <CommandPalette />
+  <PassFilterWindow />
 </div>
 
 <style>

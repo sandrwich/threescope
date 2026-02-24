@@ -3,6 +3,7 @@ import type { PassRequest, PassResponse, PassPartial, SatellitePass, PassProgres
 export class PassPredictor {
   private worker: Worker | null = null;
   private computing = false;
+  private partialPasses: SatellitePass[] = [];
 
   onResult: ((passes: SatellitePass[]) => void) | null = null;
   onPartial: ((passes: SatellitePass[]) => void) | null = null;
@@ -17,9 +18,13 @@ export class PassPredictor {
       this.worker.onmessage = (e: MessageEvent<PassResponse | PassPartial | PassProgress>) => {
         if (e.data.type === 'result') {
           this.computing = false;
+          this.partialPasses = [];
           this.onResult?.(e.data.passes);
         } else if (e.data.type === 'partial') {
-          this.onPartial?.(e.data.passes);
+          // Worker sends deltas — merge and sort on main thread
+          this.partialPasses.push(...e.data.passes);
+          this.partialPasses.sort((a, b) => a.aosEpoch - b.aosEpoch);
+          this.onPartial?.(this.partialPasses);
         } else if (e.data.type === 'progress') {
           this.onProgress?.(e.data.percent);
         }
@@ -38,6 +43,7 @@ export class PassPredictor {
       this.worker = null;
     }
     this.computing = true;
+    this.partialPasses = [];
     this.ensureWorker().postMessage(request);
   }
 

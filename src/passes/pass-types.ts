@@ -13,6 +13,7 @@ export interface SatellitePass {
   maxEl: number;          // degrees
   aosAz: number;          // azimuth at AOS (degrees)
   losAz: number;          // azimuth at LOS (degrees)
+  maxElAz: number;        // azimuth at max elevation (degrees)
   durationSec: number;
   skyPath: PassSkyPoint[];
   eclipsed: boolean;        // satellite in Earth's shadow at max elevation
@@ -31,6 +32,13 @@ export interface PassRequest {
   durationDays: number;
   minElevation: number;   // degrees
   stepMinutes?: number;   // scan step size (default 1)
+  // Optional filters — passes that don't match are discarded in the worker
+  maxElevation?: number;        // degrees, discard passes peaking below this
+  visibility?: 'all' | 'observable' | 'visible';
+  azFrom?: number;              // 0-360, supports wrap-around
+  azTo?: number;                // 0-360
+  horizonMask?: { az: number; minEl: number }[];  // 8 azimuths with min elevation
+  minDuration?: number;         // seconds within observable window
 }
 
 export interface PassResponse {
