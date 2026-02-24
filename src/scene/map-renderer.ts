@@ -8,6 +8,7 @@ import { computeFootprintGrid } from '../astro/footprint';
 import { getMapCoordinates } from '../astro/coordinates';
 import { calculatePosition } from '../astro/propagator';
 import { epochToGmst } from '../astro/epoch';
+import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
 import { calculateSunPosition } from '../astro/sun';
 import { computeApsis2D } from '../astro/apsis';
 import { uiStore } from '../stores/ui.svelte';
@@ -374,11 +375,16 @@ export class MapRenderer {
 
     const cHL = parseHexColor(cfg.orbitHighlighted);
 
-    // Ground tracks for all highlighted sats (rainbow colors)
+    // Ground tracks for all highlighted sats (rainbow colors, eclipse-dimmed)
     if (hlSats.length > 0) {
       const arr = this.hlTrackBuffer2d.array as Float32Array;
       const col = this.hlTrackColorBuffer2d.array as Float32Array;
       let vi = 0;
+
+      // Sun direction in render-space for eclipse checks
+      const sunEci = sunDirectionECI(epoch);
+      const sunRender = { x: sunEci.x, y: sunEci.z, z: -sunEci.y };
+      const ECLIPSE_DIM = 0.3;
 
       for (let si = 0; si < hlSats.length; si++) {
         const sat = hlSats[si];
@@ -388,11 +394,13 @@ export class MapRenderer {
         const timeStep = (periodDays * cfg.orbitsToDraw) / segments;
 
         const trackPts: { x: number; y: number }[] = [];
+        const eclipseDim: number[] = [];
         for (let j = 0; j <= segments; j++) {
           const t = epoch + j * timeStep;
           const pos = calculatePosition(sat, t);
           const gm = epochToGmst(t);
           trackPts.push(getMapCoordinates(pos, gm, cfg.earthRotationOffset));
+          eclipseDim.push(isEclipsed(pos.x, pos.y, pos.z, sunRender) ? ECLIPSE_DIM : 1.0);
         }
 
         for (let off = -1; off <= 1; off++) {
@@ -400,11 +408,12 @@ export class MapRenderer {
           for (let j = 1; j <= segments; j++) {
             if (vi + 6 > this.maxTrackVerts2d * 3) break;
             if (Math.abs(trackPts[j].x - trackPts[j - 1].x) < MAP_W * 0.6) {
+              const d0 = eclipseDim[j - 1], d1 = eclipseDim[j];
               arr[vi] = trackPts[j - 1].x + xOff; arr[vi+1] = -trackPts[j - 1].y; arr[vi+2] = 0.02;
-              col[vi] = cr; col[vi+1] = cg; col[vi+2] = cb;
+              col[vi] = cr * d0; col[vi+1] = cg * d0; col[vi+2] = cb * d0;
               vi += 3;
               arr[vi] = trackPts[j].x + xOff; arr[vi+1] = -trackPts[j].y; arr[vi+2] = 0.02;
-              col[vi] = cr; col[vi+1] = cg; col[vi+2] = cb;
+              col[vi] = cr * d1; col[vi+1] = cg * d1; col[vi+2] = cb * d1;
               vi += 3;
             }
           }

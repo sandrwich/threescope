@@ -4,6 +4,7 @@ import { DRAW_SCALE, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, SAT_COLORS } from '
 import { parseHexColor } from '../config';
 import { calculatePosition, getCorrectedElements } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
+import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
 
 // SAT_COLORS as 0–1 floats for WebGL
 export const ORBIT_COLORS = SAT_COLORS.map(c => [c[0] / 255, c[1] / 255, c[2] / 255]);
@@ -358,6 +359,12 @@ export class OrbitRenderer {
       const col = this.highlightColorBuffer.array as Float32Array;
       let vi = 0;
 
+      // Sun direction in render-space (ECI→render: x=x, y=z, z=-y)
+      const sunEci = sunDirectionECI(currentEpoch);
+      const sunRX = sunEci.x, sunRY = sunEci.z, sunRZ = -sunEci.y;
+      const sunRender = { x: sunRX, y: sunRY, z: sunRZ };
+      const ECLIPSE_DIM = 0.3;
+
       for (let si = 0; si < highlightSats.length; si++) {
         const sat = highlightSats[si];
         const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
@@ -365,23 +372,27 @@ export class OrbitRenderer {
         const periodDays = TWO_PI / sat.meanMotion / 86400.0;
         const timeStep = (periodDays * orbitsToDraw) / segments;
 
-        // Compute orbit points, then emit as line-segment pairs
+        // Compute orbit points with eclipse-aware coloring
         let px = 0, py = 0, pz = 0;
+        let prevDim = 1.0;
         for (let i = 0; i <= segments; i++) {
           const t = currentEpoch + i * timeStep;
           const pos = calculatePosition(sat, t);
+          // Eclipse check in render-space km (orthogonal transform preserves distances)
+          const dim = isEclipsed(pos.x, pos.y, pos.z, sunRender) ? ECLIPSE_DIM : 1.0;
           const cx = pos.x / DRAW_SCALE;
           const cy = pos.y / DRAW_SCALE;
           const cz = pos.z / DRAW_SCALE;
           if (i > 0 && vi + 6 <= this.maxHighlightVerts * 3) {
             arr[vi] = px; arr[vi+1] = py; arr[vi+2] = pz;
-            col[vi] = cr; col[vi+1] = cg; col[vi+2] = cb;
+            col[vi] = cr * prevDim; col[vi+1] = cg * prevDim; col[vi+2] = cb * prevDim;
             vi += 3;
             arr[vi] = cx; arr[vi+1] = cy; arr[vi+2] = cz;
-            col[vi] = cr; col[vi+1] = cg; col[vi+2] = cb;
+            col[vi] = cr * dim; col[vi+1] = cg * dim; col[vi+2] = cb * dim;
             vi += 3;
           }
           px = cx; py = cy; pz = cz;
+          prevDim = dim;
         }
       }
 
