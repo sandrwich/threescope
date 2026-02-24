@@ -9,3 +9,10 @@ mount(Overlay, { target: document.getElementById('svelte-ui')! });
 // Start Three.js engine
 const app = new App();
 app.init();
+
+// ── Service Worker registration ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  });
+}
