@@ -561,7 +561,7 @@
         {#if txList.length > 0}
           <Select class="tx-select" value={String(selectedTxIdx ?? 'custom')} onchange={onTxSelect}>
             {#each txList as tx, i}
-              <option value={i}>{formatFreqHz(tx.frequencyHz)} — {tx.description}{tx.mode ? ` (${tx.mode})` : ''}</option>
+              <option value={String(i)}>{formatFreqHz(tx.frequencyHz)} — {tx.description}{tx.mode ? ` (${tx.mode})` : ''}</option>
             {/each}
             <option value="custom">Custom</option>
           </Select>
