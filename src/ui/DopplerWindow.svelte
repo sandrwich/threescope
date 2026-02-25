@@ -9,12 +9,12 @@
   import { SAT_COLORS } from '../constants';
   import { palette } from './shared/theme';
 
-  const CANVAS_W = 480;
-  const CANVAS_H = 280;
-  const G_LEFT = 72;
-  const G_TOP = 32;
-  const G_RIGHT = 16;
-  const G_BOTTOM = 32;
+  const CANVAS_W = 380;
+  const CANVAS_H = 200;
+  const G_LEFT = 80;
+  const G_TOP = 24;
+  const G_RIGHT = 12;
+  const G_BOTTOM = 24;
 
   let baseFreqMhzStr = $state('137.625');
   let baseFreqHz = $derived(parseFloat(baseFreqMhzStr) * 1e6);
@@ -522,7 +522,7 @@
 </DraggableWindow>
 
 <style>
-  .dw { min-width: 480px; }
+  .dw { min-width: 380px; }
   .dw canvas { display: block; }
   .controls {
     display: flex;
