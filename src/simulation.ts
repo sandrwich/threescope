@@ -1,6 +1,7 @@
 export interface SimulationSettings {
   orbitMode: 'analytical' | 'sgp4';
   orbitSegments: number;   // 16, 30, 60, 90
+  orbitsToDraw: number;    // 0.5 – 5.0
   j2Precession: boolean;
   atmosphericDrag: boolean;
   updateQuality: number;   // 8, 16, 32, 64
@@ -19,6 +20,7 @@ export const SIM_PRESETS: SimulationPreset[] = [
     settings: {
       orbitMode: 'analytical',
       orbitSegments: 60,
+      orbitsToDraw: 3.0,
       j2Precession: true,
       atmosphericDrag: true,
       updateQuality: 16,
@@ -30,6 +32,7 @@ export const SIM_PRESETS: SimulationPreset[] = [
     settings: {
       orbitMode: 'sgp4',
       orbitSegments: 90,
+      orbitsToDraw: 3.0,
       j2Precession: true,
       atmosphericDrag: true,
       updateQuality: 8,
@@ -44,6 +47,7 @@ export function findMatchingSimPreset(current: SimulationSettings): string | nul
     const s = preset.settings;
     if (s.orbitMode === current.orbitMode &&
         s.orbitSegments === current.orbitSegments &&
+        s.orbitsToDraw === current.orbitsToDraw &&
         s.j2Precession === current.j2Precession &&
         s.atmosphericDrag === current.atmosphericDrag &&
         s.updateQuality === current.updateQuality) {

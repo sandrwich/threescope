@@ -51,6 +51,11 @@
     onSimChange();
   }
 
+  function onOrbitsToDrawInput(e: Event) {
+    settingsStore.simulation.orbitsToDraw = Number((e.target as HTMLInputElement).value) / 10;
+    onSimChange();
+  }
+
   function onUpdateQualityChange(e: Event) {
     settingsStore.simulation.updateQuality = Number((e.target as HTMLSelectElement).value);
     onSimChange();
@@ -70,6 +75,7 @@
   let showFpsWarning = $derived(settingsStore.fpsSliderValue > 480);
   let reliefDisplay = $derived((settingsStore.graphics.surfaceRelief / 10).toFixed(1) + 'x');
   let isAnalytical = $derived(settingsStore.simulation.orbitMode === 'analytical');
+  let orbitsDisplay = $derived(settingsStore.simulation.orbitsToDraw.toFixed(1));
 </script>
 
 {#snippet settIcon()}<span class="title-icon">{@html ICON_SETTINGS}</span>{/snippet}
@@ -161,6 +167,10 @@
       <option value="60">High</option>
       <option value="90">Ultra</option>
     </select>
+  </div>
+  <div class="row slider-row">
+    <label>Orbits to Draw <span class="value-label">{orbitsDisplay}</span> <InfoTip>How many full orbital periods to render for highlighted satellite orbit paths. Higher values show more of the trajectory but cost more GPU/CPU.</InfoTip></label>
+    <input type="range" class="slider" min="5" max="50" step="5" value={settingsStore.simulation.orbitsToDraw * 10} oninput={onOrbitsToDrawInput}>
   </div>
   {#if isAnalytical}
     <div class="row">

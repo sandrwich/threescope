@@ -721,6 +721,7 @@ export class App {
 
   private applySimulation(s: SimulationSettings) {
     this.sim = s;
+    this.cfg.orbitsToDraw = s.orbitsToDraw;
     this.orbitRenderer.setOrbitMode(s.orbitMode);
     this.orbitRenderer.setOrbitSegments(s.orbitSegments);
     this.orbitRenderer.setJ2Enabled(s.j2Precession);
@@ -1115,7 +1116,7 @@ export class App {
 
         this.orbitRenderer.update(
           this.satellites, epoch, this.hoveredSat, this.selectedSats,
-          this.selectedSatsVersion, this.unselectedFade, this.cfg.orbitsToDraw,
+          this.selectedSatsVersion, this.unselectedFade, this.sim.orbitsToDraw,
           { orbitNormal: this.cfg.orbitNormal, orbitHighlighted: this.cfg.orbitHighlighted }
         );
 
