@@ -36,8 +36,8 @@ uniform float hasDisplacement;
 varying vec3 vWorldNormal;
 varying vec2 vUv;
 
-const float TEX_STEP = 1.0 / 2048.0;
-const float AO_STRENGTH = 8.0;
+const float TEX_STEP = 1.0 / 4096.0;
+const float AO_STRENGTH = 14.0;
 
 void main() {
   vec3 tex = texture2D(map, vUv).rgb;
@@ -68,7 +68,7 @@ void main() {
 
   // Diffuse sun lighting (only when night mode is on)
   float NdotL = dot(N, sunDir);
-  float diffuse = smoothstep(-0.02, 0.15, NdotL);
+  float diffuse = smoothstep(-0.20, 0.10, NdotL);
   diffuse = mix(1.0, diffuse, showNight);
 
   vec3 color = tex * diffuse * ao;
@@ -127,7 +127,7 @@ export class MoonScene {
   }
 
   setBumpEnabled(on: boolean) {
-    this.material.uniforms.bumpStrength.value = on ? 1.5 : 0.0;
+    this.material.uniforms.bumpStrength.value = on ? 2.5 : 0.0;
   }
 
   setAOEnabled(on: boolean) {
