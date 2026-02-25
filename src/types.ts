@@ -2,6 +2,7 @@ import type { SatRec } from 'satellite.js';
 import * as THREE from 'three';
 
 export interface Satellite {
+  noradId: number;
   name: string;
   epochDays: number;
   inclination: number;
@@ -52,6 +53,7 @@ export interface AppConfig {
 }
 
 export interface SelectedSatInfo {
+  noradId: number;
   name: string;
   color: [number, number, number]; // RGB 0-1 from ORBIT_COLORS
   altKm: number;

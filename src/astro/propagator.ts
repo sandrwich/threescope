@@ -59,6 +59,7 @@ export function parseTLE(name: string, line1: string, line2: string): Satellite 
     );
 
     return {
+      noradId: isNaN(noradId) ? 0 : noradId,
       name: name.trim(),
       epochDays,
       inclination,

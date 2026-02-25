@@ -40,12 +40,12 @@ class UIStore {
   // Selection window
   selectionWindowOpen = $state(true);
   selectedSatData = $state<SelectedSatInfo[]>([]);
-  hiddenSelectedSats = $state(new Set<string>());
+  hiddenSelectedSats = $state(new Set<number>());
 
-  toggleSatVisibility(name: string) {
+  toggleSatVisibility(noradId: number) {
     const next = new Set(this.hiddenSelectedSats);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
+    if (next.has(noradId)) next.delete(noradId);
+    else next.add(noradId);
     this.hiddenSelectedSats = next;
   }
 
@@ -91,7 +91,7 @@ class UIStore {
   passAzTo = $state(360);       // degrees 0-360
   passVisibility = $state<'all' | 'observable' | 'visible'>('all');
   passMinDuration = $state(0);  // seconds within observable window
-  passHiddenSats = $state(new Set<string>());
+  passHiddenSats = $state(new Set<number>());
   // Horizon mask: min elevation at 8 azimuths (N/NE/E/SE/S/SW/W/NW)
   passHorizonMask = $state<{ az: number; minEl: number }[]>([]);
   passFilterWindowOpen = $state(false);
@@ -136,16 +136,16 @@ class UIStore {
   onPlanetButtonClick: (() => void) | null = null;
   onNavigateTo: ((id: string) => void) | null = null;
   onDeselectAll: (() => void) | null = null;
-  onDeselectSatelliteByName: ((name: string) => void) | null = null;
+  onDeselectSatellite: ((noradId: number) => void) | null = null;
   onToggleViewMode: (() => void) | null = null;
-  getSatelliteNames: (() => string[]) | null = null;
-  getSelectedSatelliteNames: (() => string[]) | null = null;
-  onSelectSatelliteByName: ((name: string) => void) | null = null;
+  getSatelliteList: (() => { noradId: number; name: string }[]) | null = null;
+  getSelectedSatelliteList: (() => { noradId: number; name: string }[]) | null = null;
+  onSelectSatellite: ((noradId: number) => void) | null = null;
   onRefreshTLE: (() => void) | null = null;
   onRequestPasses: (() => void) | null = null;
   onRequestNearbyPasses: (() => void) | null = null;
-  onSelectSatFromNearbyPass: ((name: string) => void) | null = null;
-  getSatTLE: ((name: string) => { line1: string; line2: string } | null) | null = null;
+  onSelectSatFromNearbyPass: ((noradId: number) => void) | null = null;
+  getSatTLE: ((noradId: number) => { line1: string; line2: string } | null) | null = null;
   onFiltersChanged: (() => void) | null = null;
   onFilterInteractionEnd: (() => void) | null = null;
 

@@ -44,6 +44,10 @@ export class InputHandler {
   private _leftDownPos = new THREE.Vector2();
   private _leftDown = false;
 
+  // UI overlay tracking
+  private _pointerOverUI = false;
+  private _canvas!: HTMLCanvasElement;
+
   constructor(
     canvas: HTMLCanvasElement,
     private renderer: THREE.WebGLRenderer,
@@ -62,10 +66,13 @@ export class InputHandler {
   get isTouchActive(): boolean { return this._touchCount > 0 || ('ontouchstart' in window); }
   get touchCount(): number { return this._touchCount; }
   get isDraggingObserver(): boolean { return this._isDraggingObserver; }
+  get isOverUI(): boolean { return this._pointerOverUI; }
 
   // ====================== Event setup ======================
 
   private setupEvents(canvas: HTMLCanvasElement): void {
+    this._canvas = canvas;
+
     // Resize
     window.addEventListener('resize', () => {
       const w = window.innerWidth, h = window.innerHeight;
@@ -86,6 +93,7 @@ export class InputHandler {
         (e.clientX / window.innerWidth) * 2 - 1,
         -(e.clientY / window.innerHeight) * 2 + 1,
       );
+      this._pointerOverUI = e.target !== this._canvas;
 
       // Observer marker drag
       if (this._leftDown && !this._isDraggingObserver) {

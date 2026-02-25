@@ -75,6 +75,7 @@ export class App {
   private orreryCtrl!: OrreryController;
 
   private satellites: Satellite[] = [];
+  private satByNorad = new Map<number, Satellite>();
   private hoveredSat: Satellite | null = null;
   private selectedSats = new Set<Satellite>();
   private selectedSatsVersion = 0;
@@ -370,17 +371,16 @@ export class App {
   }
 
   private mergeAndApply(enabledIds: Set<string>) {
-    const byNorad = new Map<string, Satellite>();
+    const byNorad = new Map<number, Satellite>();
     let total = 0;
 
     for (const id of enabledIds) {
       const sats = this.sourceData.get(id) ?? [];
       for (const sat of sats) {
         total++;
-        const norad = sat.tleLine1.substring(2, 7).trim();
-        const existing = byNorad.get(norad);
+        const existing = byNorad.get(sat.noradId);
         if (!existing || sat.epochDays > existing.epochDays) {
-          byNorad.set(norad, sat);
+          byNorad.set(sat.noradId, sat);
         }
       }
     }
@@ -389,13 +389,13 @@ export class App {
     const dupsRemoved = total - deduped.length;
 
     // Preserve selection by NORAD ID
-    const oldSelectedNorads = new Set<string>();
+    const oldSelectedNorads = new Set<number>();
     for (const sat of this.selectedSats) {
-      oldSelectedNorads.add(sat.tleLine1.substring(2, 7).trim());
+      oldSelectedNorads.add(sat.noradId);
     }
     this.selectedSats.clear();
     for (const sat of deduped) {
-      if (oldSelectedNorads.has(sat.tleLine1.substring(2, 7).trim())) {
+      if (oldSelectedNorads.has(sat.noradId)) {
         this.selectedSats.add(sat);
       }
     }
@@ -403,6 +403,7 @@ export class App {
     this.hoveredSat = null;
 
     this.satellites = deduped;
+    this.satByNorad = byNorad;
     this.orbitRenderer.precomputeOrbits(this.satellites, this.timeSystem.currentEpoch);
 
     // Invalidate nearby passes when satellite data changes
@@ -571,18 +572,16 @@ export class App {
       uiStore.hiddenSelectedSats = new Set();
     };
 
-    // Command palette: deselect satellite by name
-    uiStore.onDeselectSatelliteByName = (name: string) => {
-      for (const sat of this.selectedSats) {
-        if (sat.name === name) {
-          this.selectedSats.delete(sat);
-          this.selectedSatsVersion++;
-          if (uiStore.hiddenSelectedSats.has(name)) {
-            const next = new Set(uiStore.hiddenSelectedSats);
-            next.delete(name);
-            uiStore.hiddenSelectedSats = next;
-          }
-          break;
+    // Command palette: deselect satellite by NORAD ID
+    uiStore.onDeselectSatellite = (noradId: number) => {
+      const sat = this.satByNorad.get(noradId);
+      if (sat && this.selectedSats.has(sat)) {
+        this.selectedSats.delete(sat);
+        this.selectedSatsVersion++;
+        if (uiStore.hiddenSelectedSats.has(noradId)) {
+          const next = new Set(uiStore.hiddenSelectedSats);
+          next.delete(noradId);
+          uiStore.hiddenSelectedSats = next;
         }
       }
     };
@@ -594,28 +593,28 @@ export class App {
       uiStore.viewMode = this.viewMode;
     };
 
-    // Command palette: get satellite names for search
-    uiStore.getSatelliteNames = () => {
-      return this.satellites.map(s => s.name);
+    // Command palette: get satellite list for search
+    uiStore.getSatelliteList = () => {
+      return this.satellites.map(s => ({ noradId: s.noradId, name: s.name }));
     };
 
-    // Command palette: get selected satellite names
-    uiStore.getSelectedSatelliteNames = () => {
-      return [...this.selectedSats].map(s => s.name);
+    // Command palette: get selected satellite list
+    uiStore.getSelectedSatelliteList = () => {
+      return [...this.selectedSats].map(s => ({ noradId: s.noradId, name: s.name }));
     };
 
-    // Command palette: select satellite by name (adds to selection)
-    uiStore.onSelectSatelliteByName = (name: string) => {
-      const sat = this.satellites.find(s => s.name === name);
+    // Command palette: select satellite by NORAD ID (adds to selection)
+    uiStore.onSelectSatellite = (noradId: number) => {
+      const sat = this.satByNorad.get(noradId);
       if (sat) {
         this.selectedSats.add(sat);
         this.selectedSatsVersion++;
       }
     };
 
-    // Doppler: get TLE lines by satellite name
-    uiStore.getSatTLE = (name: string) => {
-      const sat = this.satellites.find(s => s.name === name);
+    // Doppler: get TLE lines by NORAD ID
+    uiStore.getSatTLE = (noradId: number) => {
+      const sat = this.satByNorad.get(noradId);
       return sat ? { line1: sat.tleLine1, line2: sat.tleLine2 } : null;
     };
 
@@ -684,8 +683,8 @@ export class App {
         filterDebounce = setTimeout(fireFilterRecompute, 500);
       }
     };
-    uiStore.onSelectSatFromNearbyPass = (name: string) => {
-      const sat = this.satellites.find(s => s.name === name);
+    uiStore.onSelectSatFromNearbyPass = (noradId: number) => {
+      const sat = this.satByNorad.get(noradId);
       if (sat && !this.selectedSats.has(sat)) {
         this.selectedSats.add(sat);
         this.selectedSatsVersion++;
@@ -763,10 +762,10 @@ export class App {
       return;
     }
     this.passStartTime = performance.now();
-    const sats: { name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[] = [];
+    const sats: { noradId: number; name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[] = [];
     let idx = 0;
     for (const sat of this.selectedSats) {
-      sats.push({ name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag });
+      sats.push({ noradId: sat.noradId, name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag });
       idx++;
     }
     uiStore.passesComputing = true;
@@ -816,7 +815,7 @@ export class App {
     }
 
     const sats = filtered.map((sat, idx) => ({
-      name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag,
+      noradId: sat.noradId, name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag,
     }));
 
     // Keep old results visible until new ones arrive
@@ -1020,9 +1019,11 @@ export class App {
     const isOrreryOrPlanet = this.activeLock === TargetLock.PLANET || this.orreryCtrl.isOrreryMode;
     this.camera.updateFrame(dt, earthRotRad, isOrreryOrPlanet);
 
-    // Hover detection (skip in planet/orrery view)
+    // Hover detection (skip when pointer is over UI or in planet/orrery view)
     this.hoveredSat = null;
-    if (this.orreryCtrl.isOrreryMode) {
+    if (this.input.isOverUI) {
+      this.renderer.domElement.style.cursor = '';
+    } else if (this.orreryCtrl.isOrreryMode) {
       const hovered = this.orreryCtrl.updateHover(this.raycaster, this.input.mouseNDC);
       this.renderer.domElement.style.cursor = hovered ? 'pointer' : '';
     } else if (this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON) {
@@ -1036,7 +1037,7 @@ export class App {
     // Observer drag cursor
     if (this.input.isDraggingObserver) {
       this.renderer.domElement.style.cursor = 'grabbing';
-    } else if (!this.hoveredSat && !this.orreryCtrl.isOrreryMode) {
+    } else if (!this.hoveredSat && !this.orreryCtrl.isOrreryMode && !this.input.isOverUI) {
       this.renderer.domElement.style.cursor = this.hitTestObserver() ? 'grab' : '';
     }
 
@@ -1046,8 +1047,8 @@ export class App {
 
     const earthMode = this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON && !this.orreryCtrl.isOrreryMode;
 
-    // Cursor lat/lon
-    if (earthMode) {
+    // Cursor lat/lon (skip when pointer is over UI)
+    if (earthMode && !this.input.isOverUI) {
       if (this.viewMode === ViewMode.VIEW_3D) {
         this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
         const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
@@ -1136,10 +1137,10 @@ export class App {
         // Footprints for all selected sats + hovered (per-sat orbit color)
         const fpEntries: FootprintEntry[] = [];
         {
-          const hiddenNames = uiStore.hiddenSelectedSats;
+          const hiddenIds = uiStore.hiddenSelectedSats;
           let fpIdx = 0;
           for (const sat of this.selectedSats) {
-            if (!hiddenNames.has(sat.name)) {
+            if (!hiddenIds.has(sat.noradId)) {
               fpEntries.push({
                 position: sat.currentPos,
                 color: ORBIT_COLORS[fpIdx % ORBIT_COLORS.length] as [number, number, number],
@@ -1214,7 +1215,7 @@ export class App {
       const pass = uiStore.activePassList[uiStore.selectedPassIdx];
       // Lazy sky path: compute 100-point track on first view (cached on pass object)
       if (pass.skyPath.length < 50) {
-        const sat = this.satellites.find(s => s.name === pass.satName);
+        const sat = this.satByNorad.get(pass.satNoradId);
         if (sat) {
           const pathStep = (pass.losEpoch - pass.aosEpoch) / 99;
           if (pathStep > 0) {
@@ -1236,7 +1237,7 @@ export class App {
         }
       }
       if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch) {
-        const sat = this.satellites.find(s => s.name === pass.satName);
+        const sat = this.satByNorad.get(pass.satNoradId);
         if (sat) {
           const date = new Date(epochToUnix(epoch) * 1000);
           const result = propagate(sat.satrec, date);

@@ -4,28 +4,28 @@
   import { uiStore } from '../stores/ui.svelte';
   import { ICON_SELECTION, ICON_PASSES } from './shared/icons';
 
-  let expandedSats = $state(new Set<string>());
+  let expandedSats = $state(new Set<number>());
   let searchQuery = $state('');
   let searchFocused = $state(false);
   let searchResults = $derived.by(() => {
-    if (!searchFocused) return [] as string[];
-    const names = uiStore.getSatelliteNames?.() ?? [];
-    const selected = new Set(uiStore.selectedSatData.map(s => s.name));
+    if (!searchFocused) return [] as { noradId: number; name: string }[];
+    const all = uiStore.getSatelliteList?.() ?? [];
+    const selected = new Set(uiStore.selectedSatData.map(s => s.noradId));
     if (!searchQuery) {
-      const results: string[] = [];
-      for (const name of names) {
-        if (!selected.has(name)) {
-          results.push(name);
+      const results: { noradId: number; name: string }[] = [];
+      for (const s of all) {
+        if (!selected.has(s.noradId)) {
+          results.push(s);
           if (results.length >= 10) break;
         }
       }
       return results;
     }
     const q = searchQuery.toLowerCase();
-    const matches: string[] = [];
-    for (const name of names) {
-      if (!selected.has(name) && name.toLowerCase().includes(q)) {
-        matches.push(name);
+    const matches: { noradId: number; name: string }[] = [];
+    for (const s of all) {
+      if (!selected.has(s.noradId) && (s.name.toLowerCase().includes(q) || String(s.noradId).includes(q))) {
+        matches.push(s);
         if (matches.length >= 10) break;
       }
     }
@@ -33,8 +33,8 @@
   });
   let searchSelectedIdx = $state(0);
 
-  function selectFromSearch(name: string) {
-    uiStore.onSelectSatelliteByName?.(name);
+  function selectFromSearch(noradId: number) {
+    uiStore.onSelectSatellite?.(noradId);
     searchQuery = '';
     searchSelectedIdx = 0;
   }
@@ -48,7 +48,7 @@
       searchSelectedIdx = Math.max(searchSelectedIdx - 1, 0);
     } else if (e.key === 'Enter' && searchResults[searchSelectedIdx]) {
       e.preventDefault();
-      selectFromSearch(searchResults[searchSelectedIdx]);
+      selectFromSearch(searchResults[searchSelectedIdx].noradId);
     } else if (e.key === 'Escape') {
       searchQuery = '';
       searchSelectedIdx = 0;
@@ -59,16 +59,16 @@
     searchSelectedIdx = 0;
   }
 
-  function toggle(name: string) {
+  function toggle(noradId: number) {
     const next = new Set(expandedSats);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
+    if (next.has(noradId)) next.delete(noradId);
+    else next.add(noradId);
     expandedSats = next;
   }
 
-  function deselect(name: string) {
-    expandedSats.delete(name);
-    uiStore.onDeselectSatelliteByName?.(name);
+  function deselect(noradId: number) {
+    expandedSats.delete(noradId);
+    uiStore.onDeselectSatellite?.(noradId);
   }
 
   function clearAll() {
@@ -83,7 +83,7 @@
   }
 
   function hideAll() {
-    uiStore.hiddenSelectedSats = new Set(uiStore.selectedSatData.map(s => s.name));
+    uiStore.hiddenSelectedSats = new Set(uiStore.selectedSatData.map(s => s.noradId));
   }
 
   function togglePasses() {
@@ -116,14 +116,14 @@
       />
       {#if searchFocused && searchResults.length > 0}
         <div class="search-results">
-          {#each searchResults as name, i}
+          {#each searchResults as sr, i}
             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
             <div
               class="search-item"
               class:selected={i === searchSelectedIdx}
-              onclick={() => selectFromSearch(name)}
+              onclick={() => selectFromSearch(sr.noradId)}
               onmouseenter={() => searchSelectedIdx = i}
-            >{name}</div>
+            >{sr.name} <span class="search-norad">#{sr.noradId}</span></div>
           {/each}
         </div>
       {:else if searchFocused && searchQuery}
@@ -133,7 +133,7 @@
       {/if}
     </div>
     {#if uiStore.selectedSatData.length === 0}
-      {#if (uiStore.getSatelliteNames?.() ?? []).length === 0}
+      {#if (uiStore.getSatelliteList?.() ?? []).length === 0}
         <div class="empty empty-warn">No sources loaded</div>
       {:else}
         <div class="empty">Click a satellite to select</div>
@@ -150,26 +150,27 @@
       </div>
       <div class="sat-list">
         {#each uiStore.selectedSatData as sat}
-          {@const hidden = uiStore.hiddenSelectedSats.has(sat.name)}
+          {@const hidden = uiStore.hiddenSelectedSats.has(sat.noradId)}
           <div class="sat-row" class:sat-hidden={hidden}>
             <div class="sat-compact">
               <Checkbox size="sm" color={colorRgb(sat.color)}
                 checked={!hidden}
-                onchange={() => uiStore.toggleSatVisibility(sat.name)} />
+                onchange={() => uiStore.toggleSatVisibility(sat.noradId)} />
               <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-              <span class="sat-name" onclick={() => toggle(sat.name)}>{sat.name}</span>
+              <span class="sat-name" onclick={() => toggle(sat.noradId)}>{sat.name}</span>
               <span class="pill">{fmt(sat.altKm, 0)} km</span>
               <span class="pill">{fmt(sat.speedKmS, 2)} km/s</span>
-              <button class="expand-btn" onclick={() => toggle(sat.name)} title={expandedSats.has(sat.name) ? 'Collapse' : 'Expand'}>
-                <svg viewBox="0 0 10 6" width="8" height="5" fill="currentColor" class:rotated={expandedSats.has(sat.name)}>
+              <button class="expand-btn" onclick={() => toggle(sat.noradId)} title={expandedSats.has(sat.noradId) ? 'Collapse' : 'Expand'}>
+                <svg viewBox="0 0 10 6" width="8" height="5" fill="currentColor" class:rotated={expandedSats.has(sat.noradId)}>
                   <polygon points="0,0 10,0 5,6"/>
                 </svg>
               </button>
-              <button class="deselect-btn" onclick={() => deselect(sat.name)} title="Deselect">&times;</button>
+              <button class="deselect-btn" onclick={() => deselect(sat.noradId)} title="Deselect">&times;</button>
             </div>
-            {#if expandedSats.has(sat.name)}
+            {#if expandedSats.has(sat.noradId)}
               <div class="sat-detail">
                 <div class="detail-grid">
+                  <span class="dl">NORAD ID</span><span class="dv">{sat.noradId}</span>
                   <span class="dl">Inclination</span><span class="dv">{fmt(sat.incDeg, 2)}&deg;</span>
                   <span class="dl">Eccentricity</span><span class="dv">{sat.eccen.toFixed(5)}</span>
                   <span class="dl">RAAN</span><span class="dv">{fmt(sat.raanDeg, 2)}&deg;</span>
@@ -234,6 +235,10 @@
   .search-item:hover, .search-item.selected {
     background: var(--row-highlight);
     color: var(--text);
+  }
+  .search-norad {
+    color: var(--text-ghost);
+    font-size: 10px;
   }
   .search-empty {
     padding: 6px 8px;

@@ -8,7 +8,7 @@
 </script>
 
 <div class="sat-tooltip" bind:this={el} class:visible={uiStore.satInfoVisible}>
-  <div class="sat-name" style="color:{uiStore.satInfoNameColor}">{uiStore.satInfoName}</div>
+  <div class="sat-name" style="color:{uiStore.satInfoNameColor}">{@html uiStore.satInfoName}</div>
   <div class="sat-detail">{@html uiStore.satInfoDetail}</div>
   {#if uiStore.satInfoHint}
     <div class="sat-hint">{uiStore.satInfoHint}</div>

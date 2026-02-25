@@ -365,11 +365,11 @@ export class OrbitRenderer {
       const sunRX = sunEci.x, sunRY = sunEci.z, sunRZ = -sunEci.y;
       const sunRender = { x: sunRX, y: sunRY, z: sunRZ };
       const ECLIPSE_DIM = 0.3;
-      const hiddenNames = uiStore.hiddenSelectedSats;
+      const hiddenIds = uiStore.hiddenSelectedSats;
 
       for (let si = 0; si < highlightSats.length; si++) {
         const sat = highlightSats[si];
-        if (hiddenNames.has(sat.name)) continue;
+        if (hiddenIds.has(sat.noradId)) continue;
         const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
         const segments = Math.min(this.highlightSegmentsPerOrbit, Math.max(90, Math.floor(400 * orbitsToDraw)));
         const periodDays = TWO_PI / sat.meanMotion / 86400.0;
@@ -412,7 +412,7 @@ export class OrbitRenderer {
       let ni = 0;
       for (let si = 0; si < highlightSats.length; si++) {
         const sat = highlightSats[si];
-        if (hiddenNames.has(sat.name)) continue;
+        if (hiddenIds.has(sat.noradId)) continue;
         const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
         if (ni + 6 > this.maxHighlightOrbits * 6) break;
         nd[ni] = 0; nd[ni+1] = 0; nd[ni+2] = 0;

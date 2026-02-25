@@ -6,6 +6,7 @@ export interface PassSkyPoint {
 }
 
 export interface SatellitePass {
+  satNoradId: number;
   satName: string;
   satColorIndex: number;
   aosEpoch: number;       // TLE epoch at AOS
@@ -25,7 +26,7 @@ export interface SatellitePass {
 
 export interface PassRequest {
   type: 'compute';
-  satellites: { name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[];
+  satellites: { noradId: number; name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[];
   observerLat: number;
   observerLon: number;
   observerAlt: number;    // meters

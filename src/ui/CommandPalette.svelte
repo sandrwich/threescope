@@ -157,14 +157,14 @@
 
   // Build full action list (static + dynamic per-selected-sat deselect, grouped with Satellite category)
   let allActions = $derived.by(() => {
-    const selectedNames = uiStore.selectedSatData.map(s => s.name);
-    if (selectedNames.length === 0) return staticActions;
-    const dynamicActions: PaletteAction[] = selectedNames.map(name => ({
-      id: `sat-deselect-${name}`,
+    const selectedSats = uiStore.selectedSatData;
+    if (selectedSats.length === 0) return staticActions;
+    const dynamicActions: PaletteAction[] = selectedSats.map(s => ({
+      id: `sat-deselect-${s.noradId}`,
       category: 'Satellite',
-      label: `Deselect ${name}`,
+      label: `Deselect ${s.name} #${s.noradId}`,
       keywords: 'remove unselect',
-      execute: () => { uiStore.onDeselectSatelliteByName?.(name); close(); },
+      execute: () => { uiStore.onDeselectSatellite?.(s.noradId); close(); },
     }));
     // Insert after last Satellite action so they're grouped together
     const lastSatIdx = staticActions.findLastIndex(a => a.category === 'Satellite');
@@ -186,14 +186,14 @@
 
   // Satellite search results
   let satResults = $derived.by(() => {
-    if (!satMode) return [];
-    const names = uiStore.getSatelliteNames?.() ?? [];
-    if (!query) return names.slice(0, 20);
+    if (!satMode) return [] as { noradId: number; name: string }[];
+    const all = uiStore.getSatelliteList?.() ?? [];
+    if (!query) return all.slice(0, 20);
     const q = query.toLowerCase();
-    const matches: string[] = [];
-    for (const name of names) {
-      if (name.toLowerCase().includes(q)) {
-        matches.push(name);
+    const matches: { noradId: number; name: string }[] = [];
+    for (const s of all) {
+      if (s.name.toLowerCase().includes(q) || String(s.noradId).includes(q)) {
+        matches.push(s);
         if (matches.length >= 20) break;
       }
     }
@@ -250,7 +250,7 @@
         }
       } else if (satMode) {
         if (satResults[selectedIndex]) {
-          uiStore.onSelectSatelliteByName?.(satResults[selectedIndex]);
+          uiStore.onSelectSatellite?.(satResults[selectedIndex].noradId);
           close();
         }
       } else {
@@ -317,16 +317,16 @@
           {#if satResults.length === 0}
             <div class="palette-empty">{query ? 'No matching satellites' : 'No satellites loaded'}</div>
           {:else}
-            {#each satResults as name, i}
+            {#each satResults as sr, i}
               <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
               <div
                 class="palette-item"
                 class:selected={i === selectedIndex}
-                onclick={() => { uiStore.onSelectSatelliteByName?.(name); close(); }}
+                onclick={() => { uiStore.onSelectSatellite?.(sr.noradId); close(); }}
                 onmouseenter={() => selectedIndex = i}
               >
                 <span class="item-category">Satellite</span>
-                <span class="item-label">{name}</span>
+                <span class="item-label">{sr.name} <span style="color:var(--text-ghost);font-size:11px">#{sr.noradId}</span></span>
               </div>
             {/each}
           {/if}

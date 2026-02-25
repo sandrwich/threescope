@@ -77,6 +77,7 @@ export class UIUpdater {
       }
 
       satDataArr.push({
+        noradId: sat.noradId,
         name: sat.name,
         color: ORBIT_COLORS[selIdx % ORBIT_COLORS.length] as [number, number, number],
         altKm: rKm - EARTH_RADIUS_KM,
@@ -103,7 +104,7 @@ export class UIUpdater {
       const rKm = hSat.currentPos.length();
       const alt = rKm - EARTH_RADIUS_KM;
       const speed = Math.sqrt(MU * (2.0 / rKm - 1.0 / hSat.semiMajorAxis));
-      uiStore.satInfoName = hSat.name;
+      uiStore.satInfoName = `${hSat.name} <span style="color:var(--text-ghost);font-size:11px">#${hSat.noradId}</span>`;
       let magStr = '';
       if (observerStore.isSet) {
         // Render coords → standard ECI: x=rx, y=-rz, z=ry

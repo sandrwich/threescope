@@ -152,11 +152,11 @@ export class SatelliteManager {
 
     // Build rainbow color map for selected sats (index matches orbit color)
     // Hidden sats get no color entry but still advance the index for color stability
-    const hiddenNames = uiStore.hiddenSelectedSats;
+    const hiddenIds = uiStore.hiddenSelectedSats;
     const selectedColorMap = new Map<Satellite, number[]>();
     let selIdx = 0;
     for (const s of selectedSats) {
-      if (!hiddenNames.has(s.name)) {
+      if (!hiddenIds.has(s.noradId)) {
         selectedColorMap.set(s, ORBIT_COLORS[selIdx % ORBIT_COLORS.length]);
       }
       selIdx++;

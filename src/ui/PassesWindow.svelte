@@ -95,7 +95,7 @@
 
   function autoSelect(pass: SatellitePass) {
     if (uiStore.passesTab === 'nearby') {
-      uiStore.onSelectSatFromNearbyPass?.(pass.satName);
+      uiStore.onSelectSatFromNearbyPass?.(pass.satNoradId);
     }
   }
 
@@ -169,7 +169,7 @@
 
   function filterBySat(list: SatellitePass[]): SatellitePass[] {
     if (uiStore.passHiddenSats.size === 0) return list;
-    return list.filter(pass => !uiStore.passHiddenSats.has(pass.satName));
+    return list.filter(pass => !uiStore.passHiddenSats.has(pass.satNoradId));
   }
 
   let hasSelectedSats = $derived(uiStore.selectedSatCount > 0);

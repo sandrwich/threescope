@@ -365,7 +365,7 @@ export class MapRenderer {
 
     // Build set of sats needing highlight (ground track, footprint, apsis)
     // Keep hidden sats in array to preserve color indices
-    const hiddenNames = uiStore.hiddenSelectedSats;
+    const hiddenIds = uiStore.hiddenSelectedSats;
     const hlSats: Satellite[] = [];
     for (const sat of selectedSats) {
       if (hlSats.length >= 20) break;
@@ -390,7 +390,7 @@ export class MapRenderer {
 
       for (let si = 0; si < hlSats.length; si++) {
         const sat = hlSats[si];
-        if (hiddenNames.has(sat.name)) continue;
+        if (hiddenIds.has(sat.noradId)) continue;
         const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
         const segments = Math.min(4000, Math.max(50, Math.floor(400 * cfg.orbitsToDraw)));
         const periodDays = TWO_PI / sat.meanMotion / 86400.0;
@@ -444,7 +444,7 @@ export class MapRenderer {
 
       for (let si = 0; si < hlSats.length; si++) {
         const sat = hlSats[si];
-        if (hiddenNames.has(sat.name)) continue;
+        if (hiddenIds.has(sat.noradId)) continue;
         const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
         const grid3d = computeFootprintGrid(sat.currentPos);
         if (!grid3d) continue;
@@ -580,7 +580,7 @@ export class MapRenderer {
       const apoColor = { r: 1.0, g: 0.647, b: 0.0 };       // #ffa500
 
       for (const sat of hlSats) {
-        if (hiddenNames.has(sat.name)) continue;
+        if (hiddenIds.has(sat.noradId)) continue;
         const peri = computeApsis2D(sat, epoch, false, cfg.earthRotationOffset);
         const apo = computeApsis2D(sat, epoch, true, cfg.earthRotationOffset);
 
@@ -608,7 +608,7 @@ export class MapRenderer {
     const selColorMap2d = new Map<Satellite, number[]>();
     let selIdx2d = 0;
     for (const s of selectedSats) {
-      if (!hiddenNames.has(s.name)) {
+      if (!hiddenIds.has(s.noradId)) {
         selColorMap2d.set(s, ORBIT_COLORS[selIdx2d % ORBIT_COLORS.length]);
       }
       selIdx2d++;

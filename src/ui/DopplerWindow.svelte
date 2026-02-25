@@ -46,10 +46,10 @@
     const pass = selectedPass;
     if (!pass || !baseFreqHz || baseFreqHz <= 0) { cachedData = []; cacheKey = ''; return; }
 
-    const key = `${uiStore.selectedPassIdx}:${pass.satName}:${baseFreqHz}`;
+    const key = `${uiStore.selectedPassIdx}:${pass.satNoradId}:${baseFreqHz}`;
     if (key === cacheKey) return;
 
-    const tle = uiStore.getSatTLE?.(pass.satName);
+    const tle = uiStore.getSatTLE?.(pass.satNoradId);
     if (!tle) { cachedData = []; cacheKey = ''; return; }
 
     const satrec = createSatrec(tle.line1, tle.line2);
@@ -416,7 +416,7 @@
     const res = parseFloat(csvResStr);
     if (!pass || !baseFreqHz || baseFreqHz <= 0 || !res || res <= 0) return;
 
-    const tle = uiStore.getSatTLE?.(pass.satName);
+    const tle = uiStore.getSatTLE?.(pass.satNoradId);
     if (!tle) return;
 
     const satrec = createSatrec(tle.line1, tle.line2);

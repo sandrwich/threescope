@@ -80,7 +80,7 @@ function interpolateHorizonMask(az: number, mask: { az: number; minEl: number }[
 }
 
 function computePassesForSat(
-  name: string, line1: string, line2: string, colorIndex: number,
+  noradId: number, name: string, line1: string, line2: string, colorIndex: number,
   stdMag: number | null,
   obsLat: number, obsLon: number, obsAlt: number,
   startEpoch: number, durationDays: number, minEl: number,
@@ -267,6 +267,7 @@ function computePassesForSat(
 
           if (visOk && durOk) {
           passes.push({
+            satNoradId: noradId,
             satName: name,
             satColorIndex: colorIndex,
             aosEpoch: currentAosEpoch,
@@ -322,7 +323,7 @@ self.onmessage = (e: MessageEvent<PassRequest>) => {
   for (let i = 0; i < req.satellites.length; i++) {
     const sat = req.satellites[i];
     const passes = computePassesForSat(
-      sat.name, sat.line1, sat.line2, sat.colorIndex,
+      sat.noradId, sat.name, sat.line1, sat.line2, sat.colorIndex,
       sat.stdMag,
       req.observerLat, req.observerLon, req.observerAlt,
       req.startEpoch, req.durationDays, req.minElevation,
