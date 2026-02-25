@@ -101,7 +101,7 @@ function loadFromCache(group: string, ignoreAge = false): string | null {
   }
 }
 
-function getCacheAge(group: string): number | null {
+export function getCacheAge(group: string): number | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY_PREFIX + group);
     if (!raw) return null;

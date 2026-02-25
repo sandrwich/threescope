@@ -2,6 +2,7 @@
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { sourcesStore } from '../stores/sources.svelte';
+  import { getCacheAge } from '../data/tle-loader';
   import { ICON_DATA_SOURCES } from './shared/icons';
 
   let addingUrl = $state(false);
@@ -53,6 +54,30 @@
     if (state.status === 'loaded') return `${state.satCount}`;
     return '';
   }
+
+  function formatAge(ms: number): string {
+    const min = Math.floor(ms / 60_000);
+    if (min < 1) return '<1m';
+    if (min < 60) return `${min}m`;
+    const hrs = Math.floor(min / 60);
+    if (hrs < 24) return `${hrs}h`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d`;
+  }
+
+  function getCacheInfo(src: { id: string; group?: string; type: string }): string | null {
+    // For enabled sources, use load state cache age
+    const state = sourcesStore.loadStates.get(src.id);
+    if (state?.status === 'loaded' && state.cacheAge != null) {
+      return formatAge(state.cacheAge);
+    }
+    // For disabled CelesTrak sources, peek at localStorage cache
+    if (src.group) {
+      const age = getCacheAge(src.group);
+      if (age != null) return formatAge(age);
+    }
+    return null;
+  }
 </script>
 
 {#snippet dsIcon()}<span class="title-icon">{@html ICON_DATA_SOURCES}</span>{/snippet}
@@ -71,13 +96,18 @@
       <div class="section-header">CelesTrak{#if filterQuery} <span class="filter-count">({filteredBuiltins.length})</span>{/if}</div>
       <div class="source-list">
         {#each filteredBuiltins as src}
+          {@const cached = getCacheInfo(src)}
+          {@const enabled = sourcesStore.enabledIds.has(src.id)}
           <label class="source-row">
             <input type="checkbox"
-              checked={sourcesStore.enabledIds.has(src.id)}
+              checked={enabled}
               onchange={() => sourcesStore.toggleSource(src.id)}>
             <span class="source-name">{src.name}</span>
-            {#if sourcesStore.enabledIds.has(src.id)}
+            {#if enabled}
               <span class="source-count">{getStatus(src.id)}</span>
+            {/if}
+            {#if cached}
+              <span class="cache-age" title="Cached {cached} ago">{cached}</span>
             {/if}
           </label>
         {/each}
@@ -219,6 +249,11 @@
   .source-count {
     font-size: 11px;
     color: var(--text-ghost);
+    flex-shrink: 0;
+  }
+  .cache-age {
+    font-size: 10px;
+    color: var(--text-faint);
     flex-shrink: 0;
   }
   .delete-btn {
