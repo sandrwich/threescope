@@ -8,8 +8,14 @@
   let newName = $state('');
   let newUrl = $state('');
   let fileInput: HTMLInputElement | undefined = $state();
+  let filterQuery = $state('');
 
   let builtinSources = $derived(sourcesStore.sources.filter(s => s.builtin));
+  let filteredBuiltins = $derived.by(() => {
+    if (!filterQuery) return builtinSources;
+    const q = filterQuery.toLowerCase();
+    return builtinSources.filter(s => s.name.toLowerCase().includes(q));
+  });
   let customSources = $derived(sourcesStore.sources.filter(s => !s.builtin));
 
   function submitUrl() {
@@ -52,10 +58,19 @@
 {#snippet dsIcon()}<span class="title-icon">{@html ICON_DATA_SOURCES}</span>{/snippet}
 <DraggableWindow id="data-sources" title="Data Sources" icon={dsIcon} bind:open={uiStore.dataSourcesOpen} initialX={10} initialY={260}>
   <div class="ds-content">
+    <input
+      class="filter-input"
+      type="text"
+      placeholder="Filter sources..."
+      bind:value={filterQuery}
+      spellcheck="false"
+      autocomplete="off"
+    />
+
     <div class="section">
-      <div class="section-header">CelesTrak</div>
+      <div class="section-header">CelesTrak{#if filterQuery} <span class="filter-count">({filteredBuiltins.length})</span>{/if}</div>
       <div class="source-list">
-        {#each builtinSources as src}
+        {#each filteredBuiltins as src}
           <label class="source-row">
             <input type="checkbox"
               checked={sourcesStore.enabledIds.has(src.id)}
@@ -125,8 +140,22 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    width: 280px;
+    width: 260px;
   }
+  .filter-input {
+    width: 100%;
+    background: var(--ui-bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    font-family: inherit;
+    padding: 4px 8px;
+    outline: none;
+    box-sizing: border-box;
+  }
+  .filter-input:focus { border-color: var(--border-hover); }
+  .filter-input::placeholder { color: var(--text-ghost); }
+  .filter-count { color: var(--text-faint); font-size: 10px; }
   .section {
     display: flex;
     flex-direction: column;
@@ -142,7 +171,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    max-height: 280px;
+    max-height: 140px;
     overflow-y: auto;
     padding-right: 10px;
   }

@@ -140,18 +140,22 @@
       const c = SAT_COLORS[pass.satColorIndex % SAT_COLORS.length];
       const cssColor = `rgb(${c[0]},${c[1]},${c[2]})`;
 
-      // Sky track
+      // Sky track — per-segment eclipse coloring
       if (pass.skyPath.length > 1) {
-        ctx.strokeStyle = cssColor;
+        const eclColor = `rgba(${c[0]},${c[1]},${c[2]},0.25)`;
+        const sunColor = `rgba(${c[0]},${c[1]},${c[2]},0.8)`;
         ctx.lineWidth = 2;
-        ctx.globalAlpha = 0.8;
-        ctx.beginPath();
-        for (let i = 0; i < pass.skyPath.length; i++) {
-          const { x, y } = azElToXY(pass.skyPath[i].az, pass.skyPath[i].el);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        for (let i = 1; i < pass.skyPath.length; i++) {
+          const prev = pass.skyPath[i - 1];
+          const cur = pass.skyPath[i];
+          const p0 = azElToXY(prev.az, prev.el);
+          const p1 = azElToXY(cur.az, cur.el);
+          ctx.strokeStyle = cur.eclipsed ? eclColor : sunColor;
+          ctx.beginPath();
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.stroke();
         }
-        ctx.stroke();
-        ctx.globalAlpha = 1;
 
         // AOS marker (cyan square)
         const aos = azElToXY(pass.skyPath[0].az, pass.skyPath[0].el);
@@ -192,6 +196,31 @@
       ctx.fillRect(6, ly, 5, 5);
       ctx.fillStyle = '#666';
       ctx.fillText('LOS', 14, ly + 3);
+
+      // Sunlit / eclipsed legend (top-right, only if pass has mixed segments)
+      const hasEcl = pass.skyPath.some(p => p.eclipsed);
+      const hasSun = pass.skyPath.some(p => !p.eclipsed);
+      if (hasEcl) {
+        ctx.textAlign = 'right';
+        let ry = 8;
+        ctx.strokeStyle = cssColor;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath(); ctx.moveTo(SIZE - 6, ry + 3); ctx.lineTo(SIZE - 11, ry + 3); ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#666';
+        ctx.fillText('Sunlit', SIZE - 14, ry + 3);
+        ry += 10;
+        ctx.strokeStyle = cssColor;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.25;
+        ctx.beginPath(); ctx.moveTo(SIZE - 6, ry + 3); ctx.lineTo(SIZE - 11, ry + 3); ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#666';
+        ctx.fillText('Eclipsed', SIZE - 14, ry + 3);
+        ctx.textAlign = 'left';
+      }
+
       if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch) {
         ly += 10;
         ctx.fillStyle = '#44ff44';

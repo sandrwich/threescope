@@ -2,6 +2,7 @@ export interface PassSkyPoint {
   az: number;   // degrees 0-360
   el: number;   // degrees 0-90
   t: number;    // TLE epoch (for interpolation)
+  eclipsed?: boolean;  // true if satellite is in Earth's shadow at this point
 }
 
 export interface SatellitePass {

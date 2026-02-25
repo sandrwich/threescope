@@ -27,7 +27,7 @@
     <div class="btn-group">
       <button class="source-btn" class:active={uiStore.dataSourcesOpen} title="Data Sources (D)" onclick={() => uiStore.dataSourcesOpen = !uiStore.dataSourcesOpen}>
         <span class="source-icon">{@html ICON_DATA_SOURCES}</span>
-        <span class="source-label">{sourceLabel}</span>
+        <span class="source-label" class:no-sources={sourcesStore.enabledSources.length === 0}>{sourceLabel}</span>
       </button>
     </div>
 
@@ -170,7 +170,8 @@
   }
   .source-icon { display: flex; align-items: center; }
   .source-icon :global(svg) { width: 13px; height: 13px; }
-  .source-label { white-space: nowrap; }
+  .source-label { white-space: nowrap; margin-top: 2px; }
+  .source-label.no-sources { color: #c44; }
 
   .planet-btn {
     background: none;

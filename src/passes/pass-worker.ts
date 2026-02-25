@@ -154,13 +154,16 @@ function computePassesForSat(
           // Re-sample sky path at ~10s intervals for accurate filtering
           {
             const subStep = 10 / 86400; // 10 seconds in days
-            const refined: { az: number; el: number; t: number }[] = [];
+            // Sun direction barely moves during a pass — compute once at midpoint
+            const midEpoch = (currentAosEpoch + losEpoch) / 2;
+            const passSunDir = sunDirectionECI(midEpoch);
+            const refined: { az: number; el: number; t: number; eclipsed?: boolean }[] = [];
             for (let st = currentAosEpoch; st <= losEpoch; st += subStep) {
               const sp = propagateAtEpoch(satrec, st);
               if (sp) {
                 const sg = epochToGmst(st) * DEG2RAD;
                 const sae = getAzEl(sp.x, sp.y, sp.z, sg, obsLat, obsLon, obsAlt);
-                refined.push({ az: sae.az, el: sae.el, t: st });
+                refined.push({ az: sae.az, el: sae.el, t: st, eclipsed: isEclipsed(sp.x, sp.y, sp.z, passSunDir) });
               }
             }
             // Add exact LOS point
@@ -168,7 +171,7 @@ function computePassesForSat(
             if (lp) {
               const lg = epochToGmst(losEpoch) * DEG2RAD;
               const lae = getAzEl(lp.x, lp.y, lp.z, lg, obsLat, obsLon, obsAlt);
-              refined.push({ az: lae.az, el: lae.el, t: losEpoch });
+              refined.push({ az: lae.az, el: lae.el, t: losEpoch, eclipsed: isEclipsed(lp.x, lp.y, lp.z, passSunDir) });
             }
             currentSkyPath = refined;
           }

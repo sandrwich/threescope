@@ -122,7 +122,11 @@
       {/if}
     </div>
     {#if uiStore.selectedSatData.length === 0}
-      <div class="empty">Click a satellite to select</div>
+      {#if (uiStore.getSatelliteNames?.() ?? []).length === 0}
+        <div class="empty empty-warn">No sources loaded</div>
+      {:else}
+        <div class="empty">Click a satellite to select</div>
+      {/if}
     {:else}
       <div class="header-row">
         <span class="count">{uiStore.selectedSatData.length} selected</span>
@@ -222,6 +226,9 @@
     color: var(--text-ghost);
     font-size: 12px;
     padding: 4px 0;
+  }
+  .empty-warn {
+    color: #c44;
   }
   .header-row {
     display: flex;
