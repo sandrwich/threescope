@@ -1,5 +1,6 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
+  import Checkbox from './shared/Checkbox.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { ICON_VIEW } from './shared/icons';
   import { settingsStore } from '../stores/settings.svelte';
@@ -33,18 +34,18 @@
         title={rtxTitle}
         onclick={(e) => { if (isCustomized) { e.preventDefault(); uiStore.settingsOpen = true; } }}
       >
-        <input type="checkbox" checked={rtxChecked} disabled={isCustomized} onchange={toggleRtx}>
+        <Checkbox checked={rtxChecked} disabled={isCustomized} onchange={toggleRtx} />
         {isCustomized ? 'Customized' : 'RTX'}
       </label>
       <label class="toggle-label" title="Show star skybox background">
-          <input type="checkbox" bind:checked={uiStore.showSkybox}
-            onchange={() => uiStore.setToggle('showSkybox', uiStore.showSkybox)}>
+          <Checkbox bind:checked={uiStore.showSkybox}
+            onchange={() => uiStore.setToggle('showSkybox', uiStore.showSkybox)} />
           Skybox
         </label>
       {#if uiStore.nightToggleVisible}
         <label class="toggle-label" title="Show city lights on dark side">
-          <input type="checkbox" bind:checked={uiStore.showNightLights}
-            onchange={() => uiStore.setToggle('showNightLights', uiStore.showNightLights)}>
+          <Checkbox bind:checked={uiStore.showNightLights}
+            onchange={() => uiStore.setToggle('showNightLights', uiStore.showNightLights)} />
           Dark Side
         </label>
       {/if}
@@ -54,18 +55,18 @@
       <div class="section">
         <div class="section-header">Earth</div>
         <label class="toggle-label" title="Show cloud layer on Earth">
-          <input type="checkbox" bind:checked={uiStore.showClouds}
-            onchange={() => uiStore.setToggle('showClouds', uiStore.showClouds)}>
+          <Checkbox bind:checked={uiStore.showClouds}
+            onchange={() => uiStore.setToggle('showClouds', uiStore.showClouds)} />
           Clouds
         </label>
         <label class="toggle-label" title="Show country border outlines">
-          <input type="checkbox" bind:checked={uiStore.showCountries}
-            onchange={() => uiStore.setToggle('showCountries', uiStore.showCountries)}>
+          <Checkbox bind:checked={uiStore.showCountries}
+            onchange={() => uiStore.setToggle('showCountries', uiStore.showCountries)} />
           Countries
         </label>
         <label class="toggle-label" title="Show latitude/longitude grid (15°)">
-          <input type="checkbox" bind:checked={uiStore.showGrid}
-            onchange={() => uiStore.setToggle('showGrid', uiStore.showGrid)}>
+          <Checkbox bind:checked={uiStore.showGrid}
+            onchange={() => uiStore.setToggle('showGrid', uiStore.showGrid)} />
           Grid
         </label>
       </div>
@@ -75,13 +76,13 @@
       <div class="section">
         <div class="section-header">Satellites</div>
         <label class="toggle-label" title="Focus on selected satellite only">
-          <input type="checkbox" bind:checked={uiStore.hideUnselected}
-            onchange={() => uiStore.setToggle('hideUnselected', uiStore.hideUnselected)}>
+          <Checkbox bind:checked={uiStore.hideUnselected}
+            onchange={() => uiStore.setToggle('hideUnselected', uiStore.hideUnselected)} />
           Spotlight
         </label>
         <label class="toggle-label" title="Show orbit trajectories for all satellites">
-          <input type="checkbox" bind:checked={uiStore.showOrbits}
-            onchange={() => uiStore.setToggle('showOrbits', uiStore.showOrbits)}>
+          <Checkbox bind:checked={uiStore.showOrbits}
+            onchange={() => uiStore.setToggle('showOrbits', uiStore.showOrbits)} />
           Orbits
         </label>
       </div>
@@ -90,9 +91,9 @@
         <div class="section-header">Markers</div>
         {#each defaultConfig.markerGroups as group}
           <label class="toggle-label" title={group.label}>
-            <input type="checkbox"
+            <Checkbox
               checked={uiStore.markerVisibility[group.id] ?? false}
-              onchange={() => uiStore.setMarkerGroupVisible(group.id, !(uiStore.markerVisibility[group.id] ?? false))}>
+              onchange={() => uiStore.setMarkerGroupVisible(group.id, !(uiStore.markerVisibility[group.id] ?? false))} />
             {group.label}
           </label>
         {/each}
@@ -131,27 +132,4 @@
   .toggle-label:hover { color: var(--text); }
   .toggle-label.disabled { color: var(--text-dim); opacity: 0.6; cursor: default; }
 
-  .toggle-label input[type="checkbox"] {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--border-hover);
-    background: transparent;
-    cursor: pointer;
-    position: relative;
-    flex-shrink: 0;
-  }
-  .toggle-label input[type="checkbox"]:hover { border-color: var(--text); }
-  .toggle-label input[type="checkbox"]:checked::after {
-    content: '';
-    position: absolute;
-    top: 2px; left: 2px; right: 2px; bottom: 2px;
-    background: var(--text);
-  }
-  .toggle-label input[type="checkbox"]:disabled {
-    border-color: var(--text-dim);
-    opacity: 0.4;
-    cursor: default;
-  }
 </style>

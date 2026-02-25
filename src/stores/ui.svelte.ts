@@ -40,6 +40,14 @@ class UIStore {
   // Selection window
   selectionWindowOpen = $state(true);
   selectedSatData = $state<SelectedSatInfo[]>([]);
+  hiddenSelectedSats = $state(new Set<string>());
+
+  toggleSatVisibility(name: string) {
+    const next = new Set(this.hiddenSelectedSats);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    this.hiddenSelectedSats = next;
+  }
 
   // Pass predictor
   selectedSatCount = $state(0);

@@ -1,5 +1,6 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
+  import Checkbox from './shared/Checkbox.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { sourcesStore } from '../stores/sources.svelte';
   import { getCacheAge } from '../data/tle-loader';
@@ -99,9 +100,9 @@
           {@const cached = getCacheInfo(src)}
           {@const enabled = sourcesStore.enabledIds.has(src.id)}
           <label class="source-row">
-            <input type="checkbox"
+            <Checkbox size="sm"
               checked={enabled}
-              onchange={() => sourcesStore.toggleSource(src.id)}>
+              onchange={() => sourcesStore.toggleSource(src.id)} />
             <span class="source-name">{src.name}</span>
             {#if enabled}
               <span class="source-count">{getStatus(src.id)}</span>
@@ -120,9 +121,9 @@
         <div class="source-list custom-list">
           {#each customSources as src}
             <label class="source-row">
-              <input type="checkbox"
+              <Checkbox size="sm"
                 checked={sourcesStore.enabledIds.has(src.id)}
-                onchange={() => sourcesStore.toggleSource(src.id)}>
+                onchange={() => sourcesStore.toggleSource(src.id)} />
               <span class="source-name">{src.name}</span>
               {#if sourcesStore.enabledIds.has(src.id)}
                 <span class="source-count">{getStatus(src.id)}</span>
@@ -220,24 +221,6 @@
   }
   .source-row:hover { color: var(--text); }
 
-  .source-row input[type="checkbox"] {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 12px;
-    height: 12px;
-    border: 2px solid var(--border-hover);
-    background: transparent;
-    cursor: pointer;
-    position: relative;
-    flex-shrink: 0;
-  }
-  .source-row input[type="checkbox"]:hover { border-color: var(--text); }
-  .source-row input[type="checkbox"]:checked::after {
-    content: '';
-    position: absolute;
-    top: 1px; left: 1px; right: 1px; bottom: 1px;
-    background: var(--text);
-  }
 
   .source-name {
     flex: 1;

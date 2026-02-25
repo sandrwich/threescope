@@ -1,5 +1,6 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
+  import Checkbox from './shared/Checkbox.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { ICON_SELECTION, ICON_PASSES } from './shared/icons';
 
@@ -75,6 +76,16 @@
     uiStore.onDeselectAll?.();
   }
 
+  let someHidden = $derived(uiStore.hiddenSelectedSats.size > 0);
+
+  function showAll() {
+    uiStore.hiddenSelectedSats = new Set();
+  }
+
+  function hideAll() {
+    uiStore.hiddenSelectedSats = new Set(uiStore.selectedSatData.map(s => s.name));
+  }
+
   function togglePasses() {
     uiStore.passesWindowOpen = !uiStore.passesWindowOpen;
     if (uiStore.passesWindowOpen) uiStore.onRequestPasses?.();
@@ -129,15 +140,22 @@
       {/if}
     {:else}
       <div class="header-row">
+        <Checkbox size="sm" class="master-cb"
+          checked={!someHidden}
+          mixed={someHidden && uiStore.hiddenSelectedSats.size < uiStore.selectedSatData.length}
+          onchange={() => someHidden ? showAll() : hideAll()} />
         <span class="count">{uiStore.selectedSatData.length} selected</span>
         <button class="passes-btn" onclick={togglePasses} title="Predict passes">{@html ICON_PASSES} Passes</button>
         <button class="clear-btn" onclick={clearAll}>Clear</button>
       </div>
       <div class="sat-list">
         {#each uiStore.selectedSatData as sat}
-          <div class="sat-row">
+          {@const hidden = uiStore.hiddenSelectedSats.has(sat.name)}
+          <div class="sat-row" class:sat-hidden={hidden}>
             <div class="sat-compact">
-              <svg class="color-dot" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill={colorRgb(sat.color)}/></svg>
+              <Checkbox size="sm" color={colorRgb(sat.color)}
+                checked={!hidden}
+                onchange={() => uiStore.toggleSatVisibility(sat.name)} />
               <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
               <span class="sat-name" onclick={() => toggle(sat.name)}>{sat.name}</span>
               <span class="pill">{fmt(sat.altKm, 0)} km</span>
@@ -289,12 +307,10 @@
     gap: 5px;
     padding: 3px 0;
   }
-  .color-dot {
-    display: block;
-    width: 8px;
-    height: 8px;
-    flex-shrink: 0;
-  }
+  .sat-hidden .sat-name,
+  .sat-hidden .pill { opacity: 0.35; }
+  .header-row :global(.master-cb) { margin-left: 2px; margin-right: 4px; opacity: 0.45; }
+  .header-row :global(.master-cb:hover) { opacity: 0.7; }
   .sat-name {
     font-size: 12px;
     color: var(--text);

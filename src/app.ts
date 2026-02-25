@@ -561,6 +561,7 @@ export class App {
     // Command palette: deselect all satellites
     uiStore.onDeselectAll = () => {
       this.selectedSats.clear(); this.selectedSatsVersion++;
+      uiStore.hiddenSelectedSats = new Set();
     };
 
     // Command palette: deselect satellite by name
@@ -569,6 +570,11 @@ export class App {
         if (sat.name === name) {
           this.selectedSats.delete(sat);
           this.selectedSatsVersion++;
+          if (uiStore.hiddenSelectedSats.has(name)) {
+            const next = new Set(uiStore.hiddenSelectedSats);
+            next.delete(name);
+            uiStore.hiddenSelectedSats = next;
+          }
           break;
         }
       }
@@ -1123,12 +1129,15 @@ export class App {
         // Footprints for all selected sats + hovered (per-sat orbit color)
         const fpEntries: FootprintEntry[] = [];
         {
+          const hiddenNames = uiStore.hiddenSelectedSats;
           let fpIdx = 0;
           for (const sat of this.selectedSats) {
-            fpEntries.push({
-              position: sat.currentPos,
-              color: ORBIT_COLORS[fpIdx % ORBIT_COLORS.length] as [number, number, number],
-            });
+            if (!hiddenNames.has(sat.name)) {
+              fpEntries.push({
+                position: sat.currentPos,
+                color: ORBIT_COLORS[fpIdx % ORBIT_COLORS.length] as [number, number, number],
+              });
+            }
             fpIdx++;
           }
           if (this.hoveredSat && !this.selectedSats.has(this.hoveredSat)) {

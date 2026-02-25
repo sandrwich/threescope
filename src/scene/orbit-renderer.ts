@@ -5,6 +5,7 @@ import { parseHexColor } from '../config';
 import { calculatePosition, getCorrectedElements } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
 import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
+import { uiStore } from '../stores/ui.svelte';
 
 // SAT_COLORS as 0–1 floats for WebGL
 export const ORBIT_COLORS = SAT_COLORS.map(c => [c[0] / 255, c[1] / 255, c[2] / 255]);
@@ -364,9 +365,11 @@ export class OrbitRenderer {
       const sunRX = sunEci.x, sunRY = sunEci.z, sunRZ = -sunEci.y;
       const sunRender = { x: sunRX, y: sunRY, z: sunRZ };
       const ECLIPSE_DIM = 0.3;
+      const hiddenNames = uiStore.hiddenSelectedSats;
 
       for (let si = 0; si < highlightSats.length; si++) {
         const sat = highlightSats[si];
+        if (hiddenNames.has(sat.name)) continue;
         const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
         const segments = Math.min(this.highlightSegmentsPerOrbit, Math.max(90, Math.floor(400 * orbitsToDraw)));
         const periodDays = TWO_PI / sat.meanMotion / 86400.0;
@@ -409,6 +412,7 @@ export class OrbitRenderer {
       let ni = 0;
       for (let si = 0; si < highlightSats.length; si++) {
         const sat = highlightSats[si];
+        if (hiddenNames.has(sat.name)) continue;
         const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
         if (ni + 6 > this.maxHighlightOrbits * 6) break;
         nd[ni] = 0; nd[ni+1] = 0; nd[ni+2] = 0;

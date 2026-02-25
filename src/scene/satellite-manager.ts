@@ -4,6 +4,7 @@ import { DRAW_SCALE, EARTH_RADIUS_KM } from '../constants';
 import { parseHexColor } from '../config';
 import { calculatePosition } from '../astro/propagator';
 import { ORBIT_COLORS } from './orbit-renderer';
+import { uiStore } from '../stores/ui.svelte';
 
 export class SatelliteManager {
   points: THREE.Points;
@@ -150,10 +151,14 @@ export class SatelliteManager {
     const bloomBoost = bloomEnabled ? 2.0 : 1.0;
 
     // Build rainbow color map for selected sats (index matches orbit color)
+    // Hidden sats get no color entry but still advance the index for color stability
+    const hiddenNames = uiStore.hiddenSelectedSats;
     const selectedColorMap = new Map<Satellite, number[]>();
     let selIdx = 0;
     for (const s of selectedSats) {
-      selectedColorMap.set(s, ORBIT_COLORS[selIdx % ORBIT_COLORS.length]);
+      if (!hiddenNames.has(s.name)) {
+        selectedColorMap.set(s, ORBIT_COLORS[selIdx % ORBIT_COLORS.length]);
+      }
       selIdx++;
     }
 
