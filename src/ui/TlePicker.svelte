@@ -171,7 +171,7 @@
   .source-icon { display: flex; align-items: center; }
   .source-icon :global(svg) { width: 13px; height: 13px; }
   .source-label { white-space: nowrap; margin-top: 2px; }
-  .source-label.no-sources { color: #c44; }
+  .source-label.no-sources { color: var(--danger); }
 
   .planet-btn {
     background: none;

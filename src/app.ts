@@ -36,6 +36,7 @@ import { getAzEl } from './astro/az-el';
 import { propagate } from 'satellite.js';
 import { epochToUnix, epochToGmst } from './astro/epoch';
 import { loadElevation, getElevation, isElevationLoaded } from './astro/elevation';
+import { palette } from './ui/shared/theme';
 
 function formatAge(ms: number): string {
   const mins = Math.floor(ms / 60000);
@@ -142,7 +143,7 @@ export class App {
     // Cameras
     this.camera3d = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 10000);
     this.scene3d = new THREE.Scene();
-    this.scene3d.background = new THREE.Color(this.cfg.bgColor);
+    this.scene3d.background = new THREE.Color(palette.bg);
 
     // Post-processing (bloom + tone mapping)
     this.postProcessing = new PostProcessing(this.renderer, this.scene3d, this.camera3d);
@@ -156,7 +157,7 @@ export class App {
     this.camera2d.lookAt(0, 0, 0);
     this.camera = new CameraController(this.camera3d, this.camera2d);
     this.scene2d = new THREE.Scene();
-    this.scene2d.background = new THREE.Color(this.cfg.bgColor);
+    this.scene2d.background = new THREE.Color(palette.bg);
 
     this.setLoading(0.2, 'Loading textures...');
     await this.loadTextures();
@@ -459,7 +460,7 @@ export class App {
     this.cfg.showClouds = uiStore.showClouds;
     this.cfg.showNightLights = uiStore.showNightLights;
     this.moonScene.setShowNight(uiStore.showNightLights);
-    if (!uiStore.showSkybox) this.scene3d.background = new THREE.Color(this.cfg.bgColor);
+    if (!uiStore.showSkybox) this.scene3d.background = new THREE.Color(palette.bg);
     this.geoOverlay.setCountriesVisible(uiStore.showCountries);
     this.geoOverlay.setGridVisible(uiStore.showGrid);
 
@@ -490,7 +491,7 @@ export class App {
           this.moonScene.setShowNight(value);
           break;
         case 'showSkybox':
-          this.scene3d.background = value ? this.starTex : new THREE.Color(this.cfg.bgColor);
+          this.scene3d.background = value ? this.starTex : new THREE.Color(palette.bg);
           break;
         case 'showCountries':
           this.geoOverlay.setCountriesVisible(value);

@@ -416,7 +416,7 @@
   .stats-progress {
     width: 40px;
     height: 2px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--row-highlight);
     border-radius: 1px;
     overflow: hidden;
   }
@@ -577,11 +577,11 @@
     font-size: 11px;
     cursor: pointer;
     position: relative;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--row-border);
   }
   .pass-row:last-child { border-bottom: none; }
-  .pass-row:hover { background: rgba(255, 255, 255, 0.03); }
-  .pass-row.active { background: rgba(255, 255, 255, 0.05); }
+  .pass-row:hover { background: var(--row-hover); }
+  .pass-row.active { background: var(--row-active); }
 
   .td {
     color: var(--text-muted);
@@ -607,20 +607,20 @@
     white-space: nowrap;
   }
   .eclipse-icon {
-    color: #aaa;
+    color: var(--border-hover);
   }
 
-  .el-low { color: #ff4444; }
-  .el-mid { color: #ffaa00; }
-  .el-high { color: #44ff44; }
+  .el-low { color: var(--el-low); }
+  .el-mid { color: var(--el-mid); }
+  .el-high { color: var(--el-high); }
 
-  .mag-bright { color: #fff; text-shadow: 0 0 6px rgba(255, 255, 255, 0.9), 0 0 12px rgba(255, 255, 255, 0.4); }
+  .mag-bright { color: var(--text); text-shadow: 0 0 6px rgba(255, 255, 255, 0.9), 0 0 12px rgba(255, 255, 255, 0.4); }
   .mag-mid { color: var(--text-muted); }
   .mag-faint { color: var(--text-ghost); }
   .mag-unknown { color: var(--text-ghost); opacity: 0.5; }
   .mag-eclipsed { color: var(--text-ghost); opacity: 0.35; }
-  .mag-daylight { color: #ffaa00; opacity: 0.35; }
-  .mag-twilight { color: #ffcc44; opacity: 0.7; }
+  .mag-daylight { color: var(--mag-day); opacity: 0.35; }
+  .mag-twilight { color: var(--mag-twilight); opacity: 0.7; }
   .mag-nearsun { color: var(--text-muted); font-style: italic; }
   .td-mag .eclipse-icon { display: inline-flex; align-items: center; }
   .td-mag .eclipse-icon :global(svg) { width: 10px; height: 10px; display: block; opacity: 0.35; }
@@ -645,7 +645,7 @@
     bottom: 0;
     left: 0;
     height: 2px;
-    background: #44ff44;
+    background: var(--live);
     pointer-events: none;
   }
 

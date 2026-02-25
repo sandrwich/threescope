@@ -4,6 +4,7 @@
   import { timeStore } from '../stores/time.svelte';
   import { ICON_POLAR } from './shared/icons';
   import { SAT_COLORS } from '../constants';
+  import { palette } from './shared/theme';
 
   const SIZE = 280;
   const CX = SIZE / 2;
@@ -99,7 +100,7 @@
     const font = '"Overpass Mono", monospace';
 
     // Grid rings
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = palette.grid;
     ctx.lineWidth = 1;
     for (const frac of [1, 0.666, 0.333]) {
       ctx.beginPath();
@@ -114,7 +115,7 @@
     ctx.stroke();
 
     // Cardinal labels
-    ctx.fillStyle = '#777';
+    ctx.fillStyle = palette.textFaint;
     ctx.font = `12px ${font}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
@@ -128,7 +129,7 @@
     ctx.fillText('W', CX - R_MAX - 6, CY);
 
     // Elevation labels
-    ctx.fillStyle = '#444';
+    ctx.fillStyle = palette.gridDim;
     ctx.font = `9px ${font}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
@@ -159,12 +160,12 @@
 
         // AOS marker (cyan square)
         const aos = azElToXY(pass.skyPath[0].az, pass.skyPath[0].el);
-        ctx.fillStyle = '#00ffcc';
+        ctx.fillStyle = palette.markerAos;
         ctx.fillRect(aos.x - 3, aos.y - 3, 6, 6);
 
         // LOS marker (gray square)
         const los = azElToXY(pass.skyPath[pass.skyPath.length - 1].az, pass.skyPath[pass.skyPath.length - 1].el);
-        ctx.fillStyle = '#666666';
+        ctx.fillStyle = palette.markerLos;
         ctx.fillRect(los.x - 3, los.y - 3, 6, 6);
       }
 
@@ -174,7 +175,7 @@
       const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 250);
       if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch && live) {
         const { x, y } = azElToXY(live.az, live.el);
-        ctx.fillStyle = '#44ff44';
+        ctx.fillStyle = palette.live;
         ctx.globalAlpha = 0.6 + pulse * 0.4;
         ctx.beginPath();
         ctx.arc(x, y, 5, 0, 2 * Math.PI);
@@ -187,14 +188,14 @@
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       let ly = 8;
-      ctx.fillStyle = '#00ffcc';
+      ctx.fillStyle = palette.markerAos;
       ctx.fillRect(6, ly, 5, 5);
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = palette.textGhost;
       ctx.fillText('AOS', 14, ly + 3);
       ly += 10;
-      ctx.fillStyle = '#666666';
+      ctx.fillStyle = palette.markerLos;
       ctx.fillRect(6, ly, 5, 5);
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = palette.textGhost;
       ctx.fillText('LOS', 14, ly + 3);
 
       // Sunlit / eclipsed legend (top-right, only if pass has mixed segments)
@@ -208,7 +209,7 @@
         ctx.globalAlpha = 0.8;
         ctx.beginPath(); ctx.moveTo(SIZE - 6, ry + 3); ctx.lineTo(SIZE - 11, ry + 3); ctx.stroke();
         ctx.globalAlpha = 1;
-        ctx.fillStyle = '#666';
+        ctx.fillStyle = palette.textGhost;
         ctx.fillText('Sunlit', SIZE - 14, ry + 3);
         ry += 10;
         ctx.strokeStyle = cssColor;
@@ -216,18 +217,18 @@
         ctx.globalAlpha = 0.25;
         ctx.beginPath(); ctx.moveTo(SIZE - 6, ry + 3); ctx.lineTo(SIZE - 11, ry + 3); ctx.stroke();
         ctx.globalAlpha = 1;
-        ctx.fillStyle = '#666';
+        ctx.fillStyle = palette.textGhost;
         ctx.fillText('Eclipsed', SIZE - 14, ry + 3);
         ctx.textAlign = 'left';
       }
 
       if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch) {
         ly += 10;
-        ctx.fillStyle = '#44ff44';
+        ctx.fillStyle = palette.live;
         ctx.beginPath();
         ctx.arc(8, ly + 3, 3, 0, 2 * Math.PI);
         ctx.fill();
-        ctx.fillStyle = '#666';
+        ctx.fillStyle = palette.textGhost;
         ctx.fillText('Live', 14, ly + 3);
       }
 
@@ -241,10 +242,10 @@
       ctx.beginPath();
       ctx.arc(12, infoY + 4, 3.5, 0, 2 * Math.PI);
       ctx.fill();
-      ctx.fillStyle = '#999';
+      ctx.fillStyle = palette.textMuted;
       ctx.textAlign = 'left';
       ctx.fillText(pass.satName, 20, infoY);
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = palette.textGhost;
       ctx.textAlign = 'right';
       ctx.fillText(`Max ${pass.maxEl.toFixed(0)}\u00B0`, SIZE - 8, infoY);
 
@@ -256,13 +257,13 @@
         const secToLos = (pass.losEpoch - epoch) * 86400;
         const m = Math.floor(secToLos / 60);
         const s = Math.round(secToLos % 60);
-        ctx.fillStyle = '#44ff44';
+        ctx.fillStyle = palette.live;
         ctx.fillText(`LIVE`, 8, row2Y);
-        ctx.fillStyle = '#777';
+        ctx.fillStyle = palette.textFaint;
         ctx.fillText(`LOS ${m}:${String(s).padStart(2, '0')}`, 42, row2Y);
         if (live) {
           ctx.textAlign = 'right';
-          ctx.fillStyle = '#999';
+          ctx.fillStyle = palette.textMuted;
           ctx.fillText(`${live.az.toFixed(1)}\u00B0 az  ${live.el.toFixed(1)}\u00B0 el`, SIZE - 8, row2Y);
         }
       } else if (epoch < pass.aosEpoch) {
@@ -270,14 +271,14 @@
         const h = Math.floor(sec / 3600);
         const m = Math.floor((sec % 3600) / 60);
         const s = Math.round(sec % 60);
-        ctx.fillStyle = '#777';
+        ctx.fillStyle = palette.textFaint;
         ctx.fillText(`AOS in ${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`, 8, row2Y);
       } else {
-        ctx.fillStyle = '#555';
+        ctx.fillStyle = palette.textGhost;
         ctx.fillText('Pass complete', 8, row2Y);
       }
     } else {
-      ctx.fillStyle = '#555';
+      ctx.fillStyle = palette.textGhost;
       ctx.font = `11px ${font}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';

@@ -232,7 +232,7 @@
     white-space: nowrap;
   }
   .search-item:hover, .search-item.selected {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--row-highlight);
     color: var(--text);
   }
   .search-empty {
@@ -246,7 +246,7 @@
     padding: 4px 0;
   }
   .empty-warn {
-    color: #c44;
+    color: var(--danger);
   }
   .header-row {
     display: flex;
@@ -356,7 +356,7 @@
     line-height: 1;
     flex-shrink: 0;
   }
-  .deselect-btn:hover { color: #ff6666; }
+  .deselect-btn:hover { color: var(--danger-bright); }
 
   .sat-detail {
     padding: 2px 0 4px 14px;

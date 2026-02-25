@@ -2,6 +2,7 @@
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { ICON_FILTER } from './shared/icons';
+  import { palette } from './shared/theme';
 
   const SIZE = 300;
   const CX = SIZE / 2;
@@ -247,7 +248,7 @@
     const font = '"Overpass Mono", monospace';
 
     // Grid rings
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = palette.grid;
     ctx.lineWidth = 1;
     for (const frac of [1, 0.666, 0.333]) {
       ctx.beginPath();
@@ -262,7 +263,7 @@
     ctx.stroke();
 
     // Cardinal labels
-    ctx.fillStyle = '#777';
+    ctx.fillStyle = palette.textFaint;
     ctx.font = `11px ${font}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom'; ctx.fillText('N', CX, CY - R_MAX - 28);
@@ -272,7 +273,7 @@
     ctx.textAlign = 'right'; ctx.fillText('W', CX - R_MAX - 30, CY);
 
     // Elevation labels
-    ctx.fillStyle = '#444';
+    ctx.fillStyle = palette.gridDim;
     ctx.font = `8px ${font}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
@@ -291,7 +292,7 @@
     {
       const hasMask = horizonMask.some(v => v > 0);
       if (hasMask) {
-        ctx.strokeStyle = '#44cc44';
+        ctx.strokeStyle = palette.handleHz;
         ctx.fillStyle = 'rgba(68, 204, 68, 0.08)';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([]);
@@ -308,7 +309,7 @@
         const { x, y } = azElToXY(DIR_AZ[i], horizonMask[i]);
         const isActive = dragging === `horizon${i}`;
         ctx.globalAlpha = (hasMask || isActive) ? 1 : 0.3;
-        ctx.fillStyle = isActive ? '#88ff88' : '#44cc44';
+        ctx.fillStyle = isActive ? palette.handleHzActive : palette.handleHz;
         ctx.beginPath();
         ctx.arc(x, y, HANDLE_R, 0, 2 * Math.PI);
         ctx.fill();
@@ -327,7 +328,7 @@
     {
       const minElDefault = minEl === 0;
       const maxElDefault = maxEl === 90;
-      ctx.strokeStyle = '#ff8800';
+      ctx.strokeStyle = palette.handleEl;
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
       ctx.globalAlpha = minElDefault ? 0.25 : 1;
@@ -338,7 +339,7 @@
       {
         const { x: hx, y: hy } = elHandleXY(minEl);
         ctx.globalAlpha = minElDefault ? 0.25 : 1;
-        ctx.fillStyle = '#ff8800';
+        ctx.fillStyle = palette.handleEl;
         ctx.beginPath(); ctx.arc(hx, hy, HANDLE_R, 0, 2 * Math.PI); ctx.fill();
         ctx.fillStyle = '#000';
         ctx.font = `bold 9px ${font}`;
@@ -347,7 +348,7 @@
         ctx.fillText(`${minEl}`, hx, hy + 1);
       }
       ctx.globalAlpha = 1;
-      ctx.strokeStyle = '#ff8800';
+      ctx.strokeStyle = palette.handleEl;
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
       ctx.globalAlpha = maxElDefault ? 0.25 : 1;
@@ -358,7 +359,7 @@
       {
         const { x: hx, y: hy } = elHandleXY(maxEl);
         ctx.globalAlpha = maxElDefault ? 0.25 : 1;
-        ctx.fillStyle = '#ff8800';
+        ctx.fillStyle = palette.handleEl;
         ctx.beginPath(); ctx.arc(hx, hy, HANDLE_R, 0, 2 * Math.PI); ctx.fill();
         ctx.fillStyle = '#000';
         ctx.font = `bold 9px ${font}`;
@@ -373,14 +374,14 @@
     {
       const isDefault = azFrom === 0 && azTo === 360;
       ctx.globalAlpha = isDefault ? 0.3 : 1;
-      ctx.strokeStyle = '#00aaff';
+      ctx.strokeStyle = palette.handleAz;
       ctx.lineWidth = isDefault ? 1 : 2;
       ctx.setLineDash([]);
       const fromHandle = azHandleXY(azFrom);
       ctx.beginPath(); ctx.moveTo(CX, CY); ctx.lineTo(fromHandle.x, fromHandle.y); ctx.stroke();
       const toHandle = azHandleXY(azTo === 360 ? 0 : azTo);
       ctx.beginPath(); ctx.moveTo(CX, CY); ctx.lineTo(toHandle.x, toHandle.y); ctx.stroke();
-      ctx.fillStyle = '#00aaff';
+      ctx.fillStyle = palette.handleAz;
       ctx.beginPath(); ctx.arc(fromHandle.x, fromHandle.y, HANDLE_R, 0, 2 * Math.PI); ctx.fill();
       ctx.beginPath(); ctx.arc(toHandle.x, toHandle.y, HANDLE_R, 0, 2 * Math.PI); ctx.fill();
       if (!isDefault) {
@@ -536,7 +537,7 @@
 
     <div class="pf-controls">
       <div class="pf-row">
-        <span class="pf-label"><span class="pf-dot" style="background:#ff8800"></span>Elevation</span>
+        <span class="pf-label"><span class="pf-dot" style="background:var(--handle-el)"></span>Elevation</span>
         <input class="pf-num" type="number" min="0" max="90" bind:value={minEl}
           onchange={() => syncToStore()} />
         <span class="pf-sep">&mdash;</span>
@@ -546,7 +547,7 @@
       </div>
 
       <div class="pf-row">
-        <span class="pf-label"><span class="pf-dot" style="background:#00aaff"></span>Azimuth</span>
+        <span class="pf-label"><span class="pf-dot" style="background:var(--handle-az)"></span>Azimuth</span>
         <input class="pf-num" type="number" min="0" max="360" bind:value={azFrom}
           onchange={() => syncToStore()} />
         <span class="pf-sep">&mdash;</span>
@@ -561,7 +562,7 @@
       </div>
 
       <div class="pf-row pf-row-hz">
-        <span class="pf-label"><span class="pf-dot" style="background:#44cc44"></span>Horizon</span>
+        <span class="pf-label"><span class="pf-dot" style="background:var(--handle-hz)"></span>Horizon</span>
         <div class="pf-horizon">
           {#each DIRS as dir, i}
             <div class="pf-hz-cell">

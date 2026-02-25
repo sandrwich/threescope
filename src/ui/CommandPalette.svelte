@@ -432,7 +432,7 @@
   }
   .palette-item:hover,
   .palette-item.selected {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--row-highlight);
     color: var(--text);
   }
 

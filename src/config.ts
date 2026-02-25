@@ -5,7 +5,6 @@ export const defaultConfig: AppConfig = {
   orbitsToDraw: 3.0,
   showClouds: true,
   showNightLights: true,
-  bgColor: '#000000',
   orbitNormal: '#D3D3D360',
   orbitHighlighted: '#CCCCCCFF',
   satNormal: '#EEEEEEA0',

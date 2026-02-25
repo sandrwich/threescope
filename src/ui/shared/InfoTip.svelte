@@ -22,7 +22,7 @@
     position: absolute;
     bottom: calc(100% + 6px);
     right: -12px;
-    background: #111;
+    background: var(--tooltip-bg);
     border: 1px solid var(--border);
     color: var(--text-dim);
     font-size: 11px;

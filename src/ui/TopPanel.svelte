@@ -33,5 +33,5 @@
     color: var(--text-muted);
     white-space: nowrap;
   }
-  .hud-line.alert { color: #ff6666; }
+  .hud-line.alert { color: var(--danger-bright); }
 </style>

@@ -291,7 +291,7 @@
   .value-label { color: var(--text-muted); }
   .warning {
     font-size: 11px;
-    color: #cc6633;
+    color: var(--warning);
     margin: -6px 0 8px;
   }
   .reset-btn {

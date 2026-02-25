@@ -7,6 +7,7 @@
   import { calculateDopplerShift, createSatrec } from '../astro/doppler';
   import { epochToDatetimeStr, epochToDate } from '../astro/epoch';
   import { SAT_COLORS } from '../constants';
+  import { palette } from './shared/theme';
 
   const CANVAS_W = 480;
   const CANVAS_H = 280;
@@ -89,7 +90,7 @@
     const pass = selectedPass;
 
     if (!pass) {
-      ctx.fillStyle = '#555';
+      ctx.fillStyle = palette.textGhost;
       ctx.font = `12px ${font}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -102,7 +103,7 @@
     recomputeCurve();
 
     if (cachedData.length === 0) {
-      ctx.fillStyle = '#555';
+      ctx.fillStyle = palette.textGhost;
       ctx.font = `12px ${font}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -120,12 +121,12 @@
     const fRange = cachedMaxF - cachedMinF;
 
     // Graph border
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = palette.grid;
     ctx.lineWidth = 1;
     ctx.strokeRect(gx, gy, gw, gh);
 
     // Y-axis labels
-    ctx.fillStyle = '#777';
+    ctx.fillStyle = palette.textFaint;
     ctx.font = `10px ${font}`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
@@ -136,11 +137,11 @@
     // Midpoint label
     const midF = (cachedMinF + cachedMaxF) / 2;
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#444';
+    ctx.fillStyle = palette.gridDim;
     ctx.fillText(formatFreq(midF), gx - 6, gy + gh / 2);
 
     // Horizontal grid at midpoint
-    ctx.strokeStyle = '#1a1a1a';
+    ctx.strokeStyle = palette.gridSubtle;
     ctx.beginPath();
     ctx.moveTo(gx, gy + gh / 2);
     ctx.lineTo(gx + gw, gy + gh / 2);
@@ -149,14 +150,14 @@
     // Base frequency reference line
     if (baseFreqHz > cachedMinF && baseFreqHz < cachedMaxF) {
       const baseY = gy + gh - ((baseFreqHz - cachedMinF) / fRange) * gh;
-      ctx.strokeStyle = '#444';
+      ctx.strokeStyle = palette.gridDim;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.moveTo(gx, baseY);
       ctx.lineTo(gx + gw, baseY);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = '#555';
+      ctx.fillStyle = palette.textGhost;
       ctx.font = `9px ${font}`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
@@ -164,7 +165,7 @@
     }
 
     // X-axis labels
-    ctx.fillStyle = '#777';
+    ctx.fillStyle = palette.textFaint;
     ctx.font = `10px ${font}`;
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
@@ -200,7 +201,7 @@
       const liveX = gx + (liveTSec / durSec) * gw;
 
       // Vertical line
-      ctx.strokeStyle = '#44ff44';
+      ctx.strokeStyle = palette.live;
       ctx.globalAlpha = 0.5;
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
@@ -215,7 +216,7 @@
       const liveFreq = interpolateFreq(liveTSec);
       if (liveFreq !== null) {
         const liveY = gy + gh - ((liveFreq - cachedMinF) / fRange) * gh;
-        ctx.fillStyle = '#44ff44';
+        ctx.fillStyle = palette.live;
         ctx.globalAlpha = 0.6 + pulse * 0.4;
         ctx.beginPath();
         ctx.arc(liveX, liveY, 4, 0, 2 * Math.PI);
@@ -244,7 +245,7 @@
         ctx.stroke();
 
         // Dot on curve
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = palette.text;
         ctx.beginPath();
         ctx.arc(hoverX, hy, 3, 0, 2 * Math.PI);
         ctx.fill();
@@ -268,12 +269,12 @@
         if (tipX + tipW > gx + gw) tipX = hoverX - tipW - 10;
         if (tipY < gy) tipY = hy + 10;
 
-        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillStyle = palette.cardBg;
         ctx.fillRect(tipX, tipY, tipW, tipH);
-        ctx.strokeStyle = '#555';
+        ctx.strokeStyle = palette.border;
         ctx.lineWidth = 1;
         ctx.strokeRect(tipX, tipY, tipW, tipH);
-        ctx.fillStyle = '#ccc';
+        ctx.fillStyle = palette.textDim;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         for (let i = 0; i < lines.length; i++) {
@@ -292,9 +293,9 @@
     ctx.beginPath();
     ctx.arc(gx + 4, 15, 3.5, 0, 2 * Math.PI);
     ctx.fill();
-    ctx.fillStyle = '#888';
+    ctx.fillStyle = palette.textMuted;
     ctx.fillText(pass.satName, gx + 12, 10);
-    ctx.fillStyle = '#555';
+    ctx.fillStyle = palette.textGhost;
     ctx.fillText(epochToDatetimeStr(pass.aosEpoch), gx + 12 + ctx.measureText(pass.satName + '  ').width, 10);
 
     // Max shift info in top-right
@@ -303,7 +304,7 @@
         Math.abs(cachedData[0].freq - baseFreqHz),
         Math.abs(cachedData[cachedData.length - 1].freq - baseFreqHz)
       );
-      ctx.fillStyle = '#555';
+      ctx.fillStyle = palette.textGhost;
       ctx.textAlign = 'right';
       ctx.fillText(`\u0394f max \u2248 ${formatFreq(maxShift)}`, gx + gw, 10);
     }
@@ -579,7 +580,7 @@
     position: absolute;
     right: 0;
     top: calc(100% + 4px);
-    background: var(--panel-bg, #1a1a1a);
+    background: var(--panel-bg);
     border: 1px solid var(--border);
     padding: 8px 10px;
     display: flex;

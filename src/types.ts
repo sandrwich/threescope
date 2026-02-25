@@ -41,7 +41,6 @@ export interface AppConfig {
   orbitsToDraw: number;
   showClouds: boolean;
   showNightLights: boolean;
-  bgColor: string;
   orbitNormal: string;
   orbitHighlighted: string;
   satNormal: string;

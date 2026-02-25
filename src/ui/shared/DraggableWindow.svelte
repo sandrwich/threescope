@@ -407,7 +407,7 @@
     top: 0;
     width: 1px;
     height: 100vh;
-    background: rgba(100, 150, 255, 0.3);
+    background: var(--snap-guide);
     pointer-events: none;
     z-index: 9998;
   }
@@ -416,7 +416,7 @@
     left: 0;
     height: 1px;
     width: 100vw;
-    background: rgba(100, 150, 255, 0.3);
+    background: var(--snap-guide);
     pointer-events: none;
     z-index: 9998;
   }

@@ -27,6 +27,6 @@
     white-space: nowrap;
   }
   .apsis-label.visible { display: block; }
-  .peri { color: #87ceeb; }
-  .apo { color: #ffa500; }
+  .peri { color: var(--apsis-peri); }
+  .apo { color: var(--apsis-apo); }
 </style>

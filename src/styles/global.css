@@ -12,10 +12,10 @@
   --border: #555;
   --border-hover: #aaa;
   --text: #fff;
-  --text-dim: #ccc;
-  --text-muted: #999;
-  --text-faint: #777;
-  --text-ghost: #555;
+  --text-dim: #eee;
+  --text-muted: #bbb;
+  --text-faint: #999;
+  --text-ghost: #777;
   --card-bg: rgba(0,0,0,0.85);
   --modal-bg: #0a0a0a;
   --modal-overlay: rgba(0,0,0,0.8);
@@ -23,6 +23,54 @@
   --link: #666;
   --link-hover: #aaa;
   --attrib: #555;
+
+  /* ── Surfaces ── */
+  --panel-bg: #1a1a1a;
+  --tooltip-bg: #111;
+
+  /* ── Canvas grid ── */
+  --grid: #333;
+  --grid-subtle: #1a1a1a;
+  --grid-dim: #444;
+
+  /* ── Row interactivity ── */
+  --row-border: rgba(255,255,255,0.02);
+  --row-hover: rgba(255,255,255,0.03);
+  --row-active: rgba(255,255,255,0.05);
+  --row-highlight: rgba(255,255,255,0.06);
+
+  /* ── State colors ── */
+  --danger: #c44;
+  --danger-bright: #ff6666;
+  --warning: #cc6633;
+  --warning-bright: #ff9944;
+  --live: #44ff44;
+
+  /* ── Domain: filter handles ── */
+  --handle-el: #ff8800;
+  --handle-az: #00aaff;
+  --handle-hz: #44cc44;
+  --handle-hz-active: #88ff88;
+
+  /* ── Domain: elevation scale ── */
+  --el-low: #ff4444;
+  --el-mid: #ffaa00;
+  --el-high: #44ff44;
+
+  /* ── Domain: magnitude ── */
+  --mag-day: #ffaa00;
+  --mag-twilight: #ffcc44;
+
+  /* ── Domain: polar markers ── */
+  --marker-aos: #00ffcc;
+  --marker-los: #666;
+
+  /* ── Domain: apsis labels ── */
+  --apsis-peri: #87ceeb;
+  --apsis-apo: #ffa500;
+
+  /* ── Misc ── */
+  --snap-guide: rgba(100,150,255,0.3);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }

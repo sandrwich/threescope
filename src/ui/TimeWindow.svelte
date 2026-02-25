@@ -240,13 +240,13 @@
     color: var(--text-muted);
     margin-left: 4px;
   }
-  .speed.paused { color: #ff6666; }
-  .speed.negative { color: #ff9944; }
+  .speed.paused { color: var(--danger-bright); }
+  .speed.negative { color: var(--warning-bright); }
   .rt-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #4f4;
+    background: var(--live);
     animation: pulse 2s ease-in-out infinite;
     flex-shrink: 0;
   }
@@ -380,6 +380,6 @@
   }
   .warning {
     font-size: 11px;
-    color: #cc6633;
+    color: var(--warning);
   }
 </style>

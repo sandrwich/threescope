@@ -249,7 +249,7 @@
     padding: 0 2px;
     flex-shrink: 0;
   }
-  .delete-btn:hover { color: #f55; }
+  .delete-btn:hover { color: var(--danger-bright); }
 
   .empty-hint {
     font-size: 11px;
