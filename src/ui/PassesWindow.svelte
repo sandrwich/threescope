@@ -145,6 +145,16 @@
     return `${(ms / 1000).toFixed(1)}s`;
   }
 
+  // --- Are any filters non-default? ---
+  let filtersActive = $derived(
+    uiStore.passVisibility !== 'all' ||
+    uiStore.passMinEl > 0 || uiStore.passMaxEl < 90 ||
+    uiStore.passAzFrom !== 0 || uiStore.passAzTo !== 360 ||
+    uiStore.passHorizonMask.length > 0 ||
+    uiStore.passMinDuration > 0 ||
+    uiStore.passHiddenSats.size > 0
+  );
+
   // --- Filter summary for inline bar ---
   let filterSummary = $derived.by(() => {
     const parts: string[] = [];
@@ -219,9 +229,9 @@
         <option value="visible">Visible (mag ≤ 5)</option>
       </select>
       {#if filterSummary}
-        <span class="filter-summary" title={filterSummary}>{filterSummary}</span>
+        <span class="filter-summary active" title={filterSummary}>{filterSummary}</span>
       {/if}
-      <button class="filter-window-btn" class:active={uiStore.passFilterWindowOpen} onclick={() => uiStore.passFilterWindowOpen = !uiStore.passFilterWindowOpen}>{@html ICON_FILTER} Filters</button>
+      <button class="filter-window-btn" class:active={uiStore.passFilterWindowOpen} class:has-filters={filtersActive} onclick={() => uiStore.passFilterWindowOpen = !uiStore.passFilterWindowOpen}>{@html ICON_FILTER} Filters{#if filtersActive}<span class="filter-dot"></span>{/if}</button>
     </div>
   </div>
 {/snippet}
@@ -497,6 +507,9 @@
     min-width: 0;
     flex: 1;
   }
+  .filter-summary.active {
+    color: var(--text-muted);
+  }
   .filter-window-btn {
     background: none;
     border: 1px solid var(--border);
@@ -517,6 +530,14 @@
   .filter-window-btn :global(svg) { width: 10px; height: 10px; }
   .filter-window-btn:hover { border-color: var(--border-hover); color: var(--text-dim); }
   .filter-window-btn.active { border-color: var(--accent); color: var(--text-muted); }
+  .filter-window-btn.has-filters { color: var(--accent); border-color: var(--accent); }
+  .filter-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
 
   /* Table layout */
   .table-wrap {
