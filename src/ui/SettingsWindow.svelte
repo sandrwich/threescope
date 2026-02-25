@@ -6,6 +6,7 @@
   import { uiStore } from '../stores/ui.svelte';
   import { ICON_SETTINGS } from './shared/icons';
   import { settingsStore } from '../stores/settings.svelte';
+  import { themeStore } from '../stores/theme.svelte';
   import { getPresetSettings } from '../graphics';
   import { getSimPresetSettings } from '../simulation';
 
@@ -223,6 +224,14 @@
   {#if showFpsWarning}
     <div class="warning">May reduce UI responsiveness</div>
   {/if}
+
+  <h4 class="section-header">Appearance</h4>
+  <div class="row">
+    <label>Theme</label>
+    <button class="reset-btn" onclick={() => uiStore.themeEditorOpen = !uiStore.themeEditorOpen}>
+      {themeStore.activeTheme.name}
+    </button>
+  </div>
 
   <h4 class="section-header">Layout</h4>
   <button class="reset-btn" onclick={resetWindowLayout}>Reset window positions</button>

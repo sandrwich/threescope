@@ -134,7 +134,7 @@
     transform: translateX(-50%);
     width: 10px;
     height: 2px;
-    background: var(--text-ghost);
+    background: var(--accent);
     border-radius: 1px;
   }
   .icon-btn:disabled { color: var(--text-ghost); cursor: default; opacity: 0.4; }
@@ -165,7 +165,7 @@
     transform: translateX(-50%);
     width: 10px;
     height: 2px;
-    background: var(--text-ghost);
+    background: var(--accent);
     border-radius: 1px;
   }
   .source-icon { display: flex; align-items: center; }

@@ -35,4 +35,6 @@ export const ICON_SUN = '<svg viewBox="0 0 16 16" fill="none" stroke="currentCol
 
 export const ICON_FILTER = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12l-4.5 5.5V13l-3-1.5V8.5z"/></svg>';
 
+export const ICON_THEME = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><circle cx="5" cy="5" r="3.5"/><circle cx="11" cy="5" r="3.5"/><circle cx="8" cy="10.5" r="3.5"/></svg>';
+
 export const ICON_CLOSE = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>';

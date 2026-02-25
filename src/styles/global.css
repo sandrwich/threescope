@@ -69,6 +69,13 @@
   --apsis-peri: #87ceeb;
   --apsis-apo: #ffa500;
 
+  /* ── Accent ── */
+  --accent: #66aaff;
+
+  /* ── Scene overlay text (always over dark 3D scene) ── */
+  --scene-text: rgba(255,255,255,0.75);
+  --scene-text-dim: rgba(255,255,255,0.45);
+
   /* ── Misc ── */
   --snap-guide: rgba(100,150,255,0.3);
 }

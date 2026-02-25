@@ -123,6 +123,9 @@ class UIStore {
   // Data sources window
   dataSourcesOpen = $state(false);
 
+  // Theme editor
+  themeEditorOpen = $state(false);
+
   // Earth-specific toggles visibility (hidden in orrery/planet mode)
   earthTogglesVisible = $state(true);
   nightToggleVisible = $state(true);

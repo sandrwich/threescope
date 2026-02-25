@@ -660,7 +660,7 @@
     cursor: pointer;
   }
   .pf-preset:hover { color: var(--text-dim); border-color: var(--border-hover); }
-  .pf-preset.active { color: var(--text-muted); border-color: var(--text-ghost); }
+  .pf-preset.active { color: var(--accent); border-color: var(--accent); }
 
   .pf-row-hz { align-items: flex-start; }
   .pf-horizon {

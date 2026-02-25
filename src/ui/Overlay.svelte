@@ -17,6 +17,7 @@
   import DataSourcesWindow from './DataSourcesWindow.svelte';
   import ObserverWindow from './ObserverWindow.svelte';
   import PassFilterWindow from './PassFilterWindow.svelte';
+  import ThemeEditorWindow from './ThemeEditorWindow.svelte';
 </script>
 
 <div id="ui-overlay">
@@ -38,6 +39,7 @@
   <DopplerWindow />
   <CommandPalette />
   <PassFilterWindow />
+  <ThemeEditorWindow />
 </div>
 
 <style>

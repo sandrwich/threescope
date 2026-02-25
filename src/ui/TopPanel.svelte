@@ -30,7 +30,7 @@
   }
   .hud-line {
     font-size: 13px;
-    color: var(--text-muted);
+    color: var(--scene-text);
     white-space: nowrap;
   }
   .hud-line.alert { color: var(--danger-bright); }

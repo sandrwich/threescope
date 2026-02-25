@@ -378,7 +378,7 @@
   }
   .tab-btn:hover { opacity: 0.8; }
   .tab-btn.active {
-    color: var(--text-muted);
+    color: var(--accent);
     opacity: 1;
   }
 
@@ -423,7 +423,7 @@
   .stats-progress-fill {
     display: block;
     height: 100%;
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--accent);
     transition: width 0.4s ease-out;
   }
   .filter-info {
@@ -516,7 +516,7 @@
   }
   .filter-window-btn :global(svg) { width: 10px; height: 10px; }
   .filter-window-btn:hover { border-color: var(--border-hover); color: var(--text-dim); }
-  .filter-window-btn.active { border-color: var(--text-ghost); color: var(--text-muted); }
+  .filter-window-btn.active { border-color: var(--accent); color: var(--text-muted); }
 
   /* Table layout */
   .table-wrap {

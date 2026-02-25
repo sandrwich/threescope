@@ -52,17 +52,17 @@
     font-weight: bold;
   }
   .sep {
-    color: var(--text-ghost);
+    color: var(--scene-text-dim);
     font-size: 13px;
   }
   .sats {
-    color: var(--text-muted);
+    color: var(--scene-text);
     font-size: 12px;
   }
   .refresh-btn {
     background: none;
     border: none;
-    color: var(--text-dim);
+    color: var(--scene-text);
     cursor: pointer;
     font-size: 14px;
     padding: 0 2px;
@@ -72,7 +72,7 @@
     color: var(--text);
   }
   .coords {
-    color: var(--text-muted);
+    color: var(--scene-text);
     font-size: 12px;
     margin-top: 1px;
     opacity: 0;

@@ -41,11 +41,11 @@
     position: relative;
     flex-shrink: 0;
   }
-  .cb:hover { border-color: var(--cb-color, var(--text-dim)); }
+  .cb:hover { border-color: var(--cb-color, var(--accent)); }
   .cb:checked::after {
     content: '';
     position: absolute;
-    background: var(--cb-color, var(--text-dim));
+    background: var(--cb-color, var(--accent));
   }
   .cb:disabled { opacity: 0.4; cursor: default; }
 
@@ -64,6 +64,6 @@
     left: 1px; right: 1px;
     top: 50%; transform: translateY(-50%);
     height: 2px;
-    background: var(--cb-color, var(--text-dim));
+    background: var(--cb-color, var(--accent));
   }
 </style>

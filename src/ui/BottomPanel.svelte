@@ -17,12 +17,12 @@
     left: 10px;
     font-size: 11px;
     line-height: 1.4;
-    color: var(--attrib);
+    color: var(--scene-text-dim);
   }
   .bottom-panel :global(a) {
-    color: var(--link);
+    color: var(--scene-text-dim);
     text-decoration: none;
     pointer-events: auto;
   }
-  .bottom-panel :global(a:hover) { color: var(--link-hover); }
+  .bottom-panel :global(a:hover) { color: var(--scene-text); }
 </style>

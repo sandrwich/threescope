@@ -29,6 +29,7 @@ import { timeStore } from './stores/time.svelte';
 import { uiStore } from './stores/ui.svelte';
 import { settingsStore } from './stores/settings.svelte';
 import { observerStore } from './stores/observer.svelte';
+import { themeStore } from './stores/theme.svelte';
 import { UIUpdater } from './ui/ui-updater';
 import { GeoOverlay } from './scene/geo-overlay';
 import { PassPredictor } from './passes/pass-predictor';
@@ -449,6 +450,11 @@ export class App {
     const earthDrawR = EARTH_RADIUS_KM / DRAW_SCALE;
 
     // --- Load persisted settings from localStorage ---
+    themeStore.load();
+    themeStore.onThemeChange = () => {
+      if (!uiStore.showSkybox) this.scene3d.background = new THREE.Color(palette.bg);
+      this.scene2d.background = new THREE.Color(palette.bg);
+    };
     settingsStore.load();
     uiStore.loadToggles();
     uiStore.loadPassFilters();
