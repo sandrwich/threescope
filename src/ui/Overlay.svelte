@@ -18,6 +18,7 @@
   import ObserverWindow from './ObserverWindow.svelte';
   import PassFilterWindow from './PassFilterWindow.svelte';
   import ThemeEditorWindow from './ThemeEditorWindow.svelte';
+  import SatDatabaseWindow from './SatDatabaseWindow.svelte';
 </script>
 
 <div id="ui-overlay">
@@ -40,6 +41,7 @@
   <CommandPalette />
   <PassFilterWindow />
   <ThemeEditorWindow />
+  <SatDatabaseWindow />
 </div>
 
 <style>

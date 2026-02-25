@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { sourcesStore } from '../stores/sources.svelte';
-  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_OBSERVER, ICON_HELP, ICON_2D, ICON_3D, ICON_PASSES, ICON_DATA_SOURCES } from './shared/icons';
+  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_OBSERVER, ICON_HELP, ICON_2D, ICON_3D, ICON_PASSES, ICON_DATA_SOURCES, ICON_DATABASE } from './shared/icons';
   import { ViewMode } from '../types';
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -56,6 +56,9 @@
 
     <!-- Windows group -->
     <div class="btn-group">
+      <button class="icon-btn" class:active={uiStore.satDatabaseOpen} title="SatNOGS Database" onclick={() => uiStore.satDatabaseOpen = !uiStore.satDatabaseOpen}>
+        {@html ICON_DATABASE}
+      </button>
       <button class="icon-btn" class:active={uiStore.selectionWindowOpen} title="Selection" onclick={() => uiStore.selectionWindowOpen = !uiStore.selectionWindowOpen}>
         {@html ICON_SELECTION}
       </button>

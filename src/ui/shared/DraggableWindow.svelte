@@ -67,6 +67,7 @@
     headerExtra = undefined as any,
     footer = undefined as any,
     open = $bindable(true),
+    focus = 0,
     initialX = 10,
     initialY = 50,
     children,
@@ -77,6 +78,7 @@
     headerExtra?: any;
     footer?: any;
     open?: boolean;
+    focus?: number;
     initialX?: number;
     initialY?: number;
     children: any;
@@ -229,6 +231,15 @@
   $effect(() => {
     if (open) zIndex = ++topZ;
     if (winKey) localStorage.setItem(sKey('open'), String(open));
+  });
+
+  // External bring-to-front trigger — track focus value change
+  let prevFocus = focus;
+  $effect(() => {
+    if (focus !== prevFocus) {
+      prevFocus = focus;
+      zIndex = ++topZ;
+    }
   });
 
   $effect(() => {

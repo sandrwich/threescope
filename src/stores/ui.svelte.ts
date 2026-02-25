@@ -39,6 +39,9 @@ class UIStore {
 
   // Selection window
   selectionWindowOpen = $state(true);
+  selectionWindowFocus = $state(0);
+  lastAddedSatNoradId = $state<number | null>(null);
+  singleSelectMode = $state(false);
   selectedSatData = $state<SelectedSatInfo[]>([]);
   hiddenSelectedSats = $state(new Set<number>());
 
@@ -65,6 +68,7 @@ class UIStore {
   }
   polarPlotOpen = $state(false);
   dopplerWindowOpen = $state(false);
+  dopplerWindowFocus = $state(0);
   passes = $state<SatellitePass[]>([]);
   passesComputing = $state(false);
   passesProgress = $state(0);
@@ -94,6 +98,8 @@ class UIStore {
   passHiddenSats = $state(new Set<number>());
   // Horizon mask: min elevation at 8 azimuths (N/NE/E/SE/S/SW/W/NW)
   passHorizonMask = $state<{ az: number; minEl: number }[]>([]);
+  passFreqMinMHz = $state(0);   // 0 = no filter
+  passFreqMaxMHz = $state(0);   // 0 = no filter
   passFilterWindowOpen = $state(false);
   passFilterInteracting = $state(false); // true while pointer held on filter controls
 
@@ -125,6 +131,13 @@ class UIStore {
 
   // Theme editor
   themeEditorOpen = $state(false);
+
+  // SatNOGS database window
+  satDatabaseOpen = $state(false);
+  satDatabaseNoradId = $state<number | null>(null);
+
+  // Doppler frequency prefill (set by SatDatabaseWindow, consumed by DopplerWindow)
+  dopplerPrefillHz = $state(0);
 
   // Earth-specific toggles visibility (hidden in orrery/planet mode)
   earthTogglesVisible = $state(true);
@@ -161,6 +174,19 @@ class UIStore {
     this.showSkybox = load('threescope_skybox', true);
     this.showCountries = load('threescope_countries', false);
     this.showGrid = load('threescope_grid', false);
+    this.singleSelectMode = load('threescope_single_select', false);
+    const savedTab = localStorage.getItem('threescope_passes_tab');
+    if (savedTab === 'selected' || savedTab === 'nearby') this.passesTab = savedTab;
+  }
+
+  setSingleSelectMode(value: boolean) {
+    this.singleSelectMode = value;
+    localStorage.setItem('threescope_single_select', String(value));
+  }
+
+  setPassesTab(tab: 'selected' | 'nearby') {
+    this.passesTab = tab;
+    localStorage.setItem('threescope_passes_tab', tab);
   }
 
   /** Initialize marker group visibility from config defaults + localStorage */
@@ -191,6 +217,8 @@ class UIStore {
     this.passMinDuration = num('threescope_pass_min_dur', 0);
     const vis = localStorage.getItem('threescope_pass_visibility');
     if (vis === 'observable' || vis === 'visible') this.passVisibility = vis;
+    this.passFreqMinMHz = num('threescope_pass_freq_min_mhz', 0);
+    this.passFreqMaxMHz = num('threescope_pass_freq_max_mhz', 0);
     const mask = localStorage.getItem('threescope_pass_horizon_mask');
     if (mask) {
       try { this.passHorizonMask = JSON.parse(mask); } catch { /* use default */ }
@@ -238,6 +266,15 @@ class UIStore {
     this.onFiltersChanged?.();
   }
 
+  setPassFreqRange(minMHz: number, maxMHz: number) {
+    if (minMHz === this.passFreqMinMHz && maxMHz === this.passFreqMaxMHz) return;
+    this.passFreqMinMHz = minMHz;
+    this.passFreqMaxMHz = maxMHz;
+    this.savePassFilter('freq_min_mhz', minMHz);
+    this.savePassFilter('freq_max_mhz', maxMHz);
+    this.onFiltersChanged?.();
+  }
+
   setPassHorizonMask(mask: { az: number; minEl: number }[]) {
     const same = mask.length === this.passHorizonMask.length &&
       mask.every((m, i) => m.az === this.passHorizonMask[i].az && m.minEl === this.passHorizonMask[i].minEl);
@@ -251,7 +288,8 @@ class UIStore {
     return this.passMinEl > 0 || this.passMaxEl < 90 ||
       this.passAzFrom !== 0 || this.passAzTo !== 360 ||
       this.passVisibility !== 'all' || this.passMinDuration > 0 ||
-      this.passHiddenSats.size > 0 || this.passHorizonMask.length > 0;
+      this.passHiddenSats.size > 0 || this.passHorizonMask.length > 0 ||
+      this.passFreqMinMHz > 0 || this.passFreqMaxMHz > 0;
   }
 
   resetPassFilters() {
@@ -261,7 +299,8 @@ class UIStore {
     this.passMinDuration = 0;
     this.passHiddenSats = new Set();
     this.passHorizonMask = [];
-    for (const k of ['min_el', 'max_el', 'az_from', 'az_to', 'visibility', 'min_dur', 'horizon_mask']) {
+    this.passFreqMinMHz = 0; this.passFreqMaxMHz = 0;
+    for (const k of ['min_el', 'max_el', 'az_from', 'az_to', 'visibility', 'min_dur', 'horizon_mask', 'freq_min_mhz', 'freq_max_mhz']) {
       localStorage.removeItem(`threescope_pass_${k}`);
     }
     this.onFiltersChanged?.();

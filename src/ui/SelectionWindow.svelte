@@ -2,11 +2,22 @@
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import Checkbox from './shared/Checkbox.svelte';
   import { uiStore } from '../stores/ui.svelte';
-  import { ICON_SELECTION, ICON_PASSES } from './shared/icons';
+  import { sourcesStore } from '../stores/sources.svelte';
+  import { ICON_SELECTION, ICON_PASSES, ICON_DATABASE } from './shared/icons';
+  import { hasSatnogsData } from '../data/satnogs';
 
   let expandedSats = $state(new Set<number>());
   let searchQuery = $state('');
   let searchFocused = $state(false);
+
+  // When a new sat is added, collapse all and expand the new one
+  $effect(() => {
+    const id = uiStore.lastAddedSatNoradId;
+    if (id !== null) {
+      expandedSats = new Set([id]);
+      uiStore.lastAddedSatNoradId = null;
+    }
+  });
   let searchResults = $derived.by(() => {
     if (!searchFocused) return [] as { noradId: number; name: string }[];
     const all = uiStore.getSatelliteList?.() ?? [];
@@ -99,7 +110,15 @@
 </script>
 
 {#snippet selIcon()}<span class="title-icon">{@html ICON_SELECTION}</span>{/snippet}
-<DraggableWindow id="selection" title="Selection" icon={selIcon} bind:open={uiStore.selectionWindowOpen} initialX={9999} initialY={200}>
+{#snippet headerExtra()}
+  <div class="sel-mode-bar">
+    <button class="sel-mode-btn" class:active={!uiStore.singleSelectMode}
+      onclick={() => uiStore.setSingleSelectMode(false)}>Multi</button>
+    <button class="sel-mode-btn" class:active={uiStore.singleSelectMode}
+      onclick={() => uiStore.setSingleSelectMode(true)}>Single</button>
+  </div>
+{/snippet}
+<DraggableWindow id="selection" title="Selection" icon={selIcon} {headerExtra} bind:open={uiStore.selectionWindowOpen} focus={uiStore.selectionWindowFocus} initialX={9999} initialY={200}>
   <div class="sw">
     <div class="search-box">
       <input
@@ -133,7 +152,7 @@
       {/if}
     </div>
     {#if uiStore.selectedSatData.length === 0}
-      {#if (uiStore.getSatelliteList?.() ?? []).length === 0}
+      {#if (uiStore.getSatelliteList?.() ?? []).length === 0 && !sourcesStore.loading && sourcesStore.enabledIds.size === 0}
         <div class="empty empty-warn">No sources loaded</div>
       {:else}
         <div class="empty">Click a satellite to select</div>
@@ -181,6 +200,12 @@
                     <span class="dl">Magnitude</span><span class="dv">{sat.magStr}</span>
                   {/if}
                 </div>
+                {#if hasSatnogsData(sat.noradId)}
+                  <button class="satnogs-btn" onclick={() => {
+                    uiStore.satDatabaseNoradId = sat.noradId;
+                    uiStore.satDatabaseOpen = true;
+                  }} title="View SatNOGS database entry">{@html ICON_DATABASE} SatNOGS</button>
+                {/if}
               </div>
             {/if}
           </div>
@@ -191,6 +216,28 @@
 </DraggableWindow>
 
 <style>
+  .sel-mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    margin-left: auto;
+    margin-right: 8px;
+  }
+  .sel-mode-btn {
+    background: none;
+    border: none;
+    color: var(--text-ghost);
+    font-size: 10px;
+    font-family: inherit;
+    padding: 1px 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    opacity: 0.5;
+  }
+  .sel-mode-btn:hover { opacity: 0.8; }
+  .sel-mode-btn.active { color: var(--accent); opacity: 1; }
+
   .sw {
     min-width: 220px;
     max-width: 320px;
@@ -378,4 +425,21 @@
   .dv {
     color: var(--text-dim);
   }
+  .satnogs-btn {
+    margin-top: 4px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-ghost);
+    font-size: 10px;
+    font-family: inherit;
+    padding: 1px 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .satnogs-btn:hover { color: var(--text-dim); border-color: var(--border-hover); }
+  .satnogs-btn :global(svg) { width: 10px; height: 10px; }
 </style>

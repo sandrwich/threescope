@@ -38,3 +38,5 @@ export const ICON_FILTER = '<svg viewBox="0 0 16 16" fill="none" stroke="current
 export const ICON_THEME = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><circle cx="5" cy="5" r="3.5"/><circle cx="11" cy="5" r="3.5"/><circle cx="8" cy="10.5" r="3.5"/></svg>';
 
 export const ICON_CLOSE = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>';
+
+export const ICON_DATABASE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="4" rx="6" ry="2.5"/><path d="M2 4v8c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V4"/><path d="M2 8c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5"/></svg>';

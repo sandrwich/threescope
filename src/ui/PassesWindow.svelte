@@ -4,6 +4,7 @@
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { ICON_PASSES, ICON_DOPPLER, ICON_ECLIPSE, ICON_SUN, ICON_FILTER } from './shared/icons';
+  import { formatMHz, formatMHzRange } from '../format';
   import { SAT_COLORS } from '../constants';
   import { epochToDate } from '../astro/epoch';
   import type { SatellitePass } from '../passes/pass-types';
@@ -117,6 +118,7 @@
     autoSelect(pass);
     uiStore.selectedPassIdx = idx;
     uiStore.dopplerWindowOpen = true;
+    uiStore.dopplerWindowFocus++;
   }
 
   function openObserver() {
@@ -128,8 +130,15 @@
     return `rgb(${c[0]},${c[1]},${c[2]})`;
   }
 
+  // When restored from localStorage on nearby tab, trigger computation
+  $effect(() => {
+    if (uiStore.passesWindowOpen && uiStore.passesTab === 'nearby' && uiStore.nearbyPhase === 'idle') {
+      uiStore.onRequestNearbyPasses?.();
+    }
+  });
+
   function switchTab(tab: 'selected' | 'nearby') {
-    uiStore.passesTab = tab;
+    uiStore.setPassesTab(tab);
     uiStore.selectedPassIdx = -1;
     tableScrollTop = 0;
     if (tab === 'nearby' && uiStore.nearbyPhase === 'idle') {
@@ -170,6 +179,15 @@
     }
     if (uiStore.passMinDuration > 0) parts.push(`≥${uiStore.passMinDuration}s`);
     if (uiStore.passHiddenSats.size > 0) parts.push(`${uiStore.passHiddenSats.size} hidden`);
+    if (uiStore.passFreqMinMHz > 0 || uiStore.passFreqMaxMHz > 0) {
+      const min = uiStore.passFreqMinMHz || 0;
+      const max = uiStore.passFreqMaxMHz || 0;
+      if (min && max) {
+        parts.push(formatMHzRange(min, max));
+      } else {
+        parts.push(min ? `≥${formatMHz(min)}` : `≤${formatMHz(max)}`);
+      }
+    }
     return parts.join(' · ');
   });
 

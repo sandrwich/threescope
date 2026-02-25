@@ -8,6 +8,8 @@
   import { epochToDatetimeStr, epochToDate } from '../astro/epoch';
   import { SAT_COLORS } from '../constants';
   import { palette } from './shared/theme';
+  import { getTransmitters, type SatnogsTransmitter } from '../data/satnogs';
+  import { formatFreqHz } from '../format';
 
   const CANVAS_W = 380;
   const CANVAS_H = 200;
@@ -16,8 +18,27 @@
   const G_RIGHT = 12;
   const G_BOTTOM = 24;
 
+  function freqToMhzStr(hz: number): string {
+    const mhz = hz / 1e6;
+    return mhz % 1 === 0 ? String(mhz) : mhz.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
   let baseFreqMhzStr = $state('137.625');
   let baseFreqHz = $derived(parseFloat(baseFreqMhzStr) * 1e6);
+  let txList = $state<SatnogsTransmitter[]>([]);
+  let selectedTxIdx = $state<number | null>(null); // null = custom
+
+  function onTxSelect(e: Event) {
+    const val = (e.target as HTMLSelectElement).value;
+    if (val === 'custom') {
+      selectedTxIdx = null;
+    } else {
+      const idx = Number(val);
+      selectedTxIdx = idx;
+      baseFreqMhzStr = freqToMhzStr(txList[idx].frequencyHz);
+      cacheKey = '';
+    }
+  }
 
   // Export popover
   let exportOpen = $state(false);
@@ -107,7 +128,8 @@
       ctx.font = `12px ${font}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('Unable to compute Doppler curve', CANVAS_W / 2, CANVAS_H / 2);
+      const msg = (!baseFreqHz || baseFreqHz <= 0) ? 'Enter a base frequency' : 'Unable to compute Doppler curve';
+      ctx.fillText(msg, CANVAS_W / 2, CANVAS_H / 2);
       ctx.restore();
       if (uiStore.dopplerWindowOpen) animFrameId = requestAnimationFrame(drawFrame);
       return;
@@ -285,18 +307,19 @@
 
     ctx.restore();
 
-    // Pass info in top-left
+    // Pass info — top-left: name, top-right: date + delta-f
     ctx.font = `10px ${font}`;
-    ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
     ctx.fillStyle = satColor;
     ctx.beginPath();
-    ctx.arc(gx + 4, 15, 3.5, 0, 2 * Math.PI);
+    ctx.arc(gx + 4, 8, 3.5, 0, 2 * Math.PI);
     ctx.fill();
     ctx.fillStyle = palette.textMuted;
-    ctx.fillText(pass.satName, gx + 12, 10);
+    ctx.fillText(pass.satName, gx + 12, 3);
     ctx.fillStyle = palette.textGhost;
-    ctx.fillText(epochToDatetimeStr(pass.aosEpoch), gx + 12 + ctx.measureText(pass.satName + '  ').width, 10);
+    ctx.font = `9px ${font}`;
+    ctx.fillText(epochToDatetimeStr(pass.aosEpoch), gx + 12, 14);
 
     // Max shift info in top-right
     if (cachedData.length > 0) {
@@ -305,8 +328,9 @@
         Math.abs(cachedData[cachedData.length - 1].freq - baseFreqHz)
       );
       ctx.fillStyle = palette.textGhost;
+      ctx.font = `9px ${font}`;
       ctx.textAlign = 'right';
-      ctx.fillText(`\u0394f max \u2248 ${formatFreq(maxShift)}`, gx + gw, 10);
+      ctx.fillText(`\u0394f max \u2248 ${formatFreq(maxShift)}`, gx + gw, 14);
     }
 
     ctx.restore();
@@ -476,6 +500,50 @@
     cacheKey = '';
   });
 
+  // Reset prefill + cache when window opens/focuses so pass is always re-evaluated
+  $effect(() => {
+    void uiStore.dopplerWindowFocus;
+    if (uiStore.dopplerWindowOpen) {
+      prevPrefillKey = '';
+      cacheKey = '';
+    }
+  });
+
+  // Auto-prefill frequency from bundled SatNOGS data when pass changes
+  let prevPrefillKey = '';
+  $effect(() => {
+    const pass = selectedPass;
+    if (!pass) return;
+    const key = `${pass.satNoradId}:${pass.aosEpoch}`;
+    if (key === prevPrefillKey) return;
+    prevPrefillKey = key;
+
+    const transmitters = getTransmitters(pass.satNoradId);
+    txList = transmitters;
+    if (transmitters.length) {
+      selectedTxIdx = 0;
+      baseFreqMhzStr = freqToMhzStr(transmitters[0].frequencyHz);
+      cacheKey = '';
+    } else {
+      selectedTxIdx = null;
+      baseFreqMhzStr = '';
+      cacheKey = '';
+    }
+  });
+
+  // Manual prefill from SatDatabaseWindow "Use" button
+  $effect(() => {
+    if (uiStore.dopplerPrefillHz > 0) {
+      const hz = uiStore.dopplerPrefillHz;
+      baseFreqMhzStr = freqToMhzStr(hz);
+      // Try to match to a transmitter in the current list
+      const matchIdx = txList.findIndex(tx => tx.frequencyHz === hz);
+      selectedTxIdx = matchIdx >= 0 ? matchIdx : null;
+      cacheKey = '';
+      uiStore.dopplerPrefillHz = 0;
+    }
+  });
+
   $effect(() => {
     if (canvasEl) {
       initCanvas();
@@ -486,14 +554,24 @@
 </script>
 
 {#snippet dopplerIcon()}<span class="title-icon">{@html ICON_DOPPLER}</span>{/snippet}
-<DraggableWindow id="doppler" title="Doppler Shift" icon={dopplerIcon} bind:open={uiStore.dopplerWindowOpen} initialX={200} initialY={150}>
+<DraggableWindow id="doppler" title="Doppler Shift" icon={dopplerIcon} bind:open={uiStore.dopplerWindowOpen} focus={uiStore.dopplerWindowFocus} initialX={200} initialY={150}>
   <div class="dw">
     <div class="controls">
-      <label>
+      <div class="freq-row">
         <span class="lbl">Freq</span>
-        <input type="text" bind:value={baseFreqMhzStr} class="inp freq" />
+        {#if txList.length > 0}
+          <select class="tx-select" value={selectedTxIdx ?? 'custom'} onchange={onTxSelect}>
+            {#each txList as tx, i}
+              <option value={i}>{formatFreqHz(tx.frequencyHz)} — {tx.description}{tx.mode ? ` (${tx.mode})` : ''}</option>
+            {/each}
+            <option value="custom">Custom</option>
+          </select>
+        {/if}
+        {#if selectedTxIdx === null}
+          <input type="text" bind:value={baseFreqMhzStr} class="inp freq" />
+        {/if}
         <span class="unit">MHz</span>
-      </label>
+      </div>
       <div class="export-wrap">
         <button class="export-btn" onclick={() => exportOpen = !exportOpen}>Export CSV</button>
         {#if exportOpen}
@@ -554,6 +632,22 @@
     font-family: inherit;
     padding: 3px 6px;
   }
+  .freq-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .tx-select {
+    background: var(--ui-bg);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-family: inherit;
+    padding: 3px 4px;
+    max-width: 160px;
+    text-overflow: ellipsis;
+  }
+  .tx-select:focus { border-color: var(--border-hover); outline: none; }
   .inp.freq { width: 72px; }
   .inp.res { width: 40px; }
   .export-wrap {

@@ -447,14 +447,52 @@
     syncToStore();
   }
 
+  // ─── Frequency filter ──────────────────────────────────────
+  const FREQ_PRESETS: { label: string; min: number; max: number }[] = [
+    { label: 'VHF', min: 30, max: 300 },
+    { label: '2m', min: 144, max: 146 },
+    { label: 'UHF', min: 300, max: 1000 },
+    { label: '70cm', min: 430, max: 440 },
+    { label: 'L', min: 1000, max: 2000 },
+    { label: '23cm', min: 1240, max: 1300 },
+    { label: 'S', min: 2000, max: 4000 },
+    { label: 'X', min: 8000, max: 12000 },
+  ];
+
+  let freqMin = $state(uiStore.passFreqMinMHz);
+  let freqMax = $state(uiStore.passFreqMaxMHz);
+
+  function syncFreqToStore() {
+    uiStore.setPassFreqRange(freqMin, freqMax);
+  }
+
+  function applyFreqPreset(p: { min: number; max: number }) {
+    if (freqMin === p.min && freqMax === p.max) {
+      freqMin = 0; freqMax = 0;
+    } else {
+      freqMin = p.min; freqMax = p.max;
+    }
+    syncFreqToStore();
+  }
+
+  // Sync freq from store when window opens
+  $effect(() => {
+    if (uiStore.passFilterWindowOpen) {
+      freqMin = uiStore.passFreqMinMHz;
+      freqMax = uiStore.passFreqMaxMHz;
+    }
+  });
+
   function reset() {
     azFrom = 0; azTo = 360;
     minEl = 0; maxEl = 90;
     horizonMask = [0, 0, 0, 0, 0, 0, 0, 0];
+    freqMin = 0; freqMax = 0;
     uiStore.setPassVisibility('all');
     uiStore.setPassMinDuration(0);
     uiStore.passHiddenSats = new Set();
     syncToStore();
+    syncFreqToStore();
   }
 
   function initCanvas() {
@@ -574,6 +612,21 @@
           {/each}
         </div>
       </div>
+
+      <div class="pf-row pf-row-freq">
+        <span class="pf-label">Frequency</span>
+        <input class="pf-num pf-num-freq" type="number" min="0" max="50000" bind:value={freqMin}
+          onchange={syncFreqToStore} placeholder="Min" />
+        <span class="pf-sep">&mdash;</span>
+        <input class="pf-num pf-num-freq" type="number" min="0" max="50000" bind:value={freqMax}
+          onchange={syncFreqToStore} placeholder="Max" />
+        <span class="pf-unit">MHz</span>
+        <div class="pf-presets">
+          {#each FREQ_PRESETS as p}
+            <button class="pf-preset" class:active={freqMin === p.min && freqMax === p.max} onclick={() => applyFreqPreset(p)}>{p.label}</button>
+          {/each}
+        </div>
+      </div>
     </div>
   </div>
 </DraggableWindow>
@@ -682,6 +735,16 @@
   .pf-num-hz {
     width: 46px;
     font-size: 10px;
+  }
+
+  /* Frequency filter */
+  .pf-row-freq {
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .pf-num-freq {
+    width: 64px;
   }
 
   .pf-reset {

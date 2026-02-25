@@ -24,6 +24,7 @@ import { OrreryController } from './scene/orrery-controller';
 import { getMapCoordinates, latLonToSurface } from './astro/coordinates';
 import { calculateSunPosition } from './astro/sun';
 import { fetchTLEData, parseTLEText } from './data/tle-loader';
+import { getSatellitesByFreqRange } from './data/satnogs';
 import { sourcesStore, type TLESourceConfig } from './stores/sources.svelte';
 import { timeStore } from './stores/time.svelte';
 import { uiStore } from './stores/ui.svelte';
@@ -79,6 +80,41 @@ export class App {
   private hoveredSat: Satellite | null = null;
   private selectedSats = new Set<Satellite>();
   private selectedSatsVersion = 0;
+
+  // ── Selection helpers (centralized mutation) ──
+
+  /** Add a satellite to selection, respecting single-select mode. */
+  private selectSat(sat: Satellite) {
+    if (uiStore.singleSelectMode) this.selectedSats.clear();
+    this.selectedSats.add(sat);
+    this.selectedSatsVersion++;
+    uiStore.lastAddedSatNoradId = sat.noradId;
+  }
+
+  /** Toggle a satellite's selection state. */
+  private toggleSat(sat: Satellite) {
+    if (this.selectedSats.has(sat)) this.deselectSat(sat);
+    else this.selectSat(sat);
+  }
+
+  /** Remove a satellite from selection. */
+  private deselectSat(sat: Satellite) {
+    if (!this.selectedSats.has(sat)) return;
+    this.selectedSats.delete(sat);
+    this.selectedSatsVersion++;
+    if (uiStore.hiddenSelectedSats.has(sat.noradId)) {
+      const next = new Set(uiStore.hiddenSelectedSats);
+      next.delete(sat.noradId);
+      uiStore.hiddenSelectedSats = next;
+    }
+  }
+
+  /** Clear entire selection. */
+  private clearSelection() {
+    this.selectedSats.clear();
+    this.selectedSatsVersion++;
+    uiStore.hiddenSelectedSats = new Set();
+  }
   private activeLock = TargetLock.EARTH;
   private viewMode = ViewMode.VIEW_3D;
   private hideUnselected = false;
@@ -167,7 +203,7 @@ export class App {
     // Orrery controller (after scene + camera + textures are ready)
     this.orreryCtrl = new OrreryController(this.scene3d, this.camera3d, this.camera, {
       setEarthVisible: (v) => this.setEarthVisible(v),
-      clearSatSelection: () => { this.selectedSats.clear(); this.selectedSatsVersion++; this.hoveredSat = null; },
+      clearSatSelection: () => { this.clearSelection(); this.hoveredSat = null; },
       setViewMode3D: () => { this.viewMode = ViewMode.VIEW_3D; uiStore.viewMode = ViewMode.VIEW_3D; },
       setActiveLock: (lock) => { this.activeLock = lock; },
       onMoonClicked: () => {
@@ -316,7 +352,7 @@ export class App {
 
     if (enabled.length === 0) {
       this.satellites = [];
-      this.selectedSats.clear(); this.selectedSatsVersion++;
+      this.clearSelection();
       this.hoveredSat = null;
       this.orbitRenderer.precomputeOrbits([], this.timeSystem.currentEpoch);
       sourcesStore.totalSats = 0;
@@ -355,7 +391,7 @@ export class App {
         const text = await resp.text();
         satellites = parseTLEText(text);
         try {
-          localStorage.setItem('tlescope_tle_custom_' + src.id, JSON.stringify({ ts: Date.now(), data: text }));
+          localStorage.setItem('tlescope_tle_custom_' + src.id, JSON.stringify({ ts: Date.now(), data: text, count: satellites.length }));
         } catch { /* localStorage full */ }
         sourcesStore.setLoadState(src.id, { satCount: satellites.length, status: 'loaded' });
       } else {
@@ -568,22 +604,13 @@ export class App {
 
     // Command palette: deselect all satellites
     uiStore.onDeselectAll = () => {
-      this.selectedSats.clear(); this.selectedSatsVersion++;
-      uiStore.hiddenSelectedSats = new Set();
+      this.clearSelection();
     };
 
     // Command palette: deselect satellite by NORAD ID
     uiStore.onDeselectSatellite = (noradId: number) => {
       const sat = this.satByNorad.get(noradId);
-      if (sat && this.selectedSats.has(sat)) {
-        this.selectedSats.delete(sat);
-        this.selectedSatsVersion++;
-        if (uiStore.hiddenSelectedSats.has(noradId)) {
-          const next = new Set(uiStore.hiddenSelectedSats);
-          next.delete(noradId);
-          uiStore.hiddenSelectedSats = next;
-        }
-      }
+      if (sat) this.deselectSat(sat);
     };
 
     // Command palette: toggle 2D/3D
@@ -606,10 +633,7 @@ export class App {
     // Command palette: select satellite by NORAD ID (adds to selection)
     uiStore.onSelectSatellite = (noradId: number) => {
       const sat = this.satByNorad.get(noradId);
-      if (sat) {
-        this.selectedSats.add(sat);
-        this.selectedSatsVersion++;
-      }
+      if (sat) this.selectSat(sat);
     };
 
     // Doppler: get TLE lines by NORAD ID
@@ -683,13 +707,7 @@ export class App {
         filterDebounce = setTimeout(fireFilterRecompute, 500);
       }
     };
-    uiStore.onSelectSatFromNearbyPass = (noradId: number) => {
-      const sat = this.satByNorad.get(noradId);
-      if (sat && !this.selectedSats.has(sat)) {
-        this.selectedSats.add(sat);
-        this.selectedSatsVersion++;
-      }
-    };
+    uiStore.onSelectSatFromNearbyPass = uiStore.onSelectSatellite;
 
     observerStore.onLocationChange = () => {
       if (uiStore.passesWindowOpen && uiStore.passesTab === 'selected') this.requestPasses();
@@ -762,11 +780,18 @@ export class App {
       return;
     }
     this.passStartTime = performance.now();
-    const sats: { noradId: number; name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[] = [];
+    let sats: { noradId: number; name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[] = [];
     let idx = 0;
     for (const sat of this.selectedSats) {
       sats.push({ noradId: sat.noradId, name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag });
       idx++;
+    }
+    if (uiStore.passFreqMinMHz > 0 || uiStore.passFreqMaxMHz > 0) {
+      const freqSet = getSatellitesByFreqRange(
+        (uiStore.passFreqMinMHz || 0) * 1e6,
+        (uiStore.passFreqMaxMHz || 50000) * 1e6,
+      );
+      sats = sats.filter(s => freqSet.has(s.noradId));
     }
     uiStore.passesComputing = true;
     uiStore.passesProgress = 0;
@@ -814,9 +839,17 @@ export class App {
       return;
     }
 
-    const sats = filtered.map((sat, idx) => ({
+    let sats = filtered.map((sat, idx) => ({
       noradId: sat.noradId, name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag,
     }));
+
+    if (uiStore.passFreqMinMHz > 0 || uiStore.passFreqMaxMHz > 0) {
+      const freqSet = getSatellitesByFreqRange(
+        (uiStore.passFreqMinMHz || 0) * 1e6,
+        (uiStore.passFreqMaxMHz || 50000) * 1e6,
+      );
+      sats = sats.filter(s => freqSet.has(s.noradId));
+    }
 
     // Keep old results visible until new ones arrive
     uiStore.nearbyComputing = true;
@@ -894,14 +927,7 @@ export class App {
 
   /** Handle click/tap satellite selection */
   private handleClick() {
-    if (this.hoveredSat) {
-      if (this.selectedSats.has(this.hoveredSat)) {
-        this.selectedSats.delete(this.hoveredSat);
-      } else {
-        this.selectedSats.add(this.hoveredSat);
-      }
-      this.selectedSatsVersion++;
-    }
+    if (this.hoveredSat) this.toggleSat(this.hoveredSat);
   }
 
   private fpsLimit = -1; // -1 = vsync (rAF), 0 = unlocked, >0 = FPS cap

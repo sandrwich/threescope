@@ -70,8 +70,9 @@ export async function fetchTLEData(
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const text = await resp.text();
     clearRateLimit();
-    saveToCache(group, text);
-    return { satellites: parseTLEText(text), source: 'network' };
+    const satellites = parseTLEText(text);
+    saveToCache(group, text, satellites.length);
+    return { satellites, source: 'network' };
   } catch (e) {
     // On failure, try stale cache (ignore age)
     const stale = loadFromCache(group, true);
@@ -112,12 +113,59 @@ export function getCacheAge(group: string): number | null {
   }
 }
 
-function saveToCache(group: string, data: string) {
+function saveToCache(group: string, data: string, count?: number) {
   try {
-    localStorage.setItem(CACHE_KEY_PREFIX + group, JSON.stringify({ ts: Date.now(), data }));
+    localStorage.setItem(CACHE_KEY_PREFIX + group, JSON.stringify({ ts: Date.now(), data, count }));
   } catch {
     // localStorage full or unavailable — silently ignore
   }
+}
+
+/** Read cached TLE text from localStorage. Returns null if not cached. */
+function readCachedText(cacheKey: string, isJsonWrapped: boolean): string | null {
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (!raw) return null;
+    return isJsonWrapped ? (JSON.parse(raw) as { data: string }).data : raw;
+  } catch {
+    return null;
+  }
+}
+
+/** Check if a NORAD ID exists in a cached TLE text (string search, no parsing). */
+export function cachedTleHasNorad(cacheKey: string, noradId: number, isJsonWrapped = true): boolean {
+  const text = readCachedText(cacheKey, isJsonWrapped);
+  if (!text) return false;
+  const padded = String(noradId).padStart(5, '0');
+  const needle = '1 ' + padded;
+  return text.includes('\n' + needle) || text.startsWith(needle);
+}
+
+/** Get satellite count from a cached TLE source. Uses stored count if available, falls back to text scan. */
+export function cachedTleSatCount(cacheKey: string, isJsonWrapped = true): number {
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (!raw) return 0;
+    if (isJsonWrapped) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.count === 'number') return parsed.count;
+      // Fallback: scan text for old cache entries without count
+      return countTleLines(parsed.data);
+    }
+    return countTleLines(raw);
+  } catch {
+    return 0;
+  }
+}
+
+function countTleLines(text: string): number {
+  let count = text.startsWith('1 ') ? 1 : 0;
+  let pos = 0;
+  while ((pos = text.indexOf('\n1 ', pos)) !== -1) {
+    count++;
+    pos += 3;
+  }
+  return count;
 }
 
 export function parseTLEText(text: string): Satellite[] {
