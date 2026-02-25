@@ -1,5 +1,8 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
+  import Select from './shared/Select.svelte';
+  import Input from './shared/Input.svelte';
+  import Button from './shared/Button.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { themeStore } from '../stores/theme.svelte';
   import { VAR_GROUPS, BUILTIN_THEMES, cssColorToHex, type ThemeVars } from '../themes';
@@ -108,8 +111,8 @@
     </div>
 
     <div class="action-row">
-      <button class="action-btn" onclick={onClone}>Clone Active</button>
-      <button class="action-btn" onclick={onImportClick}>Import</button>
+      <Button onclick={onClone}>Clone Active</Button>
+      <Button onclick={onImportClick}>Import</Button>
       <input bind:this={fileInput} type="file" accept=".json" style="display:none" onchange={onImportFile}>
     </div>
 
@@ -118,14 +121,14 @@
         <div class="editor-meta">
           <div class="meta-row">
             <label>Name</label>
-            <input type="text" class="name-input" value={themeStore.activeTheme.name} onchange={onNameInput}>
+            <Input class="name-input" type="text" value={themeStore.activeTheme.name} onchange={onNameInput} />
           </div>
           <div class="meta-row">
             <label>Scheme</label>
-            <select value={themeStore.activeTheme.colorScheme} onchange={onSchemeChange}>
+            <Select value={themeStore.activeTheme.colorScheme} onchange={onSchemeChange}>
               <option value="dark">Dark</option>
               <option value="light">Light</option>
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -152,8 +155,8 @@
         </div>
 
         <div class="editor-footer">
-          <button class="action-btn" onclick={onExport}>Export</button>
-          <button class="action-btn danger" onclick={resetToDefaults}>Reset</button>
+          <Button onclick={onExport}>Export</Button>
+          <Button variant="danger" onclick={resetToDefaults}>Reset</Button>
         </div>
       </div>
     {:else}
@@ -250,17 +253,6 @@
     border-top: 1px solid var(--border);
   }
 
-  .action-btn {
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    padding: 3px 8px;
-    font-size: 11px;
-    font-family: inherit;
-    cursor: pointer;
-  }
-  .action-btn:hover { border-color: var(--border-hover); color: var(--text); }
-  .action-btn.danger:hover { color: var(--danger-bright); border-color: var(--danger); }
 
   .editor-section {
     border-top: 1px solid var(--border);
@@ -283,27 +275,8 @@
   }
   .meta-row label { color: var(--text-dim); font-size: 12px; }
 
-  .name-input {
-    width: 160px;
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 2px 6px;
-    font-size: 12px;
-    font-family: inherit;
-  }
-  .name-input:focus { border-color: var(--border-hover); outline: none; }
+  :global(.name-input) { width: 160px; }
 
-  .meta-row select {
-    background: var(--ui-bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    padding: 2px 6px;
-    font-size: 12px;
-    font-family: inherit;
-    cursor: pointer;
-  }
-  .meta-row select:hover { border-color: var(--border-hover); }
 
   .var-groups {
     max-height: 320px;

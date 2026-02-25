@@ -1,6 +1,8 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import Checkbox from './shared/Checkbox.svelte';
+  import Button from './shared/Button.svelte';
+  import Input from './shared/Input.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { sourcesStore } from '../stores/sources.svelte';
   import { getCacheAge } from '../data/tle-loader';
@@ -84,8 +86,9 @@
 {#snippet dsIcon()}<span class="title-icon">{@html ICON_DATA_SOURCES}</span>{/snippet}
 <DraggableWindow id="data-sources" title="Data Sources" icon={dsIcon} bind:open={uiStore.dataSourcesOpen} initialX={10} initialY={260}>
   <div class="ds-content">
-    <input
+    <Input
       class="filter-input"
+      size="lg"
       type="text"
       placeholder="Filter sources..."
       bind:value={filterQuery}
@@ -138,17 +141,17 @@
 
       {#if addingUrl}
         <div class="add-form">
-          <input type="text" class="add-input" placeholder="Name" bind:value={newName} onkeydown={onUrlKeydown}>
-          <input type="text" class="add-input url-input" placeholder="URL" bind:value={newUrl} onkeydown={onUrlKeydown}>
+          <Input class="add-input" type="text" placeholder="Name" bind:value={newName} onkeydown={onUrlKeydown} />
+          <Input class="add-input" type="text" placeholder="URL" bind:value={newUrl} onkeydown={onUrlKeydown} />
           <div class="add-actions">
-            <button class="small-btn" onclick={submitUrl}>Add</button>
-            <button class="small-btn cancel-btn" onclick={() => addingUrl = false}>Cancel</button>
+            <Button onclick={submitUrl}>Add</Button>
+            <Button variant="ghost" onclick={() => addingUrl = false}>Cancel</Button>
           </div>
         </div>
       {:else}
         <div class="add-row">
-          <button class="small-btn" onclick={() => addingUrl = true}>+ URL</button>
-          <button class="small-btn" onclick={() => fileInput?.click()}>+ File</button>
+          <Button onclick={() => addingUrl = true}>+ URL</Button>
+          <Button onclick={() => fileInput?.click()}>+ File</Button>
           <input type="file" bind:this={fileInput} accept=".tle,.txt,.3le" style="display:none" onchange={onFileChange}>
         </div>
       {/if}
@@ -173,19 +176,7 @@
     gap: 10px;
     width: 260px;
   }
-  .filter-input {
-    width: 100%;
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: 12px;
-    font-family: inherit;
-    padding: 4px 8px;
-    outline: none;
-    box-sizing: border-box;
-  }
-  .filter-input:focus { border-color: var(--border-hover); }
-  .filter-input::placeholder { color: var(--text-ghost); }
+  :global(.filter-input) { width: 100%; }
   .filter-count { color: var(--text-faint); font-size: 10px; }
   .section {
     display: flex;
@@ -268,35 +259,13 @@
     gap: 4px;
     margin-top: 2px;
   }
-  .add-input {
-    background: var(--ui-bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    padding: 3px 6px;
-    font-size: 11px;
-    font-family: inherit;
-    width: 100%;
-  }
-  .add-input:focus { border-color: var(--border-hover); outline: none; }
-  .add-input::placeholder { color: var(--text-ghost); }
+  :global(.add-input) { width: 100%; }
 
   .add-actions {
     display: flex;
     gap: 4px;
   }
 
-  .small-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    padding: 2px 8px;
-    font-size: 11px;
-    font-family: inherit;
-    cursor: pointer;
-  }
-  .small-btn:hover { color: var(--text); border-color: var(--border-hover); }
-  .cancel-btn { border-color: transparent; }
-  .cancel-btn:hover { border-color: var(--border); }
 
   .footer {
     border-top: 1px solid var(--border);

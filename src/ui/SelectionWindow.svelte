@@ -1,6 +1,8 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import Checkbox from './shared/Checkbox.svelte';
+  import Button from './shared/Button.svelte';
+  import Input from './shared/Input.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { sourcesStore } from '../stores/sources.svelte';
   import { ICON_SELECTION, ICON_PASSES, ICON_DATABASE } from './shared/icons';
@@ -112,17 +114,18 @@
 {#snippet selIcon()}<span class="title-icon">{@html ICON_SELECTION}</span>{/snippet}
 {#snippet headerExtra()}
   <div class="sel-mode-bar">
-    <button class="sel-mode-btn" class:active={!uiStore.singleSelectMode}
-      onclick={() => uiStore.setSingleSelectMode(false)}>Multi</button>
-    <button class="sel-mode-btn" class:active={uiStore.singleSelectMode}
-      onclick={() => uiStore.setSingleSelectMode(true)}>Single</button>
+    <Button size="xs" variant="ghost" active={!uiStore.singleSelectMode}
+      onclick={() => uiStore.setSingleSelectMode(false)}>Multi</Button>
+    <Button size="xs" variant="ghost" active={uiStore.singleSelectMode}
+      onclick={() => uiStore.setSingleSelectMode(true)}>Single</Button>
   </div>
 {/snippet}
 <DraggableWindow id="selection" title="Selection" icon={selIcon} {headerExtra} bind:open={uiStore.selectionWindowOpen} focus={uiStore.selectionWindowFocus} initialX={9999} initialY={200}>
   <div class="sw">
     <div class="search-box">
-      <input
+      <Input
         class="search-input"
+        size="lg"
         type="text"
         placeholder="Add satellite..."
         bind:value={searchQuery}
@@ -164,8 +167,8 @@
           mixed={someHidden && uiStore.hiddenSelectedSats.size < uiStore.selectedSatData.length}
           onchange={() => someHidden ? showAll() : hideAll()} />
         <span class="count">{uiStore.selectedSatData.length} selected</span>
-        <button class="passes-btn" onclick={togglePasses} title="Predict passes">{@html ICON_PASSES} Passes</button>
-        <button class="clear-btn" onclick={clearAll}>Clear</button>
+        <Button size="xs" onclick={togglePasses} title="Predict passes">{@html ICON_PASSES} Passes</Button>
+        <Button size="xs" onclick={clearAll}>Clear</Button>
       </div>
       <div class="sat-list">
         {#each uiStore.selectedSatData as sat}
@@ -201,10 +204,10 @@
                   {/if}
                 </div>
                 {#if hasSatnogsData(sat.noradId)}
-                  <button class="satnogs-btn" onclick={() => {
+                  <Button size="xs" onclick={() => {
                     uiStore.satDatabaseNoradId = sat.noradId;
                     uiStore.satDatabaseOpen = true;
-                  }} title="View SatNOGS database entry">{@html ICON_DATABASE} SatNOGS</button>
+                  }} title="View SatNOGS database entry">{@html ICON_DATABASE} SatNOGS</Button>
                 {/if}
               </div>
             {/if}
@@ -223,21 +226,6 @@
     margin-left: auto;
     margin-right: 8px;
   }
-  .sel-mode-btn {
-    background: none;
-    border: none;
-    color: var(--text-ghost);
-    font-size: 10px;
-    font-family: inherit;
-    padding: 1px 6px;
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    opacity: 0.5;
-  }
-  .sel-mode-btn:hover { opacity: 0.8; }
-  .sel-mode-btn.active { color: var(--accent); opacity: 1; }
-
   .sw {
     min-width: 220px;
     max-width: 320px;
@@ -246,19 +234,7 @@
     position: relative;
     margin-bottom: 6px;
   }
-  .search-input {
-    width: 100%;
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: 12px;
-    font-family: inherit;
-    padding: 4px 8px;
-    outline: none;
-    box-sizing: border-box;
-  }
-  .search-input:focus { border-color: var(--border-hover); }
-  .search-input::placeholder { color: var(--text-ghost); }
+  :global(.search-input) { width: 100%; }
   .search-results {
     position: absolute;
     left: 0; right: 0;
@@ -303,7 +279,7 @@
   .header-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 6px;
     margin-bottom: 6px;
   }
   .count {
@@ -311,37 +287,8 @@
     color: var(--text-ghost);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    flex: 1;
   }
-  .clear-btn {
-    margin-left: 6px;
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-ghost);
-    font-size: 10px;
-    font-family: inherit;
-    padding: 1px 6px;
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-  .passes-btn {
-    margin-left: auto;
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-ghost);
-    font-size: 10px;
-    font-family: inherit;
-    padding: 1px 6px;
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    display: flex;
-    align-items: center;
-    gap: 3px;
-  }
-  .passes-btn:hover { color: var(--text-dim); border-color: var(--border-hover); }
-  .passes-btn :global(svg) { width: 10px; height: 10px; }
-  .clear-btn:hover { color: var(--text-dim); border-color: var(--border-hover); }
 
   .sat-list {
     display: flex;
@@ -425,21 +372,4 @@
   .dv {
     color: var(--text-dim);
   }
-  .satnogs-btn {
-    margin-top: 4px;
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-ghost);
-    font-size: 10px;
-    font-family: inherit;
-    padding: 1px 6px;
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    display: flex;
-    align-items: center;
-    gap: 3px;
-  }
-  .satnogs-btn:hover { color: var(--text-dim); border-color: var(--border-hover); }
-  .satnogs-btn :global(svg) { width: 10px; height: 10px; }
 </style>

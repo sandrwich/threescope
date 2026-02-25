@@ -5,7 +5,7 @@
     disabled = false,
     mixed = false,
     color = '',
-    size = 'md',
+    size = 'sm',
     class: extraClass = '',
     ...rest
   }: {
@@ -14,7 +14,7 @@
     disabled?: boolean;
     mixed?: boolean;
     color?: string;
-    size?: 'sm' | 'md' | 'lg';
+    size?: 'xs' | 'sm' | 'md' | 'lg';
     class?: string;
     [key: string]: unknown;
   } = $props();
@@ -50,6 +50,8 @@
   .cb:disabled { opacity: 0.4; cursor: default; }
 
   /* Sizes */
+  .cb-xs { width: 10px; height: 10px; }
+  .cb-xs:checked::after { top: 1px; left: 1px; right: 1px; bottom: 1px; }
   .cb-sm { width: 12px; height: 12px; }
   .cb-sm:checked::after { top: 1px; left: 1px; right: 1px; bottom: 1px; }
   .cb-md { width: 14px; height: 14px; }

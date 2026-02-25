@@ -3,6 +3,8 @@
   import { resetWindowLayout } from './shared/DraggableWindow.svelte';
   import InfoTip from './shared/InfoTip.svelte';
   import Checkbox from './shared/Checkbox.svelte';
+  import Select from './shared/Select.svelte';
+  import Button from './shared/Button.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { ICON_SETTINGS } from './shared/icons';
   import { settingsStore } from '../stores/settings.svelte';
@@ -84,11 +86,11 @@
   <h4 class="section-header">Graphics</h4>
   <div class="row">
     <label>Preset</label>
-    <select value={settingsStore.graphicsPreset ?? 'custom'} onchange={onGfxPresetChange}>
+    <Select size="xs" value={settingsStore.graphicsPreset ?? 'custom'} onchange={onGfxPresetChange}>
       <option value="standard">Standard</option>
       <option value="rtx">RTX</option>
       <option value="custom" disabled hidden>Custom</option>
-    </select>
+    </Select>
   </div>
   <div class="row">
     <label>Bloom <InfoTip>UnrealBloomPass post-processing. Samples bright fragments and applies a Gaussian blur to simulate light bleeding — visible on the sun disc, city lights, and atmosphere rim.</InfoTip></label>
@@ -117,13 +119,13 @@
         <div><b>Ultra</b> (512×512) — 524k tris, sharpest relief</div>
       </div>
     </InfoTip></label>
-    <select value={String(settingsStore.graphics.sphereDetail)} onchange={onSphereDetailChange}>
+    <Select size="xs" value={String(settingsStore.graphics.sphereDetail)} onchange={onSphereDetailChange}>
       <option value="32">Low</option>
       <option value="64">Medium</option>
       <option value="128">High</option>
       <option value="256">Very High</option>
       <option value="512">Ultra</option>
-    </select>
+    </Select>
   </div>
   <div class="row slider-row">
     <label>Surface Relief <span class="value-label">{reliefDisplay}</span></label>
@@ -133,11 +135,11 @@
   <h4 class="section-header">Simulation</h4>
   <div class="row">
     <label>Preset</label>
-    <select value={settingsStore.simulationPreset ?? 'custom'} onchange={onSimPresetChange}>
+    <Select size="xs" value={settingsStore.simulationPreset ?? 'custom'} onchange={onSimPresetChange}>
       <option value="approximate">Approximate</option>
       <option value="accurate">Accurate</option>
       <option value="custom" disabled hidden>Custom</option>
-    </select>
+    </Select>
   </div>
   <div class="row">
     <label>Orbit Mode <InfoTip>
@@ -147,10 +149,10 @@
         <div><b>SGP4</b> — full SGP4/SDP4 numerical propagation for every satellite. Includes J2–J4, drag, lunar/solar perturbations. Most accurate but O(n × segments) propagation calls on every recompute.</div>
       </div>
     </InfoTip></label>
-    <select value={settingsStore.simulation.orbitMode} onchange={onOrbitModeChange}>
+    <Select size="xs" value={settingsStore.simulation.orbitMode} onchange={onOrbitModeChange}>
       <option value="analytical">Analytical</option>
       <option value="sgp4">SGP4</option>
-    </select>
+    </Select>
   </div>
   <div class="row">
     <label>Orbit Segments <InfoTip>
@@ -162,12 +164,12 @@
         <div><b>Ultra</b> (90) — near-continuous, heaviest</div>
       </div>
     </InfoTip></label>
-    <select value={String(settingsStore.simulation.orbitSegments)} onchange={onOrbitSegmentsChange}>
+    <Select size="xs" value={String(settingsStore.simulation.orbitSegments)} onchange={onOrbitSegmentsChange}>
       <option value="16">Low</option>
       <option value="30">Medium</option>
       <option value="60">High</option>
       <option value="90">Ultra</option>
-    </select>
+    </Select>
   </div>
   <div class="row slider-row">
     <label>Orbits to Draw <span class="value-label">{orbitsDisplay}</span> <InfoTip>How many full orbital periods to render for highlighted satellite orbit paths. Higher values show more of the trajectory but cost more GPU/CPU.</InfoTip></label>
@@ -207,13 +209,13 @@
       </div>
       <div>Errors for LEO at ~550 km altitude (~7.6 km/s), 1× speed, 60 FPS. Scales linearly with frame rate — at 30 FPS errors double. Higher orbits are slower and have proportionally less error.</div>
     </InfoTip></label>
-    <select value={String(settingsStore.simulation.updateQuality)} onchange={onUpdateQualityChange}>
+    <Select size="xs" value={String(settingsStore.simulation.updateQuality)} onchange={onUpdateQualityChange}>
       <option value="1">Ultra</option>
       <option value="8">High</option>
       <option value="16">Balanced</option>
       <option value="32">Low</option>
       <option value="64">Lowest</option>
-    </select>
+    </Select>
   </div>
 
   <h4 class="section-header">General</h4>
@@ -224,17 +226,16 @@
   {#if showFpsWarning}
     <div class="warning">May reduce UI responsiveness</div>
   {/if}
-
-  <h4 class="section-header">Appearance</h4>
   <div class="row">
     <label>Theme</label>
-    <button class="reset-btn" onclick={() => uiStore.themeEditorOpen = !uiStore.themeEditorOpen}>
+    <Button size="xs" onclick={() => uiStore.themeEditorOpen = !uiStore.themeEditorOpen}>
       {themeStore.activeTheme.name}
-    </button>
+    </Button>
   </div>
-
-  <h4 class="section-header">Layout</h4>
-  <button class="reset-btn" onclick={resetWindowLayout}>Reset window positions</button>
+  <div class="row">
+    <label>Layout</label>
+    <Button size="xs" onclick={resetWindowLayout}>Reset Window Positions</Button>
+  </div>
 
 </DraggableWindow>
 
@@ -245,7 +246,7 @@
     font-weight: normal;
     text-transform: uppercase;
     letter-spacing: 1px;
-    margin: 12px 0 8px;
+    margin: 10px 0 6px;
     padding-bottom: 4px;
     border-bottom: 1px solid var(--border);
   }
@@ -255,19 +256,9 @@
     align-items: center;
     min-width: 280px;
     justify-content: space-between;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
   }
-  .row label { color: var(--text-dim); }
-  .row select {
-    background: var(--ui-bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    padding: 3px 6px;
-    font-size: 13px;
-    font-family: inherit;
-    cursor: pointer;
-  }
-  .row select:hover { border-color: var(--border-hover); }
+  .row label { color: var(--text-dim); font-size: 12px; }
   .slider-row { flex-direction: column; align-items: stretch; gap: 4px; }
   .slider-row label { display: flex; justify-content: space-between; }
   .slider {
@@ -303,15 +294,5 @@
     color: var(--warning);
     margin: -6px 0 8px;
   }
-  .reset-btn {
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    padding: 4px 10px;
-    font-size: 12px;
-    font-family: inherit;
-    cursor: pointer;
-  }
-  .reset-btn:hover { border-color: var(--border-hover); color: var(--text); }
 
 </style>

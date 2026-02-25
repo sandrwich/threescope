@@ -126,3 +126,11 @@ export function solarElongation(
             + (toSatZ / toSatLen) * sunDir.z;
   return Math.acos(Math.max(-1, Math.min(1, dot))) * RAD2DEG;
 }
+
+export function sunLabel(alt: number): string {
+  if (alt > 0) return 'Daylight';
+  if (alt > -6) return 'Civil twilight';
+  if (alt > -12) return 'Nautical twilight';
+  if (alt > -18) return 'Astronomical twilight';
+  return 'Night';
+}

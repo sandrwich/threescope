@@ -1,8 +1,13 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
+  import Select from './shared/Select.svelte';
+  import Input from './shared/Input.svelte';
+  import Button from './shared/Button.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { ICON_FILTER } from './shared/icons';
   import { palette } from './shared/theme';
+  import { initHiDPICanvas } from './shared/canvas';
+  import { FREQ_PRESETS } from '../data/freq-presets';
 
   const SIZE = 300;
   const CX = SIZE / 2;
@@ -448,16 +453,6 @@
   }
 
   // ─── Frequency filter ──────────────────────────────────────
-  const FREQ_PRESETS: { label: string; min: number; max: number }[] = [
-    { label: 'VHF', min: 30, max: 300 },
-    { label: '2m', min: 144, max: 146 },
-    { label: 'UHF', min: 300, max: 1000 },
-    { label: '70cm', min: 430, max: 440 },
-    { label: 'L', min: 1000, max: 2000 },
-    { label: '23cm', min: 1240, max: 1300 },
-    { label: 'S', min: 2000, max: 4000 },
-    { label: 'X', min: 8000, max: 12000 },
-  ];
 
   let freqMin = $state(uiStore.passFreqMinMHz);
   let freqMax = $state(uiStore.passFreqMaxMHz);
@@ -497,12 +492,7 @@
 
   function initCanvas() {
     if (!canvasEl) return;
-    const dpr = window.devicePixelRatio || 1;
-    canvasEl.width = SIZE * dpr;
-    canvasEl.height = SIZE * dpr;
-    canvasEl.style.width = SIZE + 'px';
-    canvasEl.style.height = SIZE + 'px';
-    ctx = canvasEl.getContext('2d');
+    ctx = initHiDPICanvas(canvasEl, SIZE, SIZE);
   }
 
   // Clear interaction flag on any global pointerup (safety net if pointer leaves element)
@@ -538,7 +528,7 @@
 
 {#snippet headerExtra()}
   {#if uiStore.hasActivePassFilters}
-    <button class="pf-reset" onclick={reset}>Reset</button>
+    <Button class="pf-reset" size="xs" variant="ghost" onclick={reset}>Reset</Button>
   {/if}
 {/snippet}
 
@@ -552,14 +542,14 @@
     onpointercancel={() => { uiStore.passFilterInteracting = false; uiStore.onFilterInteractionEnd?.(); }}>
     <div class="pf-row pf-row-top">
       <span class="pf-label">Show</span>
-      <select class="pf-select" value={uiStore.passVisibility}
+      <Select value={uiStore.passVisibility}
         onchange={(e) => uiStore.setPassVisibility((e.target as HTMLSelectElement).value as 'all' | 'observable' | 'visible')}>
-        <option value="all">All passes</option>
+        <option value="all">All Passes</option>
         <option value="observable">Observable</option>
         <option value="visible">Visible (mag ≤ 5)</option>
-      </select>
+      </Select>
       <span class="pf-label" style="margin-left:6px">Min view</span>
-      <input class="pf-num" type="number" min="0" max="3600" value={uiStore.passMinDuration}
+      <Input class="pf-num-top" type="number" min="0" max="3600" value={uiStore.passMinDuration}
         onchange={(e) => uiStore.setPassMinDuration(Math.max(0, parseInt((e.target as HTMLInputElement).value) || 0))} />
       <span class="pf-unit">s</span>
     </div>
@@ -576,25 +566,25 @@
     <div class="pf-controls">
       <div class="pf-row">
         <span class="pf-label"><span class="pf-dot" style="background:var(--handle-el)"></span>Elevation</span>
-        <input class="pf-num" type="number" min="0" max="90" bind:value={minEl}
+        <Input class="pf-num" size="xs" type="number" min="0" max="90" bind:value={minEl}
           onchange={() => syncToStore()} />
         <span class="pf-sep">&mdash;</span>
-        <input class="pf-num" type="number" min="0" max="90" bind:value={maxEl}
+        <Input class="pf-num" size="xs" type="number" min="0" max="90" bind:value={maxEl}
           onchange={() => syncToStore()} />
         <span class="pf-unit">°</span>
       </div>
 
       <div class="pf-row">
         <span class="pf-label"><span class="pf-dot" style="background:var(--handle-az)"></span>Azimuth</span>
-        <input class="pf-num" type="number" min="0" max="360" bind:value={azFrom}
+        <Input class="pf-num" size="xs" type="number" min="0" max="360" bind:value={azFrom}
           onchange={() => syncToStore()} />
         <span class="pf-sep">&mdash;</span>
-        <input class="pf-num" type="number" min="0" max="360" bind:value={azTo}
+        <Input class="pf-num" size="xs" type="number" min="0" max="360" bind:value={azTo}
           onchange={() => syncToStore()} />
         <span class="pf-unit">°</span>
         <div class="pf-presets">
           {#each AZ_PRESETS as p}
-            <button class="pf-preset" class:active={azFrom === p.from && azTo === p.to} onclick={() => applyAzPreset(p)}>{p.label}</button>
+            <Button size="xs" active={azFrom === p.from && azTo === p.to} onclick={() => applyAzPreset(p)}>{p.label}</Button>
           {/each}
         </div>
       </div>
@@ -605,7 +595,7 @@
           {#each DIRS as dir, i}
             <div class="pf-hz-cell">
               <span class="pf-dir">{dir}</span>
-              <input class="pf-num pf-num-hz" type="number" min="0" max="80" bind:value={horizonMask[i]}
+              <Input class="pf-num-hz" size="xs" type="number" min="0" max="80" bind:value={horizonMask[i]}
                 onchange={() => { horizonMask = [...horizonMask]; syncToStore(); }} />
               <span class="pf-unit">°</span>
             </div>
@@ -615,15 +605,15 @@
 
       <div class="pf-row pf-row-freq">
         <span class="pf-label">Frequency</span>
-        <input class="pf-num pf-num-freq" type="number" min="0" max="50000" bind:value={freqMin}
+        <Input class="pf-num-freq" type="number" min="0" max="50000" bind:value={freqMin}
           onchange={syncFreqToStore} placeholder="Min" />
         <span class="pf-sep">&mdash;</span>
-        <input class="pf-num pf-num-freq" type="number" min="0" max="50000" bind:value={freqMax}
+        <Input class="pf-num-freq" type="number" min="0" max="50000" bind:value={freqMax}
           onchange={syncFreqToStore} placeholder="Max" />
         <span class="pf-unit">MHz</span>
         <div class="pf-presets">
           {#each FREQ_PRESETS as p}
-            <button class="pf-preset" class:active={freqMin === p.min && freqMax === p.max} onclick={() => applyFreqPreset(p)}>{p.label}</button>
+            <Button active={freqMin === p.min && freqMax === p.max} onclick={() => applyFreqPreset(p)}>{p.label}</Button>
           {/each}
         </div>
       </div>
@@ -674,46 +664,15 @@
     min-width: 48px;
     flex-shrink: 0;
   }
-  .pf-num {
-    width: 56px;
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 2px 3px;
-    text-align: center;
-  }
-  .pf-num:focus { border-color: var(--border-hover); outline: none; }
-  .pf-num-sm { width: 30px; font-size: 10px; }
+  :global(.pf-num) { width: 48px; }
+  :global(.pf-num-top) { width: 56px; }
   .pf-sep { color: var(--text-ghost); font-size: 10px; }
   .pf-unit { color: var(--text-ghost); font-size: 10px; }
-  .pf-select {
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 2px 4px;
-  }
-  .pf-select:focus { border-color: var(--border-hover); outline: none; }
-
   .pf-presets {
     display: flex;
     gap: 1px;
     margin-left: 2px;
   }
-  .pf-preset {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-ghost);
-    font-size: 9px;
-    font-family: inherit;
-    padding: 1px 5px;
-    cursor: pointer;
-  }
-  .pf-preset:hover { color: var(--text-dim); border-color: var(--border-hover); }
-  .pf-preset.active { color: var(--accent); border-color: var(--accent); }
 
   .pf-row-hz { align-items: flex-start; }
   .pf-horizon {
@@ -732,10 +691,7 @@
     min-width: 16px;
     text-align: right;
   }
-  .pf-num-hz {
-    width: 46px;
-    font-size: 10px;
-  }
+  :global(.pf-num-hz) { width: 40px; }
 
   /* Frequency filter */
   .pf-row-freq {
@@ -743,22 +699,10 @@
     padding-top: 10px;
     border-top: 1px solid var(--border);
   }
-  .pf-num-freq {
-    width: 64px;
-  }
+  :global(.pf-num-freq) { width: 56px; }
 
-  .pf-reset {
+  :global(.pf-reset) {
     margin-left: auto;
     margin-right: 6px;
-    background: none;
-    border: none;
-    color: var(--text-ghost);
-    font-size: 9px;
-    font-family: inherit;
-    padding: 0;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    cursor: pointer;
   }
-  .pf-reset:hover { color: var(--text-dim); border-color: var(--border-hover); }
 </style>

@@ -1,11 +1,13 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
+  import Button from './shared/Button.svelte';
+  import Input from './shared/Input.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { ICON_OBSERVER } from './shared/icons';
   import { getElevation, isElevationLoaded } from '../astro/elevation';
-  import { sunAltitude } from '../astro/eclipse';
+  import { sunAltitude, sunLabel } from '../astro/eclipse';
   import { epochToGmst, epochToDate } from '../astro/epoch';
   import { moonPositionECI, moonIllumination } from '../astro/moon-observer';
   import { getAzEl } from '../astro/az-el';
@@ -56,14 +58,6 @@
   });
 
   // --- Sky data (real-time) ---
-  function sunLabel(alt: number): string {
-    if (alt > 0) return 'Daylight';
-    if (alt > -6) return 'Civil twilight';
-    if (alt > -12) return 'Nautical twilight';
-    if (alt > -18) return 'Astronomical twilight';
-    return 'Night';
-  }
-
   let sunEl = $derived.by(() => {
     if (!observerStore.isSet) return null;
     const epoch = timeStore.epoch;
@@ -175,23 +169,23 @@
     <h4 class="section-header">Location</h4>
     <div class="obs-name-row">
       <label>Name</label>
-      <input class="obs-input" type="text" bind:value={obsName} onblur={applyObserver} placeholder="Home" />
+      <Input class="obs-input" type="text" bind:value={obsName} onblur={applyObserver} placeholder="Home" />
     </div>
     <div class="obs-coord-row">
       <div class="obs-field">
         <label>Lat</label>
-        <input class="obs-input" type="number" min="-90" max="90" step="0.01" bind:value={obsLat} onblur={applyObserver} />
+        <Input class="obs-input" type="number" min="-90" max="90" step="0.01" bind:value={obsLat} onblur={applyObserver} />
       </div>
       <div class="obs-field">
         <label>Lon</label>
-        <input class="obs-input" type="number" min="-180" max="180" step="0.01" bind:value={obsLon} onblur={applyObserver} />
+        <Input class="obs-input" type="number" min="-180" max="180" step="0.01" bind:value={obsLon} onblur={applyObserver} />
       </div>
       <div class="obs-field">
         <label class="alt-label">Alt (m) <button class="alt-auto" onclick={lookupAlt} title="Auto-detect from coordinates">&#8635;</button></label>
-        <input class="obs-input" type="number" min="0" step="1" bind:value={obsAlt} onblur={applyObserver} />
+        <Input class="obs-input" type="number" min="0" step="1" bind:value={obsAlt} onblur={applyObserver} />
       </div>
     </div>
-    <button class="geo-btn" onclick={useMyLocation}>Use My Location</button>
+    <Button class="geo-btn" onclick={useMyLocation}>Use My Location</Button>
 
     {#if observerStore.isSet}
       <!-- Sky -->
@@ -277,17 +271,7 @@
     line-height: 1;
   }
   .alt-auto:hover { color: var(--text-dim); }
-  .obs-input {
-    background: var(--ui-bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    padding: 3px 6px;
-    font-size: 12px;
-    font-family: inherit;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  .obs-input:hover { border-color: var(--border-hover); }
+  :global(.obs-input) { width: 100%; }
   .obs-name-row {
     display: flex;
     align-items: center;
@@ -301,17 +285,7 @@
   .obs-name-row .obs-input {
     flex: 1;
   }
-  .geo-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 4px 12px;
-    cursor: pointer;
-    width: 100%;
-  }
-  .geo-btn:hover { border-color: var(--border-hover); color: var(--text); }
+  :global(.geo-btn) { width: 100%; }
 
   /* Sky section */
   .sky-grid {

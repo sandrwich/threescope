@@ -1,5 +1,7 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
+  import Select from './shared/Select.svelte';
+  import Button from './shared/Button.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
@@ -7,6 +9,7 @@
   import { formatMHz, formatMHzRange } from '../format';
   import { SAT_COLORS } from '../constants';
   import { epochToDate } from '../astro/epoch';
+  import { sunLabel } from '../astro/eclipse';
   import type { SatellitePass } from '../passes/pass-types';
 
   const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -64,14 +67,6 @@
     if (pass.peakMag < 2) return 'mag-bright';
     if (pass.peakMag <= 5) return 'mag-mid';
     return 'mag-faint';
-  }
-
-  function sunLabel(alt: number): string {
-    if (alt > 0) return 'Daylight';
-    if (alt > -6) return 'Civil twilight';
-    if (alt > -12) return 'Nautical twilight';
-    if (alt > -18) return 'Astronomical twilight';
-    return 'Night';
   }
 
   function magTooltip(pass: SatellitePass): string {
@@ -240,12 +235,12 @@
 {#snippet filterBar()}
   <div class="filter-bar">
     <div class="filter-bar-row">
-      <select class="filter-select" value={uiStore.passVisibility}
+      <Select value={uiStore.passVisibility}
         onchange={(e) => uiStore.setPassVisibility((e.target as HTMLSelectElement).value as 'all' | 'observable' | 'visible')}>
-        <option value="all">All passes</option>
+        <option value="all">All Passes</option>
         <option value="observable">Observable</option>
         <option value="visible">Visible (mag ≤ 5)</option>
-      </select>
+      </Select>
       {#if filterSummary}
         <span class="filter-summary active" title={filterSummary}>{filterSummary}</span>
       {/if}
@@ -298,8 +293,8 @@
 {#snippet headerTabs()}
   {#if observerStore.isSet}
     <div class="tab-bar">
-      <button class="tab-btn" class:active={!isNearby} onclick={() => switchTab('selected')}>Selected</button>
-      <button class="tab-btn" class:active={isNearby} onclick={() => switchTab('nearby')}>All Nearby</button>
+      <Button size="xs" variant="ghost" active={!isNearby} onclick={() => switchTab('selected')}>Selected</Button>
+      <Button size="xs" variant="ghost" active={isNearby} onclick={() => switchTab('nearby')}>All Nearby</Button>
     </div>
   {/if}
 {/snippet}
@@ -324,7 +319,7 @@
     {#if !observerStore.isSet}
       <div class="prompt">
         <p>Set your observer location to predict satellite passes.</p>
-        <button class="action-btn" onclick={openObserver}>Set Location</button>
+        <Button onclick={openObserver}>Set Location</Button>
       </div>
     {:else if !isNearby}
         <!-- Selected tab -->
@@ -392,23 +387,6 @@
     margin-left: auto;
     margin-right: 8px;
   }
-  .tab-btn {
-    background: none;
-    border: none;
-    color: var(--text-ghost);
-    font-size: 10px;
-    font-family: inherit;
-    padding: 1px 6px;
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    opacity: 0.5;
-  }
-  .tab-btn:hover { opacity: 0.8; }
-  .tab-btn.active {
-    color: var(--accent);
-    opacity: 1;
-  }
 
   /* Empty-state prompts */
   .prompt {
@@ -418,17 +396,6 @@
     padding: 12px 8px;
   }
   .prompt p { margin: 0 0 10px 0; }
-  .action-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 4px 12px;
-    cursor: pointer;
-  }
-  .action-btn:hover { border-color: var(--border-hover); color: var(--text); }
-
   /* Inline pass stats (right side of top-bar) */
   .top-stats {
     display: flex;
@@ -506,16 +473,6 @@
     align-items: center;
     gap: 6px;
   }
-  .filter-select {
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 2px 4px;
-    flex-shrink: 0;
-  }
-  .filter-select:focus { border-color: var(--border-hover); outline: none; }
   .filter-summary {
     font-size: 10px;
     color: var(--text-ghost);
@@ -539,8 +496,6 @@
     flex-shrink: 0;
     white-space: nowrap;
     margin-left: auto;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
     display: inline-flex;
     align-items: center;
     gap: 3px;

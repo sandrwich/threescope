@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Button from './Button.svelte';
+
   let { open = $bindable(false), children }: {
     open?: boolean;
     children: any;
@@ -14,7 +16,7 @@
   <div class="modal-overlay" onclick={onOverlayClick}>
     <div class="modal-content">
       {@render children()}
-      <button class="modal-close" onclick={() => open = false}>Close</button>
+      <Button class="modal-close" size="md" onclick={() => open = false}>Close</Button>
     </div>
   </div>
 {/if}
@@ -40,19 +42,8 @@
     line-height: 1.6;
     color: var(--text-muted);
   }
-  .modal-close {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 13px;
-    font-family: inherit;
-    padding: 4px 14px;
-    cursor: pointer;
+  :global(.modal-close) {
     margin-top: 10px;
     float: right;
-  }
-  .modal-close:hover {
-    border-color: var(--border-hover);
-    color: var(--text-dim);
   }
 </style>

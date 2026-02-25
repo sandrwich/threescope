@@ -5,6 +5,7 @@
   import { ICON_POLAR } from './shared/icons';
   import { SAT_COLORS } from '../constants';
   import { palette } from './shared/theme';
+  import { initHiDPICanvas } from './shared/canvas';
 
   const SIZE = 280;
   const CX = SIZE / 2;
@@ -294,12 +295,7 @@
 
   function initCanvas() {
     if (!canvasEl) return;
-    const dpr = window.devicePixelRatio || 1;
-    canvasEl.width = SIZE * dpr;
-    canvasEl.height = (SIZE + 48) * dpr;
-    canvasEl.style.width = SIZE + 'px';
-    canvasEl.style.height = (SIZE + 48) + 'px';
-    ctx = canvasEl.getContext('2d');
+    ctx = initHiDPICanvas(canvasEl, SIZE, SIZE + 48);
   }
 
   $effect(() => {

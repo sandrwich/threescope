@@ -1,5 +1,8 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
+  import Select from './shared/Select.svelte';
+  import Button from './shared/Button.svelte';
+  import Input from './shared/Input.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
@@ -10,6 +13,7 @@
   import { palette } from './shared/theme';
   import { getTransmitters, type SatnogsTransmitter } from '../data/satnogs';
   import { formatFreqHz } from '../format';
+  import { initHiDPICanvas } from './shared/canvas';
 
   const CANVAS_W = 380;
   const CANVAS_H = 200;
@@ -486,12 +490,7 @@
 
   function initCanvas() {
     if (!canvasEl) return;
-    const dpr = window.devicePixelRatio || 1;
-    canvasEl.width = CANVAS_W * dpr;
-    canvasEl.height = CANVAS_H * dpr;
-    canvasEl.style.width = CANVAS_W + 'px';
-    canvasEl.style.height = CANVAS_H + 'px';
-    ctx = canvasEl.getContext('2d');
+    ctx = initHiDPICanvas(canvasEl, CANVAS_W, CANVAS_H);
   }
 
   // Invalidate cache when frequency input changes
@@ -560,30 +559,30 @@
       <div class="freq-row">
         <span class="lbl">Freq</span>
         {#if txList.length > 0}
-          <select class="tx-select" value={selectedTxIdx ?? 'custom'} onchange={onTxSelect}>
+          <Select class="tx-select" value={String(selectedTxIdx ?? 'custom')} onchange={onTxSelect}>
             {#each txList as tx, i}
               <option value={i}>{formatFreqHz(tx.frequencyHz)} — {tx.description}{tx.mode ? ` (${tx.mode})` : ''}</option>
             {/each}
             <option value="custom">Custom</option>
-          </select>
+          </Select>
         {/if}
         {#if selectedTxIdx === null}
-          <input type="text" bind:value={baseFreqMhzStr} class="inp freq" />
+          <Input class="dw-freq" type="text" bind:value={baseFreqMhzStr} />
         {/if}
         <span class="unit">MHz</span>
       </div>
       <div class="export-wrap">
-        <button class="export-btn" onclick={() => exportOpen = !exportOpen}>Export CSV</button>
+        <Button onclick={() => exportOpen = !exportOpen}>Export CSV</Button>
         {#if exportOpen}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="export-backdrop" onclick={() => exportOpen = false}></div>
           <div class="export-popover">
             <label>
               <span class="lbl">Resolution</span>
-              <input type="text" bind:value={csvResStr} class="inp res" />
+              <Input class="dw-res" type="text" bind:value={csvResStr} />
               <span class="unit">samples/s</span>
             </label>
-            <button class="download-btn" onclick={exportCSV}>Download</button>
+            <Button onclick={exportCSV}>Download</Button>
           </div>
         {/if}
       </div>
@@ -624,47 +623,18 @@
     font-size: 10px;
     color: var(--text-ghost);
   }
-  .inp {
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 3px 6px;
-  }
   .freq-row {
     display: flex;
     align-items: center;
     gap: 4px;
   }
-  .tx-select {
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 3px 4px;
-    max-width: 160px;
-    text-overflow: ellipsis;
-  }
-  .tx-select:focus { border-color: var(--border-hover); outline: none; }
-  .inp.freq { width: 72px; }
-  .inp.res { width: 40px; }
+  :global(.tx-select) { max-width: 160px; text-overflow: ellipsis; }
+  :global(.dw-freq) { width: 72px; }
+  :global(.dw-res) { width: 40px; }
   .export-wrap {
     margin-left: auto;
     position: relative;
   }
-  .export-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 3px 10px;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .export-btn:hover { color: var(--text); }
   .export-backdrop {
     position: fixed;
     inset: 0;
@@ -683,14 +653,4 @@
     z-index: 11;
     white-space: nowrap;
   }
-  .download-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 3px 10px;
-    cursor: pointer;
-  }
-  .download-btn:hover { color: var(--text); }
 </style>

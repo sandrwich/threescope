@@ -1,6 +1,8 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import VirtualList from './shared/VirtualList.svelte';
+  import Button from './shared/Button.svelte';
+  import Input from './shared/Input.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { sourcesStore } from '../stores/sources.svelte';
   import { ICON_DATABASE } from './shared/icons';
@@ -14,6 +16,7 @@
   } from '../data/satnogs';
   import { cachedTleHasNorad, cachedTleSatCount } from '../data/tle-loader';
   import { formatFreqHz } from '../format';
+  import { FREQ_PRESETS } from '../data/freq-presets';
 
   function truncUrl(url: string): string {
     try {
@@ -42,17 +45,6 @@
     're-entered': 'Re-entered',
     'future': 'Future',
   };
-
-  const FREQ_PRESETS: { label: string; min: number; max: number }[] = [
-    { label: 'VHF', min: 30, max: 300 },
-    { label: '2m', min: 144, max: 146 },
-    { label: 'UHF', min: 300, max: 1000 },
-    { label: '70cm', min: 430, max: 440 },
-    { label: 'L', min: 1000, max: 2000 },
-    { label: '23cm', min: 1240, max: 1300 },
-    { label: 'S', min: 2000, max: 4000 },
-    { label: 'X', min: 8000, max: 12000 },
-  ];
 
   function toggleStatus(status: string) {
     const next = new Set(filterStatuses);
@@ -209,15 +201,16 @@
 {#snippet dbIcon()}<span class="title-icon">{@html ICON_DATABASE}</span>{/snippet}
 {#snippet headerExtra()}
   {#if hasAnyFilter}
-    <button class="sdb-reset" onclick={clearFilters}>Reset</button>
+    <Button class="sdb-reset" size="xs" variant="ghost" onclick={clearFilters}>Reset</Button>
   {/if}
 {/snippet}
 <DraggableWindow id="sat-database" title="SatNOGS Database" icon={dbIcon} {headerExtra} bind:open={uiStore.satDatabaseOpen} initialX={200} initialY={100}>
   <div class="sdb">
     <!-- Search -->
     <div class="sdb-search-row">
-      <input
+      <Input
         class="sdb-search"
+        size="lg"
         type="text"
         placeholder="Search satellites..."
         bind:value={searchQuery}
@@ -232,22 +225,22 @@
       <div class="sdb-frow">
         <span class="sdb-flabel">status</span>
         {#each STATUSES as status}
-          <button class="sdb-preset" class:active={filterStatuses.has(status)} onclick={() => toggleStatus(status)}>{STATUS_LABELS[status]}</button>
+          <Button size="xs" active={filterStatuses.has(status)} onclick={() => toggleStatus(status)}>{STATUS_LABELS[status]}</Button>
         {/each}
         <span class="sdb-flabel">service</span>
-        <button class="sdb-preset" class:active={filterService === 'Amateur'} onclick={() => toggleService('Amateur')}>Amateur</button>
-        <button class="sdb-preset" class:active={filterService === 'Meteorological'} onclick={() => toggleService('Meteorological')}>Meteo</button>
+        <Button size="xs" active={filterService === 'Amateur'} onclick={() => toggleService('Amateur')}>Amateur</Button>
+        <Button size="xs" active={filterService === 'Meteorological'} onclick={() => toggleService('Meteorological')}>Meteo</Button>
         <span class="sdb-flabel">data</span>
-        <button class="sdb-preset" class:active={filterTle} onclick={() => filterTle = !filterTle}>Loaded TLE</button>
+        <Button size="xs" active={filterTle} onclick={() => filterTle = !filterTle}>Loaded TLE</Button>
       </div>
       <div class="sdb-frow">
         <span class="sdb-flabel">freq</span>
-        <input class="sdb-fnum" type="number" min="0" max="50000" bind:value={freqMin} placeholder="Min" />
+        <Input class="sdb-fnum" size="xs" type="number" min="0" max="50000" bind:value={freqMin} placeholder="Min" />
         <span class="sdb-fsep-dash">&mdash;</span>
-        <input class="sdb-fnum" type="number" min="0" max="50000" bind:value={freqMax} placeholder="Max" />
+        <Input class="sdb-fnum" size="xs" type="number" min="0" max="50000" bind:value={freqMax} placeholder="Max" />
         <span class="sdb-funit">MHz</span>
         {#each FREQ_PRESETS as p}
-          <button class="sdb-preset" class:active={freqMin === p.min && freqMax === p.max} onclick={() => applyFreqPreset(p)}>{p.label}</button>
+          <Button size="xs" active={freqMin === p.min && freqMax === p.max} onclick={() => applyFreqPreset(p)}>{p.label}</Button>
         {/each}
       </div>
     </div>
@@ -330,7 +323,7 @@
                     <span class="tx-freq">{formatFreqHz(tx.frequencyHz)}</span>
                     {#if tx.mode}<span class="tx-pill">{tx.mode}</span>{/if}
                     <span class="tx-desc">{tx.description}</span>
-                    <button class="use-btn" onclick={() => useDoppler(tx.frequencyHz)} title="Use in Doppler analysis">Use</button>
+                    <Button size="xs" onclick={() => useDoppler(tx.frequencyHz)} title="Use in Doppler analysis">Use</Button>
                   </div>
                 {/each}
               </div>
@@ -348,15 +341,15 @@
               <div class="sdb-source-hint">
                 <span class="sdb-hint-text">Available in:</span>
                 {#each availableSources as src}
-                  <button class="sdb-hint-btn" class:large={src.satCount >= 1000} onclick={() => enableSource(src.id)} title="{src.name} ({src.satCount} sats){src.satCount >= 1000 ? ' — large source' : ''}">
+                  <Button size="xs" class={src.satCount >= 1000 ? 'sdb-hint-large' : ''} onclick={() => enableSource(src.id)} title="{src.name} ({src.satCount} sats){src.satCount >= 1000 ? ' — large source' : ''}">
                     {#if src.satCount >= 1000}<svg class="sdb-warn-icon" viewBox="0 0 12 12"><path d="M6 1L1 11h10z" fill="none" stroke="currentColor" stroke-width="1.2"/><text x="6" y="9.5" text-anchor="middle" fill="currentColor" font-size="7" font-weight="bold">!</text></svg>{/if}
                     {src.name}
-                  </button>
+                  </Button>
                 {/each}
               </div>
             {/if}
             {#if isInTle && !isSelected}
-              <button class="select-btn" onclick={() => addToSelection(selectedId!)}>Select satellite</button>
+              <Button class="select-btn" onclick={() => addToSelection(selectedId!)}>Select Satellite</Button>
             {/if}
           </div>
         {/if}
@@ -375,19 +368,7 @@
   .sdb-search-row {
     margin-bottom: 6px;
   }
-  .sdb-search {
-    width: 100%;
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: 12px;
-    font-family: inherit;
-    padding: 4px 8px;
-    outline: none;
-    box-sizing: border-box;
-  }
-  .sdb-search:focus { border-color: var(--border-hover); }
-  .sdb-search::placeholder { color: var(--text-ghost); }
+  :global(.sdb-search) { width: 100%; }
 
   /* ── Filter rows (matching PassFilterWindow pattern) ── */
 
@@ -403,18 +384,7 @@
     gap: 2px;
     flex-wrap: wrap;
   }
-  .sdb-fnum {
-    width: 56px;
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 2px 3px;
-    text-align: center;
-  }
-  .sdb-fnum:focus { border-color: var(--border-hover); outline: none; }
-  .sdb-fnum::placeholder { color: var(--text-ghost); font-size: 10px; }
+  :global(.sdb-fnum) { width: 48px; }
   .sdb-flabel {
     font-size: 8px;
     color: var(--text-ghost);
@@ -426,32 +396,10 @@
   .sdb-fsep-dash { color: var(--text-ghost); font-size: 10px; }
   .sdb-funit { color: var(--text-ghost); font-size: 10px; margin: 0 4px 0 2px; }
 
-  .sdb-preset {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-ghost);
-    font-size: 9px;
-    font-family: inherit;
-    padding: 1px 5px;
-    cursor: pointer;
-  }
-  .sdb-preset:hover { color: var(--text-dim); border-color: var(--border-hover); }
-  .sdb-preset.active { color: var(--accent); border-color: var(--accent); }
-
-  .sdb-reset {
+  :global(.sdb-reset) {
     margin-left: auto;
     margin-right: 6px;
-    background: none;
-    border: none;
-    color: var(--text-ghost);
-    font-size: 9px;
-    font-family: inherit;
-    padding: 0;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    cursor: pointer;
   }
-  .sdb-reset:hover { color: var(--text-dim); }
 
   /* ── Split layout ─────────────────────────────────────── */
 
@@ -590,20 +538,6 @@
   .sat-status.alive { color: var(--live); border-color: var(--live); }
   .sat-status.dead { color: var(--danger); border-color: var(--danger); }
 
-  /* Select button */
-  .select-btn {
-    display: block;
-    width: 100%;
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 11px;
-    font-family: inherit;
-    padding: 4px 0;
-    cursor: pointer;
-  }
-  .select-btn:hover { color: var(--text); border-color: var(--border-hover); }
-
   .sdb-source-hint {
     display: flex;
     align-items: center;
@@ -615,18 +549,9 @@
     font-size: 9px;
     color: var(--text-ghost);
   }
-  .sdb-hint-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 9px;
-    font-family: inherit;
-    padding: 1px 5px;
-    cursor: pointer;
-  }
-  .sdb-hint-btn:hover { color: var(--text); border-color: var(--border-hover); }
-  .sdb-hint-btn.large { color: var(--warning); border-color: var(--warning); }
-  .sdb-hint-btn.large:hover { color: var(--warning-bright); border-color: var(--warning-bright); }
+  :global(.sdb-hint-large) { color: var(--warning); border-color: var(--warning); }
+  :global(.sdb-hint-large:hover) { color: var(--warning-bright); border-color: var(--warning-bright); }
+  :global(.select-btn) { display: flex; width: 100%; justify-content: center; }
   .sdb-warn-icon {
     width: 10px;
     height: 10px;
@@ -691,19 +616,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .use-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-ghost);
-    font-size: 9px;
-    font-family: inherit;
-    padding: 0 5px;
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    flex-shrink: 0;
-  }
-  .use-btn:hover { color: var(--text-dim); border-color: var(--border-hover); }
 
   .satnogs-link {
     display: block;
