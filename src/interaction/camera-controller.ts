@@ -59,6 +59,12 @@ export class CameraController {
     this._targetCamAngleY = y;
   }
 
+  /** Set horizontal angle to an absolute value (both current and target). Used during orbit scrub. */
+  setAngleX(value: number): void {
+    this._targetCamAngleX = value;
+    this._camAngleX = value;
+  }
+
   /** Set desired 3D look-at target (lerps toward it). */
   setTarget3d(pos: THREE.Vector3): void { this._targetTarget3d.copy(pos); }
 

@@ -19,6 +19,8 @@ export interface InputCallbacks {
   onResize(w: number, h: number): void;
   tryStartObserverDrag(): boolean;
   onObserverDrag(): void;
+  tryStartOrbitScrub(): boolean;
+  onOrbitScrub(): void;
 }
 
 /**
@@ -44,6 +46,9 @@ export class InputHandler {
   private _leftDownPos = new THREE.Vector2();
   private _leftDown = false;
 
+  // Orbit scrub drag
+  private _isDraggingOrbit = false;
+
   // UI overlay tracking
   private _pointerOverUI = false;
   private _canvas!: HTMLCanvasElement;
@@ -66,6 +71,7 @@ export class InputHandler {
   get isTouchActive(): boolean { return this._touchCount > 0 || ('ontouchstart' in window); }
   get touchCount(): number { return this._touchCount; }
   get isDraggingObserver(): boolean { return this._isDraggingObserver; }
+  get isDraggingOrbit(): boolean { return this._isDraggingOrbit; }
   get isOverUI(): boolean { return this._pointerOverUI; }
 
   // ====================== Event setup ======================
@@ -96,17 +102,24 @@ export class InputHandler {
       this._pointerOverUI = e.target !== this._canvas;
 
       // Observer marker drag
-      if (this._leftDown && !this._isDraggingObserver) {
+      if (this._leftDown && !this._isDraggingObserver && !this._isDraggingOrbit) {
         const dist = this._leftDownPos.distanceTo(this._mousePos);
         if (dist > 4) {
-          // Moved enough to start drag — check if we should drag the observer
+          // Moved enough to start drag — check observer first, then orbit scrub
           this._isDraggingObserver = this.cb.tryStartObserverDrag();
+          if (!this._isDraggingObserver) {
+            this._isDraggingOrbit = this.cb.tryStartOrbitScrub();
+          }
           this._leftDown = false; // don't re-check
         }
       }
       if (this._isDraggingObserver) {
         this.cb.onObserverDrag();
         return; // don't orbit/pan while dragging observer
+      }
+      if (this._isDraggingOrbit) {
+        this.cb.onOrbitScrub();
+        return; // don't orbit/pan while scrubbing
       }
 
       if (this._isRightDragging || this._isMiddleDragging) {
@@ -140,6 +153,9 @@ export class InputHandler {
         if (this._isDraggingObserver) {
           this._isDraggingObserver = false;
         }
+        if (this._isDraggingOrbit) {
+          this._isDraggingOrbit = false;
+        }
       }
       if (e.button === 2) this._isRightDragging = false;
       if (e.button === 1) this._isMiddleDragging = false;
@@ -162,8 +178,8 @@ export class InputHandler {
 
     // Click selection
     canvas.addEventListener('click', (e) => {
-      // Suppress click if we just finished dragging the observer
-      if (this._isDraggingObserver) return;
+      // Suppress click if we just finished dragging the observer or orbit scrub
+      if (this._isDraggingObserver || this._isDraggingOrbit) return;
       // Check if left button was released after a drag (distance > threshold)
       if (this._leftDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY)) > 4) return;
 

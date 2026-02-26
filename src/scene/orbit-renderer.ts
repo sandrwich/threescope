@@ -85,6 +85,10 @@ export class OrbitRenderer {
   private selectedSatsVersion = 0; // bumped externally when selection changes
   showNormalOrbits = true;
 
+  // Orbit scrub: cached time→position for dragging along orbit to change time
+  orbitScrubPoints: { epoch: number; sx: number; sy: number; sz: number }[] = [];
+  orbitScrubPeriod = 0; // orbital period in days (for wrap-around)
+
   // Fat pass arc (AOS → LOS thick line overlay)
   private passArcLine: Line2;
   private passArcMat: LineMaterial;
@@ -429,6 +433,9 @@ export class OrbitRenderer {
       const ECLIPSE_DIM = 0.3;
       const hiddenIds = uiStore.hiddenSelectedSats;
 
+      // Cache orbit scrub points for the first highlighted sat only
+      const scrubPts: { epoch: number; sx: number; sy: number; sz: number }[] = [];
+
       for (let si = 0; si < highlightSats.length; si++) {
         const sat = highlightSats[si];
         if (hiddenIds.has(sat.noradId)) continue;
@@ -443,6 +450,10 @@ export class OrbitRenderer {
         for (let i = 0; i <= segments; i++) {
           const t = currentEpoch + i * timeStep;
           const pos = calculatePosition(sat, t);
+          // Cache scrub points for first visible highlighted sat (one orbit only)
+          if ((si === 0 || (scrubPts.length === 0 && si > 0)) && t <= currentEpoch + periodDays) {
+            scrubPts.push({ epoch: t, sx: pos.x / DRAW_SCALE, sy: pos.y / DRAW_SCALE, sz: pos.z / DRAW_SCALE });
+          }
           // Eclipse check: Earth shadow (penumbra gradient) + Moon shadow (solar eclipse)
           let shadowFactor = earthShadowFactor(pos.x, pos.y, pos.z, sunRender);
           if (shadowFactor >= 1.0 && checkSolarEclipse) {
@@ -465,6 +476,11 @@ export class OrbitRenderer {
           px = cx; py = cy; pz = cz;
           prevDim = dim;
         }
+      }
+
+      this.orbitScrubPoints = scrubPts;
+      if (highlightSats.length > 0) {
+        this.orbitScrubPeriod = TWO_PI / highlightSats[0].meanMotion / 86400.0;
       }
 
       this.highlightBuffer.needsUpdate = true;
@@ -804,6 +820,100 @@ export class OrbitRenderer {
     if (this.satellites.length > 0) {
       this.precomputeOrbits(this.satellites, this.lastConfigEpoch);
     }
+  }
+
+  /**
+   * Analytical orbit scrub: intersect a camera ray with the orbital plane,
+   * find the closest true anomaly on the ellipse, and convert to epoch.
+   * Returns null if no highlighted sat or ray doesn't come close to the orbit.
+   */
+  scrubOrbitFromRay(
+    raycaster: THREE.Raycaster, camera: THREE.PerspectiveCamera,
+    mousePos: THREE.Vector2, currentEpoch: number, hitThresholdPx: number,
+    sat?: Satellite,
+  ): { M: number; dist: number } | null {
+    // Use provided sat, or fall back to the first satellite that has scrub points
+    if (!sat) return null;
+
+    // Get orbital plane orientation (J2-corrected)
+    const corrected = this.j2Enabled ? getCorrectedElements(sat, currentEpoch) : null;
+    const raan = corrected ? corrected.raan : sat.raan;
+    const w = corrected ? corrected.argPerigee : sat.argPerigee;
+    const inc = sat.inclination;
+    const a = sat.semiMajorAxis;
+    const e = sat.eccentricity;
+    const p = a * (1 - e * e);
+
+    // Rotation matrix: perifocal → ECI (standard, not render-space)
+    const cosO = Math.cos(raan), sinO = Math.sin(raan);
+    const cosI = Math.cos(inc), sinI = Math.sin(inc);
+    const cosW = Math.cos(w), sinW = Math.sin(w);
+
+    // Orbital plane normal in ECI = R * [0,0,1]
+    const nxEci = sinO * sinI;
+    const nyEci = -cosO * sinI;
+    const nzEci = cosI;
+    // Convert to render-space: x=eci.x, y=eci.z, z=-eci.y
+    const nx = nxEci / DRAW_SCALE * DRAW_SCALE; // just nxEci
+    const ny = nzEci;
+    const nz = -nyEci;
+
+    // Ray-plane intersection
+    const ray = raycaster.ray;
+    const denom = ray.direction.x * nx + ray.direction.y * ny + ray.direction.z * nz;
+    if (Math.abs(denom) < 1e-10) return null;
+    const t = -(ray.origin.x * nx + ray.origin.y * ny + ray.origin.z * nz) / denom;
+    if (t < 0) return null;
+
+    // Intersection point in render-space (draw-scale)
+    const ix = ray.origin.x + t * ray.direction.x;
+    const iy = ray.origin.y + t * ray.direction.y;
+    const iz = ray.origin.z + t * ray.direction.z;
+
+    // Convert to ECI (km): eci.x = render.x * DRAW_SCALE, eci.y = -render.z * DRAW_SCALE, eci.z = render.y * DRAW_SCALE
+    const eciX = ix * DRAW_SCALE;
+    const eciY = -iz * DRAW_SCALE;
+    const eciZ = iy * DRAW_SCALE;
+
+    // Project to perifocal frame: inverse of rotation matrix (= transpose)
+    const r11 = cosO * cosW - sinO * sinW * cosI;
+    const r12 = -cosO * sinW - sinO * cosW * cosI;
+    const r21 = sinO * cosW + cosO * sinW * cosI;
+    const r22 = -sinO * sinW + cosO * cosW * cosI;
+    const r31 = sinW * sinI;
+    const r32 = cosW * sinI;
+    // Transpose: perifocal = R^T * eci
+    const xpf = r11 * eciX + r21 * eciY + r31 * eciZ;
+    const ypf = r12 * eciX + r22 * eciY + r32 * eciZ;
+
+    // True anomaly from perifocal coordinates
+    let nu = Math.atan2(ypf, xpf);
+    if (nu < 0) nu += TWO_PI;
+
+    // Closest point on the ellipse at this true anomaly
+    const cosNu = Math.cos(nu);
+    const rOrbit = p / (1 + e * cosNu);
+    const exX = rOrbit * cosNu;
+    const exY = rOrbit * Math.sin(nu);
+
+    // Check screen-space distance between mouse and this ellipse point
+    // Convert ellipse point back to render-space
+    const exEciX = r11 * exX + r12 * exY;
+    const exEciY = r21 * exX + r22 * exY;
+    const exEciZ = r31 * exX + r32 * exY;
+    const tmp = new THREE.Vector3(exEciX / DRAW_SCALE, exEciZ / DRAW_SCALE, -exEciY / DRAW_SCALE);
+    tmp.project(camera);
+    const sx = (tmp.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-tmp.y * 0.5 + 0.5) * window.innerHeight;
+    const screenDist = Math.hypot(sx - mousePos.x, sy - mousePos.y);
+    if (screenDist > hitThresholdPx) return null;
+
+    // True anomaly → eccentric anomaly → mean anomaly
+    const E = Math.atan2(Math.sqrt(1 - e * e) * Math.sin(nu), e + cosNu);
+    let M = E - e * Math.sin(E);
+    if (M < 0) M += TWO_PI;
+
+    return { M, dist: screenDist };
   }
 
   private isOccludedByEarth(camPos: THREE.Vector3, p: THREE.Vector3, earthR: number): boolean {

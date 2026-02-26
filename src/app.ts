@@ -241,6 +241,8 @@ export class App {
       onResize: () => {},
       tryStartObserverDrag: () => this.tryStartObserverDrag(),
       onObserverDrag: () => this.handleObserverDrag(),
+      tryStartOrbitScrub: () => this.tryStartOrbitScrub(),
+      onOrbitScrub: () => this.handleOrbitScrub(),
     });
 
     this.setLoading(1.0, 'Ready!');
@@ -931,6 +933,74 @@ export class App {
     this.updateObserverMarker();
   }
 
+  // Orbit scrub state
+  private scrubStartCamAngleX = 0;
+  private scrubBaseEpoch = 0;
+  private scrubInitDM = 0;    // initial M offset from M0 (shortest path, clamped once at start)
+  private scrubAccumM = 0;    // accumulated mean anomaly delta since first hit (continuous)
+  private scrubLastM = 0;     // last raw M for wrap detection
+  private scrubSat: Satellite | null = null;
+
+  private tryStartOrbitScrub(): boolean {
+    if (this.viewMode !== ViewMode.VIEW_3D) return false;
+    this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
+    this.scrubSat = this.selectedSats.values().next().value ?? null;
+    if (!this.scrubSat) return false;
+    const hit = this.orbitRenderer.scrubOrbitFromRay(
+      this.raycaster, this.camera3d, this.input.mousePos, timeStore.epoch, 20, this.scrubSat,
+    );
+    if (!hit) return false;
+
+    this.scrubStartCamAngleX = this.camera.angleX;
+    this.scrubBaseEpoch = timeStore.epoch;
+    this.scrubLastM = hit.M;
+    this.scrubAccumM = 0;
+
+    // Compute M0 (mean anomaly at base epoch) and initial offset to click point
+    const sat = this.scrubSat;
+    const TWO_PI = 2 * Math.PI;
+    const deltaSec = epochToUnix(timeStore.epoch) - epochToUnix(sat.epochDays);
+    let M0 = (sat.meanAnomaly + sat.meanMotion * deltaSec) % TWO_PI;
+    if (M0 < 0) M0 += TWO_PI;
+    let initDM = hit.M - M0;
+    if (initDM > Math.PI) initDM -= TWO_PI;
+    if (initDM < -Math.PI) initDM += TWO_PI;
+    this.scrubInitDM = initDM;
+
+    this.handleOrbitScrub();
+    return true;
+  }
+
+  private handleOrbitScrub() {
+    if (!this.scrubSat) return;
+    this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
+    const hit = this.orbitRenderer.scrubOrbitFromRay(
+      this.raycaster, this.camera3d, this.input.mousePos, this.scrubBaseEpoch, 200, this.scrubSat,
+    );
+    if (!hit) return;
+
+    // Track cumulative mean anomaly delta (detect wraps at M = 0/2π boundary)
+    const TWO_PI = 2 * Math.PI;
+    let dM = hit.M - this.scrubLastM;
+    if (dM > Math.PI) dM -= TWO_PI;
+    if (dM < -Math.PI) dM += TWO_PI;
+    this.scrubAccumM += dM;
+    this.scrubLastM = hit.M;
+
+    // Total mean anomaly offset from M0 = initial offset + accumulated delta
+    const totalDM = this.scrubInitDM + this.scrubAccumM;
+    const epoch = this.scrubBaseEpoch + totalDM / this.scrubSat.meanMotion / 86400;
+
+    timeStore.epoch = epoch;
+    timeStore.paused = true;
+
+    // Compensate camera for Earth rotation using continuous rate
+    const epochDeltaDays = epoch - this.scrubBaseEpoch;
+    const earthRotDelta = epochDeltaDays * 360.98564736629 * DEG2RAD;
+    this.camera.setAngleX(this.scrubStartCamAngleX - earthRotDelta);
+    this.renderer.domElement.style.cursor = 'grabbing';
+  }
+
   /** Handle click/tap satellite selection */
   private handleClick() {
     if (this.hoveredSat) this.toggleSat(this.hoveredSat);
@@ -1052,9 +1122,11 @@ export class App {
     this.camera.updateFrame(dt, earthRotRad, isOrreryOrPlanet);
     this.camera3d.updateMatrixWorld();
 
-    // Hover detection (skip when pointer is over UI or in planet/orrery view)
+    // Hover detection (skip during orbit scrub, over UI, or in planet/orrery view)
     this.hoveredSat = null;
-    if (this.input.isOverUI) {
+    if (this.input.isDraggingOrbit) {
+      // Don't detect hover during orbit scrub — prevents accidental selection changes
+    } else if (this.input.isOverUI) {
       this.renderer.domElement.style.cursor = '';
     } else if (this.orreryCtrl.isOrreryMode) {
       const hovered = this.orreryCtrl.updateHover(this.raycaster, this.input.mouseNDC);
@@ -1067,11 +1139,24 @@ export class App {
       }
     }
 
-    // Observer drag cursor
-    if (this.input.isDraggingObserver) {
+    // Drag cursors (observer / orbit scrub)
+    if (this.input.isDraggingObserver || this.input.isDraggingOrbit) {
       this.renderer.domElement.style.cursor = 'grabbing';
     } else if (!this.hoveredSat && !this.orreryCtrl.isOrreryMode && !this.input.isOverUI) {
-      this.renderer.domElement.style.cursor = this.hitTestObserver() ? 'grab' : '';
+      if (this.hitTestObserver()) {
+        this.renderer.domElement.style.cursor = 'grab';
+      } else if (this.viewMode === ViewMode.VIEW_3D && this.selectedSats.size > 0) {
+        const firstSel = this.selectedSats.values().next().value;
+        if (firstSel) {
+          this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
+          const near = this.orbitRenderer.scrubOrbitFromRay(this.raycaster, this.camera3d, this.input.mousePos, timeStore.epoch, 20, firstSel);
+          this.renderer.domElement.style.cursor = near ? 'grab' : '';
+        } else {
+          this.renderer.domElement.style.cursor = '';
+        }
+      } else {
+        this.renderer.domElement.style.cursor = '';
+      }
     }
 
     // activeSat = hovered, or first selected if nothing hovered
