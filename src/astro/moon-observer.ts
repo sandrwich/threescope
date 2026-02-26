@@ -3,25 +3,15 @@
  * No THREE.js dependency — returns plain objects.
  */
 import { DEG2RAD } from '../constants';
-import { epochToJulianDate, normalizeEpoch } from './epoch';
+import { computeMoonEcliptic } from './moon-core';
 import { sunDirectionECI } from './eclipse';
 
 /**
  * Compute Moon position in standard ECI (km).
- * Same simplified lunar theory as moon.ts but returns plain {x,y,z}.
+ * Uses the shared Meeus lunar ephemeris (~0.1° accuracy).
  */
 export function moonPositionECI(epoch: number): { x: number; y: number; z: number } {
-  epoch = normalizeEpoch(epoch);
-  const jd = epochToJulianDate(epoch);
-  const D = jd - 2451545.0;
-
-  const L = ((218.316 + 13.176396 * D) % 360.0) * DEG2RAD;
-  const M = ((134.963 + 13.064993 * D) % 360.0) * DEG2RAD;
-  const F = ((93.272 + 13.229350 * D) % 360.0) * DEG2RAD;
-
-  const lambda = L + 6.289 * DEG2RAD * Math.sin(M);
-  const beta = 5.128 * DEG2RAD * Math.sin(F);
-  const distKm = 385000.0 - 20905.0 * Math.cos(M);
+  const { lambda, beta, distKm } = computeMoonEcliptic(epoch);
 
   const xEcl = distKm * Math.cos(beta) * Math.cos(lambda);
   const yEcl = distKm * Math.cos(beta) * Math.sin(lambda);

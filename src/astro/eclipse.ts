@@ -3,7 +3,7 @@
  * Uses a cylindrical shadow model — accurate enough for LEO/MEO pass prediction.
  * No Three.js dependency so it can run in the pass Web Worker.
  */
-import { DEG2RAD, RAD2DEG, EARTH_RADIUS_KM } from '../constants';
+import { DEG2RAD, RAD2DEG, EARTH_RADIUS_KM, MOON_RADIUS_KM } from '../constants';
 import { epochToJulianDate, normalizeEpoch } from './epoch';
 import { getAzEl } from './az-el';
 
@@ -49,34 +49,97 @@ export function sunDirectionECI(epoch: number): { x: number; y: number; z: numbe
   return { x: x / len, y: y / len, z: z / len };
 }
 
+// Sun angular radius as seen from Earth (radians)
+const SUN_DISTANCE_KM = 149597870.7;
+const SUN_RADIUS_KM = 696000;
+// Half-angles of umbra and penumbra cones
+const UMBRA_HALF = Math.asin((SUN_RADIUS_KM - EARTH_RADIUS_KM) / SUN_DISTANCE_KM);
+const PENUMBRA_HALF = Math.asin((SUN_RADIUS_KM + EARTH_RADIUS_KM) / SUN_DISTANCE_KM);
+
 /**
- * Check if a satellite at ECI position (km) is in Earth's cylindrical shadow.
- * Returns true if eclipsed (in shadow), false if sunlit.
+ * Compute Earth shadow factor for a satellite at ECI position (km).
+ * Returns 1.0 = fully sunlit, 0.0 = fully in umbra, intermediate = penumbra.
  *
- * Cylindrical model: treats Earth's shadow as an infinite cylinder with
- * radius = EARTH_RADIUS_KM extending away from the Sun. This ignores
- * the penumbra/umbra cone geometry but is accurate to within ~1% for
- * LEO satellites where the shadow boundary is nearly parallel.
+ * Conical model: umbra narrows, penumbra widens with distance from Earth.
+ * At distance d along the anti-sun axis:
+ *   umbra radius   = R_earth - d * tan(umbraHalf)
+ *   penumbra radius = R_earth + d * tan(penumbraHalf)
  */
-export function isEclipsed(
+export function earthShadowFactor(
   satX: number, satY: number, satZ: number,
   sunDir: { x: number; y: number; z: number },
-): boolean {
+): number {
   // Project satellite position onto the Sun direction vector.
-  // dot > 0 means the satellite is on the sunward side of Earth — always lit.
-  // dot < 0 means it's on the anti-sun side — potentially in shadow.
   const dot = satX * sunDir.x + satY * sunDir.y + satZ * sunDir.z;
-  if (dot > 0) return false;
+  if (dot > 0) return 1.0; // sunward side — always lit
 
-  // Compute perpendicular distance from the Earth–Sun axis.
-  // Subtract the parallel component to get only the perpendicular part.
+  // Distance along shadow axis (positive into shadow)
+  const d = -dot;
+
+  // Perpendicular distance from the Earth–Sun axis
   const projX = satX - dot * sunDir.x;
   const projY = satY - dot * sunDir.y;
   const projZ = satZ - dot * sunDir.z;
   const perpDist = Math.sqrt(projX * projX + projY * projY + projZ * projZ);
 
-  // If the satellite is closer to the axis than Earth's radius, it's in shadow.
-  return perpDist < EARTH_RADIUS_KM;
+  // Conical shadow radii at this distance
+  const umbraR = EARTH_RADIUS_KM - d * Math.tan(UMBRA_HALF);
+  const penumbraR = EARTH_RADIUS_KM + d * Math.tan(PENUMBRA_HALF);
+
+  if (umbraR > 0 && perpDist < umbraR) return 0.0; // fully in umbra
+  if (perpDist >= penumbraR) return 1.0; // fully sunlit
+
+  // Penumbra: smooth gradient between umbra edge and penumbra edge
+  const innerR = Math.max(umbraR, 0);
+  return (perpDist - innerR) / (penumbraR - innerR);
+}
+
+/**
+ * Boolean eclipse check (backward-compatible wrapper).
+ * Returns true if satellite is in umbra OR penumbra (any shadow).
+ */
+export function isEclipsed(
+  satX: number, satY: number, satZ: number,
+  sunDir: { x: number; y: number; z: number },
+): boolean {
+  return earthShadowFactor(satX, satY, satZ, sunDir) < 1.0;
+}
+
+const SUN_ANG_RADIUS = 0.00465; // radians (~0.267°)
+
+/**
+ * Check if a point in space is in the Moon's shadow (solar eclipse).
+ * Returns true if the Moon partially or totally blocks the Sun as seen from the point.
+ * All positions must be in the same coordinate system (ECI or render-space).
+ */
+export function isSolarEclipsed(
+  px: number, py: number, pz: number,
+  moonPos: { x: number; y: number; z: number },
+  sunDir: { x: number; y: number; z: number },
+): boolean {
+  const toMoonX = moonPos.x - px, toMoonY = moonPos.y - py, toMoonZ = moonPos.z - pz;
+  const moonDist = Math.sqrt(toMoonX * toMoonX + toMoonY * toMoonY + toMoonZ * toMoonZ);
+  if (moonDist === 0) return false;
+  const dot = (toMoonX / moonDist) * sunDir.x + (toMoonY / moonDist) * sunDir.y + (toMoonZ / moonDist) * sunDir.z;
+  const sep = Math.acos(Math.max(-1, Math.min(1, dot)));
+  const moonAngR = Math.atan(MOON_RADIUS_KM / moonDist);
+  return sep < moonAngR + SUN_ANG_RADIUS;
+}
+
+/**
+ * Quick check: is a solar eclipse geometrically possible anywhere near Earth?
+ * Use as an early exit to skip per-vertex isSolarEclipsed calls.
+ */
+export function solarEclipsePossible(
+  moonPos: { x: number; y: number; z: number },
+  sunDir: { x: number; y: number; z: number },
+): boolean {
+  const dist = Math.sqrt(moonPos.x * moonPos.x + moonPos.y * moonPos.y + moonPos.z * moonPos.z);
+  if (dist === 0) return false;
+  const dot = (moonPos.x / dist) * sunDir.x + (moonPos.y / dist) * sunDir.y + (moonPos.z / dist) * sunDir.z;
+  const sep = Math.acos(Math.max(-1, Math.min(1, dot)));
+  // Moon angular radius from Earth center + Sun angular radius + parallax margin (~0.02 rad)
+  return sep < Math.atan(MOON_RADIUS_KM / dist) + SUN_ANG_RADIUS + 0.02;
 }
 
 /**

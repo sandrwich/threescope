@@ -2,7 +2,9 @@ export interface PassSkyPoint {
   az: number;   // degrees 0-360
   el: number;   // degrees 0-90
   t: number;    // TLE epoch (for interpolation)
-  eclipsed?: boolean;  // true if satellite is in Earth's shadow at this point
+  shadowFactor?: number;  // 1.0 = fully sunlit, 0.0 = full shadow (Earth umbra or solar eclipse)
+  mag?: number;           // apparent visual magnitude at this point (only when sunlit + stdMag known)
+  rangeKm?: number;       // slant range from observer (km)
 }
 
 export interface SatellitePass {

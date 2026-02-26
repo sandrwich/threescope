@@ -2,14 +2,16 @@ import * as THREE from 'three';
 import type { Satellite, Marker } from '../types';
 import type { AppConfig, MarkerGroup } from '../types';
 import { parseHexColor } from '../config';
-import { MAP_W, MAP_H, TWO_PI, FP_RINGS, FP_PTS, DEG2RAD } from '../constants';
+import { MAP_W, MAP_H, TWO_PI, FP_RINGS, FP_PTS, DEG2RAD, MOON_RADIUS_KM } from '../constants';
 import { ORBIT_COLORS } from './orbit-renderer';
 import { computeFootprintGrid } from '../astro/footprint';
 import { getMapCoordinates } from '../astro/coordinates';
 import { calculatePosition } from '../astro/propagator';
 import { epochToGmst } from '../astro/epoch';
-import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
+import { sunDirectionECI, earthShadowFactor, isSolarEclipsed, solarEclipsePossible } from '../astro/eclipse';
+import { moonPositionECI } from '../astro/moon-observer';
 import { calculateSunPosition } from '../astro/sun';
+import { calculateMoonPosition } from '../astro/moon';
 import { computeApsis2D } from '../astro/apsis';
 import { uiStore } from '../stores/ui.svelte';
 import { createPinTexture, createDiamondTexture } from './marker-manager';
@@ -74,6 +76,8 @@ export class MapRenderer {
         dayTexture: { value: dayTex },
         nightTexture: { value: nightTex },
         sunDir: { value: new THREE.Vector3(1, 0, 0) },
+        moonPos: { value: new THREE.Vector3(0, 0, 0) },
+        moonRadius: { value: MOON_RADIUS_KM },
         showNight: { value: 1.0 },
       },
       vertexShader: `
@@ -87,21 +91,38 @@ export class MapRenderer {
         uniform sampler2D dayTexture;
         uniform sampler2D nightTexture;
         uniform vec3 sunDir;
+        uniform vec3 moonPos;
+        uniform float moonRadius;
         uniform float showNight;
         varying vec2 vUv;
+        const float EARTH_R = 6371.0;
+        const float SUN_ANG_R = 0.00465;
         void main() {
           vec4 day = texture2D(dayTexture, vUv);
-          if (showNight < 0.5) {
-            gl_FragColor = day;
-            return;
-          }
-          vec4 night = texture2D(nightTexture, vUv);
           float theta = (vUv.x - 0.5) * 6.28318530718;
           float phi = vUv.y * 3.14159265359;
           vec3 normal = vec3(cos(theta)*sin(phi), cos(phi), -sin(theta)*sin(phi));
-          float intensity = dot(normal, sunDir);
-          float blend = smoothstep(-0.15, 0.15, intensity);
-          gl_FragColor = mix(night, day, blend);
+
+          // Solar eclipse shadow
+          float eclipseFactor = 1.0;
+          float rawIntensity = dot(normal, sunDir);
+          if (rawIntensity > -0.15) {
+            vec3 surfPos = normal * EARTH_R;
+            vec3 toMoon = moonPos - surfPos;
+            float moonDist = length(toMoon);
+            float sep = acos(clamp(dot(toMoon / moonDist, sunDir), -1.0, 1.0));
+            float moonAngR = atan(moonRadius / moonDist);
+            eclipseFactor = smoothstep(abs(moonAngR - SUN_ANG_R), moonAngR + SUN_ANG_R, sep);
+          }
+
+          if (showNight < 0.5) {
+            gl_FragColor = day * eclipseFactor;
+            return;
+          }
+          vec4 night = texture2D(nightTexture, vUv);
+          float blend = smoothstep(-0.15, 0.15, rawIntensity);
+          vec4 dayColor = mix(night, day, eclipseFactor);
+          gl_FragColor = mix(night, dayColor, blend);
         }
       `,
       side: THREE.DoubleSide,
@@ -358,12 +379,16 @@ export class MapRenderer {
   update(params: MapUpdateParams) {
     const { epoch, gmstDeg, cfg, satellites, hoveredSat, selectedSats, cam2dZoom, camera2d } = params;
 
-    // Update map shader sun direction
+    // Update map shader sun + moon direction for terminator and eclipse shadow
     this.mapMaterial.uniforms.showNight.value = cfg.showNightLights ? 1.0 : 0.0;
     const sunEci = calculateSunPosition(epoch);
     const earthRotRad = (gmstDeg + cfg.earthRotationOffset) * DEG2RAD;
-    const sunEcef = sunEci.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
+    const yAxis = new THREE.Vector3(0, 1, 0);
+    const sunEcef = sunEci.clone().applyAxisAngle(yAxis, -earthRotRad);
     this.mapMaterial.uniforms.sunDir.value.copy(sunEcef);
+    const moonRender = calculateMoonPosition(epoch);
+    const moonEcef = moonRender.applyAxisAngle(yAxis, -earthRotRad);
+    this.mapMaterial.uniforms.moonPos.value.copy(moonEcef);
 
     // Build set of sats needing highlight (ground track, footprint, apsis)
     // Keep hidden sats in array to preserve color indices
@@ -385,9 +410,12 @@ export class MapRenderer {
       const col = this.hlTrackColorBuffer2d.array as Float32Array;
       let vi = 0;
 
-      // Sun direction in render-space for eclipse checks
+      // Sun direction + Moon position in render-space for eclipse checks
       const sunEci = sunDirectionECI(epoch);
       const sunRender = { x: sunEci.x, y: sunEci.z, z: -sunEci.y };
+      const moonEci = moonPositionECI(epoch);
+      const moonRender = { x: moonEci.x, y: moonEci.z, z: -moonEci.y };
+      const checkSolarEclipse = solarEclipsePossible(moonRender, sunRender);
       const ECLIPSE_DIM = 0.3;
 
       for (let si = 0; si < hlSats.length; si++) {
@@ -405,7 +433,9 @@ export class MapRenderer {
           const pos = calculatePosition(sat, t);
           const gm = epochToGmst(t);
           trackPts.push(getMapCoordinates(pos, gm, cfg.earthRotationOffset));
-          eclipseDim.push(isEclipsed(pos.x, pos.y, pos.z, sunRender) ? ECLIPSE_DIM : 1.0);
+          let shadowFactor = earthShadowFactor(pos.x, pos.y, pos.z, sunRender);
+          if (shadowFactor >= 1.0 && checkSolarEclipse && isSolarEclipsed(pos.x, pos.y, pos.z, moonRender, sunRender)) shadowFactor = 0.0;
+          eclipseDim.push(ECLIPSE_DIM + shadowFactor * (1.0 - ECLIPSE_DIM));
         }
 
         for (let off = -1; off <= 1; off++) {

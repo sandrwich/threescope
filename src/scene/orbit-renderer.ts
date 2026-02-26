@@ -9,7 +9,8 @@ import { DRAW_SCALE, EARTH_RADIUS_KM, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, SA
 import { parseHexColor } from '../config';
 import { calculatePosition, getCorrectedElements } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
-import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
+import { sunDirectionECI, earthShadowFactor, isSolarEclipsed, solarEclipsePossible } from '../astro/eclipse';
+import { moonPositionECI } from '../astro/moon-observer';
 import { uiStore } from '../stores/ui.svelte';
 import { observerStore } from '../stores/observer.svelte';
 import { latLonToSurface } from '../astro/coordinates';
@@ -421,6 +422,10 @@ export class OrbitRenderer {
       const sunEci = sunDirectionECI(currentEpoch);
       const sunRX = sunEci.x, sunRY = sunEci.z, sunRZ = -sunEci.y;
       const sunRender = { x: sunRX, y: sunRY, z: sunRZ };
+      // Moon position in render-space for solar eclipse check
+      const moonEci = moonPositionECI(currentEpoch);
+      const moonRender = { x: moonEci.x, y: moonEci.z, z: -moonEci.y };
+      const checkSolarEclipse = solarEclipsePossible(moonRender, sunRender);
       const ECLIPSE_DIM = 0.3;
       const hiddenIds = uiStore.hiddenSelectedSats;
 
@@ -438,8 +443,14 @@ export class OrbitRenderer {
         for (let i = 0; i <= segments; i++) {
           const t = currentEpoch + i * timeStep;
           const pos = calculatePosition(sat, t);
-          // Eclipse check in render-space km (orthogonal transform preserves distances)
-          const dim = isEclipsed(pos.x, pos.y, pos.z, sunRender) ? ECLIPSE_DIM : 1.0;
+          // Eclipse check: Earth shadow (penumbra gradient) + Moon shadow (solar eclipse)
+          let shadowFactor = earthShadowFactor(pos.x, pos.y, pos.z, sunRender);
+          if (shadowFactor >= 1.0 && checkSolarEclipse) {
+            // Per-vertex Moon position for accuracy over multi-hour orbits
+            const me = moonPositionECI(t);
+            if (isSolarEclipsed(pos.x, pos.y, pos.z, { x: me.x, y: me.z, z: -me.y }, sunRender)) shadowFactor = 0.0;
+          }
+          const dim = ECLIPSE_DIM + shadowFactor * (1.0 - ECLIPSE_DIM);
           const cx = pos.x / DRAW_SCALE;
           const cy = pos.y / DRAW_SCALE;
           const cz = pos.z / DRAW_SCALE;
@@ -551,12 +562,21 @@ export class OrbitRenderer {
             const arcDuration = pass.losEpoch - pass.aosEpoch;
             const arcSteps = 60;
             const arcTimeStep = arcDuration / arcSteps;
+            // Use Moon/Sun at pass midpoint (not current epoch) for consistent eclipse check
+            const arcMidEpoch = (pass.aosEpoch + pass.losEpoch) / 2;
+            const arcSunEci = sunDirectionECI(arcMidEpoch);
+            const arcSunR = { x: arcSunEci.x, y: arcSunEci.z, z: -arcSunEci.y };
+            const arcMoonEci = moonPositionECI(arcMidEpoch);
+            const arcMoonR = { x: arcMoonEci.x, y: arcMoonEci.z, z: -arcMoonEci.y };
+            const arcSolarEcl = solarEclipsePossible(arcMoonR, arcSunR);
             const positions: number[] = [];
             const colors: number[] = [];
             for (let i = 0; i <= arcSteps; i++) {
               const t = pass.aosEpoch + i * arcTimeStep;
               const pos = calculatePosition(arcSat, t);
-              const dim = isEclipsed(pos.x, pos.y, pos.z, sunRender) ? ECLIPSE_DIM : 1.0;
+              let arcShadow = earthShadowFactor(pos.x, pos.y, pos.z, arcSunR);
+              if (arcShadow >= 1.0 && arcSolarEcl && isSolarEclipsed(pos.x, pos.y, pos.z, arcMoonR, arcSunR)) arcShadow = 0.0;
+              const dim = ECLIPSE_DIM + arcShadow * (1.0 - ECLIPSE_DIM);
               positions.push(pos.x / DRAW_SCALE, pos.y / DRAW_SCALE, pos.z / DRAW_SCALE);
               colors.push(cr * dim, cg * dim, cb * dim);
             }

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { EARTH_RADIUS_KM, DRAW_SCALE, DEG2RAD } from '../constants';
+import { EARTH_RADIUS_KM, MOON_RADIUS_KM, DRAW_SCALE, DEG2RAD } from '../constants';
 import { calculateSunPosition } from '../astro/sun';
+import { calculateMoonPosition } from '../astro/moon';
 
 import earthVertSrc from '../shaders/earth-daynight.vert.glsl?raw';
 import earthFragSrc from '../shaders/earth-daynight.frag.glsl?raw';
@@ -23,6 +24,8 @@ export class Earth {
         normalMap: { value: null },
         displacementMap: { value: null },
         sunDir: { value: new THREE.Vector3(1, 0, 0) },
+        moonPos: { value: new THREE.Vector3(0, 0, 0) },
+        moonRadius: { value: MOON_RADIUS_KM },
         showNight: { value: 1.0 },
         nightEmission: { value: 1.0 },
         hasNormalMap: { value: 0.0 },
@@ -115,8 +118,14 @@ export class Earth {
 
     const sunEci = calculateSunPosition(currentEpoch);
     const earthRotRad = (gmstDeg + earthOffset) * DEG2RAD;
-    const sunEcef = sunEci.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
+    const yAxis = new THREE.Vector3(0, 1, 0);
+    const sunEcef = sunEci.clone().applyAxisAngle(yAxis, -earthRotRad);
     this.material.uniforms.sunDir.value.copy(sunEcef);
+
+    // Moon position in ECEF for solar eclipse shadow
+    const moonRender = calculateMoonPosition(currentEpoch);
+    const moonEcef = moonRender.applyAxisAngle(yAxis, -earthRotRad);
+    this.material.uniforms.moonPos.value.copy(moonEcef);
   }
 
   setNightEmission(value: number) {

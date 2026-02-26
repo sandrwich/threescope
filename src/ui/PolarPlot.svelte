@@ -3,9 +3,14 @@
   import { uiStore } from '../stores/ui.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { ICON_POLAR } from './shared/icons';
-  import { SAT_COLORS } from '../constants';
+  import { SAT_COLORS, DEG2RAD, MOON_RADIUS_KM } from '../constants';
   import { palette } from './shared/theme';
   import { initHiDPICanvas } from './shared/canvas';
+  import { moonPositionECI } from '../astro/moon-observer';
+  import { sunDirectionECI } from '../astro/eclipse';
+  import { getAzEl } from '../astro/az-el';
+  import { epochToGmst } from '../astro/epoch';
+  import { observerStore } from '../stores/observer.svelte';
 
   const SIZE = 280;
   const CX = SIZE / 2;
@@ -29,6 +34,15 @@
       x: CX + r * Math.sin(azRad),
       y: CY - r * Math.cos(azRad),
     };
+  }
+
+  function angularSeparation(az1: number, el1: number, az2: number, el2: number): number {
+    const toRad = Math.PI / 180;
+    const dAz = (az2 - az1) * toRad;
+    const lat1 = el1 * toRad, lat2 = el2 * toRad;
+    const a = Math.sin((lat2 - lat1) / 2) ** 2 +
+              Math.cos(lat1) * Math.cos(lat2) * Math.sin(dAz / 2) ** 2;
+    return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) / toRad;
   }
 
   // ── Time scrubbing via pointer interaction on the track ──
@@ -142,22 +156,37 @@
       const c = SAT_COLORS[pass.satColorIndex % SAT_COLORS.length];
       const cssColor = `rgb(${c[0]},${c[1]},${c[2]})`;
 
-      // Sky track — per-segment eclipse coloring
+      // Sky track — per-segment shadow + magnitude bloom via shadowBlur
       if (pass.skyPath.length > 1) {
-        const eclColor = `rgba(${c[0]},${c[1]},${c[2]},0.25)`;
-        const sunColor = `rgba(${c[0]},${c[1]},${c[2]},0.8)`;
+        const isDarkSky = pass.sunAlt < -6;
+
+        // Main colored line with magnitude bloom
         ctx.lineWidth = 2;
         for (let i = 1; i < pass.skyPath.length; i++) {
           const prev = pass.skyPath[i - 1];
           const cur = pass.skyPath[i];
           const p0 = azElToXY(prev.az, prev.el);
           const p1 = azElToXY(cur.az, cur.el);
-          ctx.strokeStyle = cur.eclipsed ? eclColor : sunColor;
+          const sf = cur.shadowFactor ?? 1.0;
+          const alpha = 0.15 + sf * 0.85;
+          const boost = 1.0 + sf * 0.3;
+          const r = Math.min(255, Math.round(c[0] * boost));
+          const g = Math.min(255, Math.round(c[1] * boost));
+          const b = Math.min(255, Math.round(c[2] * boost));
+          if (isDarkSky && sf > 0 && cur.mag !== undefined) {
+            const brightness = Math.max(0, Math.min(1, (7 - cur.mag) / 9));
+            ctx.shadowColor = 'rgba(255,255,255,0.9)';
+            ctx.shadowBlur = brightness * sf * 16;
+          } else {
+            ctx.shadowBlur = 0;
+          }
+          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
           ctx.beginPath();
           ctx.moveTo(p0.x, p0.y);
           ctx.lineTo(p1.x, p1.y);
           ctx.stroke();
         }
+        ctx.shadowBlur = 0;
 
         // AOS marker (cyan square)
         const aos = azElToXY(pass.skyPath[0].az, pass.skyPath[0].el);
@@ -195,6 +224,43 @@
         ctx.globalAlpha = 1;
       }
 
+      // Solar eclipse overlay (Sun + Moon discs)
+      if (observerStore.isSet) {
+        const ep = epoch;
+        const gmstRad = epochToGmst(ep) * DEG2RAD;
+        const obs = observerStore.location;
+        const sunDir = sunDirectionECI(ep);
+        const sunAzEl = getAzEl(sunDir.x * 1e6, sunDir.y * 1e6, sunDir.z * 1e6, gmstRad, obs.lat, obs.lon, obs.alt);
+        if (sunAzEl.el > 0) {
+          const moonEci = moonPositionECI(ep);
+          const moonAzEl = getAzEl(moonEci.x, moonEci.y, moonEci.z, gmstRad, obs.lat, obs.lon, obs.alt);
+          if (moonAzEl.el > 0) {
+            const sepDeg = angularSeparation(sunAzEl.az, sunAzEl.el, moonAzEl.az, moonAzEl.el);
+            const moonDistKm = Math.sqrt(moonEci.x ** 2 + moonEci.y ** 2 + moonEci.z ** 2);
+            const moonAngDeg = (MOON_RADIUS_KM / moonDistKm) * (180 / Math.PI);
+            const sunAngDeg = 0.267;
+            if (sepDeg < moonAngDeg + sunAngDeg + 2.0) {
+              const degPerPx = 90 / R_MAX;
+              const sunXY = azElToXY(sunAzEl.az, sunAzEl.el);
+              const moonXY = azElToXY(moonAzEl.az, moonAzEl.el);
+              const sunRPx = Math.max(sunAngDeg / degPerPx, 4);
+              const moonRPx = Math.max(moonAngDeg / degPerPx, 3.5);
+              ctx.globalAlpha = 0.4;
+              ctx.fillStyle = '#ffcc00';
+              ctx.beginPath();
+              ctx.arc(sunXY.x, sunXY.y, sunRPx, 0, 2 * Math.PI);
+              ctx.fill();
+              ctx.fillStyle = '#111';
+              ctx.globalAlpha = 0.9;
+              ctx.beginPath();
+              ctx.arc(moonXY.x, moonXY.y, moonRPx, 0, 2 * Math.PI);
+              ctx.fill();
+              ctx.globalAlpha = 1;
+            }
+          }
+        }
+      }
+
       // Legend (top-left)
       ctx.font = `9px ${font}`;
       ctx.textAlign = 'left';
@@ -223,8 +289,8 @@
       ctx.fillText('TCA', 14, ly + 3);
 
       // Sunlit / eclipsed legend (top-right, only if pass has mixed segments)
-      const hasEcl = pass.skyPath.some(p => p.eclipsed);
-      const hasSun = pass.skyPath.some(p => !p.eclipsed);
+      const hasEcl = pass.skyPath.some(p => (p.shadowFactor ?? 1.0) < 1.0);
+      const hasSun = pass.skyPath.some(p => (p.shadowFactor ?? 1.0) > 0.0);
       if (hasEcl) {
         ctx.textAlign = 'right';
         let ry = 8;
@@ -289,6 +355,25 @@
           ctx.textAlign = 'right';
           ctx.fillStyle = palette.textMuted;
           ctx.fillText(`${live.az.toFixed(1)}\u00B0 az  ${live.el.toFixed(1)}\u00B0 el`, SIZE - 8, row2Y);
+        }
+        // Row 3: range + magnitude at current time
+        const row3Y = row2Y + 14;
+        const nearest = pass.skyPath.reduce((best, p) =>
+          Math.abs(p.t - epoch) < Math.abs(best.t - epoch) ? p : best
+        );
+        ctx.textAlign = 'left';
+        if (nearest.rangeKm !== undefined) {
+          ctx.fillStyle = palette.textFaint;
+          ctx.fillText(`Range ${Math.round(nearest.rangeKm)} km`, 8, row3Y);
+        }
+        if (nearest.mag !== undefined) {
+          ctx.textAlign = 'right';
+          ctx.fillStyle = palette.textMuted;
+          ctx.fillText(`mag ${nearest.mag.toFixed(1)}`, SIZE - 8, row3Y);
+        } else if ((nearest.shadowFactor ?? 1) < 1) {
+          ctx.textAlign = 'right';
+          ctx.fillStyle = palette.textGhost;
+          ctx.fillText('eclipsed', SIZE - 8, row3Y);
         }
       } else if (epoch < pass.aosEpoch) {
         const sec = (pass.aosEpoch - epoch) * 86400;

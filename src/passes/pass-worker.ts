@@ -5,7 +5,8 @@
 import { twoline2satrec, propagate } from 'satellite.js';
 import { normalizeEpoch, epochToUnix, epochToGmst } from '../astro/epoch';
 import { getAzEl } from '../astro/az-el';
-import { sunDirectionECI, isEclipsed, sunAltitude, solarElongation } from '../astro/eclipse';
+import { sunDirectionECI, isEclipsed, earthShadowFactor, isSolarEclipsed, solarEclipsePossible, sunAltitude, solarElongation } from '../astro/eclipse';
+import { moonPositionECI } from '../astro/moon-observer';
 import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } from '../astro/magnitude';
 import type { PassRequest, PassResponse, PassPartial, SatellitePass, PassProgress } from './pass-types';
 
@@ -154,16 +155,20 @@ function computePassesForSat(
           // Re-sample sky path at ~10s intervals for accurate filtering
           {
             const subStep = 10 / 86400; // 10 seconds in days
-            // Sun direction barely moves during a pass — compute once at midpoint
+            // Sun/Moon barely move during a pass — compute once at midpoint
             const midEpoch = (currentAosEpoch + losEpoch) / 2;
             const passSunDir = sunDirectionECI(midEpoch);
-            const refined: { az: number; el: number; t: number; eclipsed?: boolean }[] = [];
+            const passMoonPos = moonPositionECI(midEpoch);
+            const passSolarEcl = solarEclipsePossible(passMoonPos, passSunDir);
+            const refined: { az: number; el: number; t: number; shadowFactor?: number }[] = [];
             for (let st = currentAosEpoch; st <= losEpoch; st += subStep) {
               const sp = propagateAtEpoch(satrec, st);
               if (sp) {
                 const sg = epochToGmst(st) * DEG2RAD;
                 const sae = getAzEl(sp.x, sp.y, sp.z, sg, obsLat, obsLon, obsAlt);
-                refined.push({ az: sae.az, el: sae.el, t: st, eclipsed: isEclipsed(sp.x, sp.y, sp.z, passSunDir) });
+                let sf = earthShadowFactor(sp.x, sp.y, sp.z, passSunDir);
+                if (sf >= 1.0 && passSolarEcl && isSolarEclipsed(sp.x, sp.y, sp.z, passMoonPos, passSunDir)) sf = 0.0;
+                refined.push({ az: sae.az, el: sae.el, t: st, shadowFactor: sf });
               }
             }
             // Add exact LOS point
@@ -171,7 +176,9 @@ function computePassesForSat(
             if (lp) {
               const lg = epochToGmst(losEpoch) * DEG2RAD;
               const lae = getAzEl(lp.x, lp.y, lp.z, lg, obsLat, obsLon, obsAlt);
-              refined.push({ az: lae.az, el: lae.el, t: losEpoch, eclipsed: isEclipsed(lp.x, lp.y, lp.z, passSunDir) });
+              let sf = earthShadowFactor(lp.x, lp.y, lp.z, passSunDir);
+              if (sf >= 1.0 && passSolarEcl && isSolarEclipsed(lp.x, lp.y, lp.z, passMoonPos, passSunDir)) sf = 0.0;
+              refined.push({ az: lae.az, el: lae.el, t: losEpoch, shadowFactor: sf });
             }
             currentSkyPath = refined;
           }
@@ -224,7 +231,9 @@ function computePassesForSat(
             const obsPos = observerEci(obsLat, obsLon, obsAlt, gmstMaxEl);
 
             sunAlt = sunAltitude(currentMaxElEpoch, obsLat, obsLon, obsAlt, gmstMaxEl);
-            eclipsed = isEclipsed(maxElPos.x, maxElPos.y, maxElPos.z, sunDir);
+            const moonPosMaxEl = moonPositionECI(currentMaxElEpoch);
+            eclipsed = isEclipsed(maxElPos.x, maxElPos.y, maxElPos.z, sunDir)
+              || (solarEclipsePossible(moonPosMaxEl, sunDir) && isSolarEclipsed(maxElPos.x, maxElPos.y, maxElPos.z, moonPosMaxEl, sunDir));
             elongation = solarElongation(maxElPos, sunDir, obsPos);
 
             if (!eclipsed && stdMag !== null) {

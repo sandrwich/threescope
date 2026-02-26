@@ -37,6 +37,9 @@ import { PassPredictor } from './passes/pass-predictor';
 import { getAzEl } from './astro/az-el';
 import { propagate } from 'satellite.js';
 import { epochToUnix, epochToGmst } from './astro/epoch';
+import { sunDirectionECI, earthShadowFactor, isSolarEclipsed, solarEclipsePossible } from './astro/eclipse';
+import { moonPositionECI } from './astro/moon-observer';
+import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } from './astro/magnitude';
 import { loadElevation, getElevation, isElevationLoaded } from './astro/elevation';
 import { palette } from './ui/shared/theme';
 
@@ -1244,14 +1247,22 @@ export class App {
     // Pass predictor: compute sky path on-demand + live az/el for polar plot
     if (uiStore.polarPlotOpen && uiStore.selectedPassIdx >= 0 && uiStore.selectedPassIdx < uiStore.activePassList.length) {
       const pass = uiStore.activePassList[uiStore.selectedPassIdx];
-      // Lazy sky path: compute 100-point track on first view (cached on pass object)
-      if (pass.skyPath.length < 50) {
+      // Lazy sky path: enrich with per-point shadow + magnitude for polar plot bloom
+      // Worker provides ~60 points with shadowFactor but no mag; recompute with mag on first view
+      const needsMag = pass.skyPath.length === 0 || pass.skyPath[0].mag === undefined;
+      if (needsMag) {
         const sat = this.satByNorad.get(pass.satNoradId);
         if (sat) {
           const pathStep = (pass.losEpoch - pass.aosEpoch) / 99;
           if (pathStep > 0) {
-            const path: { az: number; el: number; t: number }[] = [];
+            const path: { az: number; el: number; t: number; shadowFactor?: number; mag?: number; rangeKm?: number }[] = [];
             const obs = observerStore.location;
+            // Sun/Moon barely move during a pass — compute once at midpoint
+            const midEpoch = (pass.aosEpoch + pass.losEpoch) / 2;
+            const sunDir = sunDirectionECI(midEpoch);
+            const moonEci = moonPositionECI(midEpoch);
+            const checkSolarEcl = solarEclipsePossible(moonEci, sunDir);
+            let bestMag = Infinity;
             for (let k = 0; k < 100; k++) {
               const pt = pass.aosEpoch + k * pathStep;
               const date = new Date(epochToUnix(pt) * 1000);
@@ -1260,10 +1271,24 @@ export class App {
                 const eci = result.position as { x: number; y: number; z: number };
                 const g = epochToGmst(pt) * (Math.PI / 180);
                 const ae = getAzEl(eci.x, eci.y, eci.z, g, obs.lat, obs.lon, obs.alt);
-                path.push({ az: ae.az, el: ae.el, t: pt });
+                // Shadow factor (Earth + Moon shadow)
+                let sf = earthShadowFactor(eci.x, eci.y, eci.z, sunDir);
+                if (sf >= 1.0 && checkSolarEcl && isSolarEclipsed(eci.x, eci.y, eci.z, moonEci, sunDir)) sf = 0.0;
+                // Per-point slant range + magnitude
+                const obsPos = observerEci(obs.lat, obs.lon, obs.alt, g);
+                const rangeKm = slantRange(eci, obsPos);
+                let mag: number | undefined;
+                if (sf > 0 && sat.stdMag !== null) {
+                  const phase = computePhaseAngle(eci, sunDir, obsPos);
+                  mag = estimateVisualMagnitude(sat.stdMag, rangeKm, phase, ae.el);
+                  if (mag < bestMag) bestMag = mag;
+                }
+                path.push({ az: ae.az, el: ae.el, t: pt, shadowFactor: sf, mag, rangeKm });
               }
             }
             pass.skyPath = path;
+            // Update peakMag with true brightest point
+            if (bestMag < Infinity) pass.peakMag = Math.round(bestMag * 100) / 100;
           }
         }
       }
