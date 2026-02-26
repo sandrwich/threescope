@@ -168,6 +168,17 @@
         const los = azElToXY(pass.skyPath[pass.skyPath.length - 1].az, pass.skyPath[pass.skyPath.length - 1].el);
         ctx.fillStyle = palette.markerLos;
         ctx.fillRect(los.x - 3, los.y - 3, 6, 6);
+
+        // TCA marker (diamond at max elevation)
+        const tca = azElToXY(pass.maxElAz, pass.maxEl);
+        ctx.fillStyle = palette.markerTca;
+        ctx.beginPath();
+        ctx.moveTo(tca.x, tca.y - 4);
+        ctx.lineTo(tca.x + 4, tca.y);
+        ctx.lineTo(tca.x, tca.y + 4);
+        ctx.lineTo(tca.x - 4, tca.y);
+        ctx.closePath();
+        ctx.fill();
       }
 
       // Live dot during active pass (pulsating)
@@ -198,6 +209,18 @@
       ctx.fillRect(6, ly, 5, 5);
       ctx.fillStyle = palette.textGhost;
       ctx.fillText('LOS', 14, ly + 3);
+      ly += 10;
+      ctx.fillStyle = palette.markerTca;
+      const dlx = 8.5, dly = ly + 2.5, dr = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(dlx, dly - dr);
+      ctx.lineTo(dlx + dr, dly);
+      ctx.lineTo(dlx, dly + dr);
+      ctx.lineTo(dlx - dr, dly);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = palette.textGhost;
+      ctx.fillText('TCA', 14, ly + 3);
 
       // Sunlit / eclipsed legend (top-right, only if pass has mixed segments)
       const hasEcl = pass.skyPath.some(p => p.eclipsed);

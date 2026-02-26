@@ -133,7 +133,7 @@ export class MapRenderer {
         varying vec3 vColor;
         void main() {
           vColor = color;
-          gl_PointSize = 14.0;
+          gl_PointSize = 20.0;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
@@ -142,25 +142,27 @@ export class MapRenderer {
         varying vec3 vColor;
         void main() {
           vec4 texel = texture2D(pointTexture, gl_PointCoord);
-          if (texel.a > 0.1) {
+          if (texel.a > 0.3) {
             gl_FragColor = vec4(vColor * texel.rgb, texel.a);
             return;
           }
-          float s = 0.06;
-          float na = max(
-            max(texture2D(pointTexture, gl_PointCoord + vec2(s, 0.0)).a,
-                texture2D(pointTexture, gl_PointCoord - vec2(s, 0.0)).a),
-            max(texture2D(pointTexture, gl_PointCoord + vec2(0.0, s)).a,
-                texture2D(pointTexture, gl_PointCoord - vec2(0.0, s)).a)
-          );
-          na = max(na, max(
-            max(texture2D(pointTexture, gl_PointCoord + vec2(s, s) * 0.707).a,
-                texture2D(pointTexture, gl_PointCoord - vec2(s, s) * 0.707).a),
-            max(texture2D(pointTexture, gl_PointCoord + vec2(s, -s) * 0.707).a,
-                texture2D(pointTexture, gl_PointCoord - vec2(s, -s) * 0.707).a)
-          ));
-          if (na > 0.1) {
-            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.7);
+          float na = 0.0;
+          for (float s = 0.035; s <= 0.07; s += 0.035) {
+            na = max(na, max(
+              max(texture2D(pointTexture, gl_PointCoord + vec2(s, 0.0)).a,
+                  texture2D(pointTexture, gl_PointCoord - vec2(s, 0.0)).a),
+              max(texture2D(pointTexture, gl_PointCoord + vec2(0.0, s)).a,
+                  texture2D(pointTexture, gl_PointCoord - vec2(0.0, s)).a)
+            ));
+            na = max(na, max(
+              max(texture2D(pointTexture, gl_PointCoord + vec2(s, s) * 0.707).a,
+                  texture2D(pointTexture, gl_PointCoord - vec2(s, s) * 0.707).a),
+              max(texture2D(pointTexture, gl_PointCoord + vec2(s, -s) * 0.707).a,
+                  texture2D(pointTexture, gl_PointCoord - vec2(s, -s) * 0.707).a)
+            ));
+          }
+          if (na > 0.3) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.9);
             return;
           }
           discard;
@@ -229,7 +231,7 @@ export class MapRenderer {
         allMarkers.push({ groupId: group.id, mapX, mapY, color });
 
         const label = document.createElement('div');
-        label.style.cssText = `position:absolute;font-size:11px;color:${group.color};pointer-events:none;white-space:nowrap;display:none;`;
+        label.style.cssText = `position:absolute;font-size:11px;color:${group.color};pointer-events:none;white-space:nowrap;display:none;text-shadow:-1px -1px 0 var(--bg),1px -1px 0 var(--bg),-1px 1px 0 var(--bg),1px 1px 0 var(--bg);`;
         label.textContent = m.name;
         overlay.appendChild(label);
         this.markerLabels2d.push({ div: label, groupId: group.id, mapX, mapY });
@@ -295,7 +297,7 @@ export class MapRenderer {
       this.markerData2d.push({ groupId, mapX, mapY, color: c });
 
       const label = document.createElement('div');
-      label.style.cssText = `position:absolute;font-size:11px;color:${color};pointer-events:none;white-space:nowrap;display:none;`;
+      label.style.cssText = `position:absolute;font-size:11px;color:${color};pointer-events:none;white-space:nowrap;display:none;text-shadow:-1px -1px 0 var(--bg),1px -1px 0 var(--bg),-1px 1px 0 var(--bg),1px 1px 0 var(--bg);`;
       label.textContent = m.name;
       overlay.appendChild(label);
       this.markerLabels2d.push({ div: label, groupId, mapX, mapY });

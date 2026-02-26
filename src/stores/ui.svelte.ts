@@ -120,10 +120,24 @@ class UIStore {
   apoVisible = $state(false);
   apoText = $state('');
 
+  // Pass markers (AOS/LOS/TCA)
+  passAosVisible = $state(false);
+  passAosText = $state('');
+  passLosVisible = $state(false);
+  passLosText = $state('');
+  passTcaVisible = $state(false);
+  passTcaText = $state('');
+  passAosDrawPos: { x: number; y: number; z: number } | null = null;
+  passLosDrawPos: { x: number; y: number; z: number } | null = null;
+  passTcaDrawPos: { x: number; y: number; z: number } | null = null;
+
   // DOM refs — set by components, read by App for direct positioning
   satInfoEl: HTMLDivElement | null = null;
   periLabelEl: HTMLDivElement | null = null;
   apoLabelEl: HTMLDivElement | null = null;
+  passAosLabelEl: HTMLDivElement | null = null;
+  passLosLabelEl: HTMLDivElement | null = null;
+  passTcaLabelEl: HTMLDivElement | null = null;
   planetCanvasEl: HTMLCanvasElement | null = null;
 
   // Data sources window

@@ -207,11 +207,13 @@ export class UIUpdater {
         const ppX = (pp.x * 0.5 + 0.5) * vw;
         const ppY = (-pp.y * 0.5 + 0.5) * vh;
         if (!periOccluded && pp.z < 1 && ppX > -50 && ppX < vw + 50 && ppY > -20 && ppY < vh + 20) {
-          uiStore.periText = `Peri: ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
+          uiStore.periText = `Peri ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
           uiStore.periVisible = true;
           if (periLabel) {
-            periLabel.style.left = `${ppX + 20}px`;
-            periLabel.style.top = `${ppY - 8}px`;
+            const px = ppX + 12, py = ppY - 6;
+            periLabel.dataset.sx = String(px);
+            periLabel.dataset.sy = String(py);
+            periLabel.style.transform = `translate(${px}px,${py}px)`;
           }
         } else {
           uiStore.periVisible = false;
@@ -220,11 +222,13 @@ export class UIUpdater {
         const apX = (ap.x * 0.5 + 0.5) * vw;
         const apY = (-ap.y * 0.5 + 0.5) * vh;
         if (!apoOccluded && ap.z < 1 && apX > -50 && apX < vw + 50 && apY > -20 && apY < vh + 20) {
-          uiStore.apoText = `Apo: ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
+          uiStore.apoText = `Apo ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
           uiStore.apoVisible = true;
           if (apoLabel) {
-            apoLabel.style.left = `${apX + 20}px`;
-            apoLabel.style.top = `${apY - 8}px`;
+            const ax = apX + 12, ay = apY - 6;
+            apoLabel.dataset.sx = String(ax);
+            apoLabel.dataset.sy = String(ay);
+            apoLabel.style.transform = `translate(${ax}px,${ay}px)`;
           }
         } else {
           uiStore.apoVisible = false;
@@ -250,20 +254,24 @@ export class UIUpdater {
 
         const pnx = (periX - camL) / (camR - camL);
         const pny = (-peri2d.y - camB) / (camT - camB);
-        uiStore.periText = `Peri: ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
+        uiStore.periText = `Peri ${(periR - EARTH_RADIUS_KM).toFixed(0)} km`;
         uiStore.periVisible = pnx > -0.1 && pnx < 1.1 && pny > -0.1 && pny < 1.1;
         if (uiStore.periVisible && periLabel) {
-          periLabel.style.left = `${pnx * vw + 12}px`;
-          periLabel.style.top = `${(1 - pny) * vh - 8}px`;
+          const px = pnx * vw + 12, py = (1 - pny) * vh - 8;
+          periLabel.dataset.sx = String(px);
+          periLabel.dataset.sy = String(py);
+          periLabel.style.transform = `translate(${px}px,${py}px)`;
         }
 
         const anx = (apoX - camL) / (camR - camL);
         const any_ = (-apo2d.y - camB) / (camT - camB);
-        uiStore.apoText = `Apo: ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
+        uiStore.apoText = `Apo ${(apoR - EARTH_RADIUS_KM).toFixed(0)} km`;
         uiStore.apoVisible = anx > -0.1 && anx < 1.1 && any_ > -0.1 && any_ < 1.1;
         if (uiStore.apoVisible && apoLabel) {
-          apoLabel.style.left = `${anx * vw + 12}px`;
-          apoLabel.style.top = `${(1 - any_) * vh - 8}px`;
+          const ax = anx * vw + 12, ay = (1 - any_) * vh - 8;
+          apoLabel.dataset.sx = String(ax);
+          apoLabel.dataset.sy = String(ay);
+          apoLabel.style.transform = `translate(${ax}px,${ay}px)`;
         }
       }
     } else {
@@ -271,6 +279,92 @@ export class UIUpdater {
       uiStore.apoVisible = false;
       periSprite3d.visible = false;
       apoSprite3d.visible = false;
+    }
+
+    // Pass markers (AOS / LOS / TCA)
+    if (viewMode === ViewMode.VIEW_3D && uiStore.passAosDrawPos && uiStore.passLosDrawPos && uiStore.passTcaDrawPos) {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
+      const camPos = camera3d.position;
+
+      const projectLabel = (
+        dp: { x: number; y: number; z: number },
+        labelEl: HTMLDivElement | null,
+        setVisible: (v: boolean) => void,
+      ) => {
+        // Occlusion check against Earth
+        const dx = dp.x - camPos.x, dy = dp.y - camPos.y, dz = dp.z - camPos.z;
+        const L = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const ux = dx / L, uy = dy / L, uz = dz / L;
+        const t = -(camPos.x * ux + camPos.y * uy + camPos.z * uz);
+        if (t > 0 && t < L) {
+          const cx = camPos.x + ux * t, cy = camPos.y + uy * t, cz = camPos.z + uz * t;
+          if (Math.sqrt(cx * cx + cy * cy + cz * cz) < earthR * 0.99) {
+            setVisible(false);
+            return;
+          }
+        }
+
+        const v = new THREE.Vector3(dp.x, dp.y, dp.z).project(camera3d);
+        const sx = (v.x * 0.5 + 0.5) * vw;
+        const sy = (-v.y * 0.5 + 0.5) * vh;
+        if (v.z < 1 && sx > -50 && sx < vw + 50 && sy > -20 && sy < vh + 20) {
+          setVisible(true);
+          if (labelEl) {
+            const lx = sx + 12, ly = sy - 6;
+            labelEl.dataset.sx = String(lx);
+            labelEl.dataset.sy = String(ly);
+            labelEl.style.transform = `translate(${lx}px,${ly}px)`;
+          }
+        } else {
+          setVisible(false);
+        }
+      };
+
+      projectLabel(uiStore.passAosDrawPos, uiStore.passAosLabelEl, v => uiStore.passAosVisible = v);
+      projectLabel(uiStore.passLosDrawPos, uiStore.passLosLabelEl, v => uiStore.passLosVisible = v);
+      projectLabel(uiStore.passTcaDrawPos, uiStore.passTcaLabelEl, v => uiStore.passTcaVisible = v);
+    } else {
+      uiStore.passAosVisible = false;
+      uiStore.passLosVisible = false;
+      uiStore.passTcaVisible = false;
+    }
+
+    // Label collision avoidance — nudge overlapping scene labels apart
+    this.nudgeLabels();
+  }
+
+  private nudgeLabels() {
+    const labels = document.querySelectorAll<HTMLElement>('.scene-label');
+    const items: { el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
+    for (const el of labels) {
+      // Marker-manager uses inline display; Svelte labels use .visible class
+      if (el.style.display !== 'block' && !el.classList.contains('visible')) continue;
+      const x = parseFloat(el.dataset.sx || '0');
+      const y = parseFloat(el.dataset.sy || '0');
+      const w = (el.textContent?.length || 4) * 7 + 4;
+      items.push({ el, x, y, w, h: 16 });
+    }
+
+    // Sort by y so the downward sweep cascades correctly
+    items.sort((a, b) => a.y - b.y);
+
+    // Push each label down past any overlapping labels above it
+    for (let i = 1; i < items.length; i++) {
+      const cur = items[i];
+      for (let j = 0; j < i; j++) {
+        const prev = items[j];
+        const overlapX = Math.min(cur.x + cur.w, prev.x + prev.w) - Math.max(cur.x, prev.x);
+        const overlapY = Math.min(cur.y + cur.h, prev.y + prev.h) - Math.max(cur.y, prev.y);
+        if (overlapX > 0 && overlapY > 0) {
+          cur.y = prev.y + prev.h + 2;
+        }
+      }
+    }
+
+    for (const { el, x, y } of items) {
+      el.style.transform = `translate(${x}px,${y}px)`;
     }
   }
 }

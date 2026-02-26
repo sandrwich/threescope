@@ -20,7 +20,7 @@ export function initTheme() {
     handleHz: r('--handle-hz'), handleHzActive: r('--handle-hz-active'),
     elLow: r('--el-low'), elMid: r('--el-mid'), elHigh: r('--el-high'),
     magDay: r('--mag-day'), magTwilight: r('--mag-twilight'),
-    markerAos: r('--marker-aos'), markerLos: r('--marker-los'),
+    markerAos: r('--marker-aos'), markerLos: r('--marker-los'), markerTca: r('--marker-tca'),
     apsisPeri: r('--apsis-peri'), apsisApo: r('--apsis-apo'),
   };
 }

@@ -35,6 +35,23 @@ export function createPinTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+/** Generate a filled square marker texture on a canvas. */
+export function createSquareTexture(): THREE.CanvasTexture {
+  const S = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+
+  const r = S * 0.38;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(S / 2 - r, S / 2 - r, r * 2, r * 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 /** Generate a diamond/rhombus marker texture on a canvas (replaces smallmark.png). */
 export function createDiamondTexture(): THREE.CanvasTexture {
   const S = 64;
@@ -90,19 +107,24 @@ export class MarkerManager {
   }
 
   private createSprite(color: THREE.Color): THREE.Sprite {
+    // Clamp brightness below bloom threshold (0.95) so markers don't glow
+    const maxC = Math.max(color.r, color.g, color.b);
+    if (maxC > 0.9) color.multiplyScalar(0.9 / maxC);
     const mat = new THREE.SpriteMaterial({
-      map: this.pinTex, color, depthTest: false, transparent: true, alphaTest: 0.1,
+      map: this.pinTex, color, depthTest: false, transparent: true, alphaTest: 0.1, sizeAttenuation: false, toneMapped: false,
     });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(0.03, 0.035, 1);
+    sprite.scale.set(0.015, 0.018, 1);
     sprite.center.set(0.5, 0); // anchor at pin tip (bottom center)
+    sprite.renderOrder = 999;
     this.scene.add(sprite);
     return sprite;
   }
 
   private createLabel(name: string, colorStr: string): HTMLDivElement {
     const label = document.createElement('div');
-    label.style.cssText = `position:absolute;font-size:11px;color:${colorStr};pointer-events:none;white-space:nowrap;display:none;`;
+    label.className = 'scene-label';
+    label.style.cssText = `position:absolute;left:0;top:0;font-size:11px;color:${colorStr};pointer-events:none;white-space:nowrap;display:none;will-change:transform;text-shadow:-1px -1px 0 var(--bg),1px -1px 0 var(--bg),-1px 1px 0 var(--bg),1px 1px 0 var(--bg);`;
     label.textContent = name;
     this.overlay.appendChild(label);
     return label;
@@ -132,7 +154,27 @@ export class MarkerManager {
     if (!visible) this.hideGroup(entry);
   }
 
+  // Reusable vectors to avoid per-frame allocations
+  private _v = new THREE.Vector3();
+  private _camFwd = new THREE.Vector3();
+
   update(gmstDeg: number, earthOffset: number, camera: THREE.Camera, camDistance: number) {
+    this._camFwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    const vw = window.innerWidth, vh = window.innerHeight;
+
+    // Distance-based scaling: full size when close, shrink and fade when far
+    // camDistance is in draw-space units; Earth radius ≈ 2.12 in draw-space
+    const FADE_START = 12;   // start shrinking
+    const FADE_END = 40;    // fully hidden
+    if (camDistance > FADE_END) {
+      for (const entry of this.groups) this.hideGroup(entry);
+      return;
+    }
+    const distFactor = camDistance < FADE_START ? 1.0
+      : 1.0 - (camDistance - FADE_START) / (FADE_END - FADE_START);
+    const scale = 0.015 * distFactor;
+    const scaleY = 0.018 * distFactor;
+
     for (const entry of this.groups) {
       if (!entry.visible) {
         this.hideGroup(entry);
@@ -141,23 +183,30 @@ export class MarkerManager {
       for (let i = 0; i < entry.group.markers.length; i++) {
         const m = entry.group.markers[i];
         const pos = latLonToSurface(m.lat, m.lon, gmstDeg, earthOffset);
-        entry.sprites[i].position.copy(pos);
+        const sprite = entry.sprites[i];
+        sprite.position.copy(pos);
+        sprite.scale.set(scale, scaleY, 1);
+        (sprite.material as THREE.SpriteMaterial).opacity = distFactor;
 
-        const normal = pos.clone().normalize();
-        const viewDir = camera.position.clone().sub(pos).normalize();
-        const toTarget = pos.clone().sub(camera.position);
-        const camForward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        // Visibility: facing camera and in front of camera
+        const nx = pos.x, ny = pos.y, nz = pos.z;
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        const dx = camera.position.x - nx, dy = camera.position.y - ny, dz = camera.position.z - nz;
+        const facingCam = (nx * dx + ny * dy + nz * dz) / len > 0;
+        const inFront = (-dx * this._camFwd.x - dy * this._camFwd.y - dz * this._camFwd.z) > 0;
+        const visible = facingCam && inFront;
+        sprite.visible = visible;
 
-        const visible = normal.dot(viewDir) > 0 && toTarget.dot(camForward) > 0;
-        entry.sprites[i].visible = visible;
-
-        if (visible && camDistance < 50) {
-          const screenPos = pos.clone().project(camera);
-          const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-          const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
-          entry.labels[i].style.display = 'block';
-          entry.labels[i].style.left = `${x + 12}px`;
-          entry.labels[i].style.top = `${y - 24}px`;
+        if (visible) {
+          this._v.copy(pos).project(camera);
+          const x = (this._v.x * 0.5 + 0.5) * vw + 12;
+          const y = (-this._v.y * 0.5 + 0.5) * vh - 24;
+          const label = entry.labels[i];
+          label.style.display = 'block';
+          label.style.opacity = String(distFactor);
+          label.dataset.sx = String(x);
+          label.dataset.sy = String(y);
+          label.style.transform = `translate(${x}px,${y}px)`;
         } else {
           entry.labels[i].style.display = 'none';
         }

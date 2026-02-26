@@ -3,12 +3,14 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import type { Satellite } from '../types';
-import { DRAW_SCALE, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, SAT_COLORS } from '../constants';
+import { DRAW_SCALE, EARTH_RADIUS_KM, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, SAT_COLORS } from '../constants';
 import { parseHexColor } from '../config';
 import { calculatePosition, getCorrectedElements } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
 import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
 import { uiStore } from '../stores/ui.svelte';
+import { palette } from '../ui/shared/theme';
+import { createSquareTexture, createDiamondTexture } from './marker-manager';
 
 // SAT_COLORS as 0–1 floats for WebGL
 export const ORBIT_COLORS = SAT_COLORS.map(c => [c[0] / 255, c[1] / 255, c[2] / 255]);
@@ -80,6 +82,11 @@ export class OrbitRenderer {
   private passArcGeo: LineGeometry;
   private lastPassArcKey = '';
 
+  // Pass endpoint markers (AOS/LOS/TCA)
+  private passAosMarker: THREE.Sprite;
+  private passLosMarker: THREE.Sprite;
+  private passTcaMarker: THREE.Sprite;
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
 
@@ -135,6 +142,27 @@ export class OrbitRenderer {
     this.passArcLine.frustumCulled = false;
     this.passArcLine.visible = false;
     scene.add(this.passArcLine);
+
+    // Pass markers (AOS/LOS squares + TCA diamond, screen-space sized)
+    const sqTex = createSquareTexture();
+    const dmTex = createDiamondTexture();
+    const markerOpts = { depthTest: false, transparent: true, alphaTest: 0.1, sizeAttenuation: false, toneMapped: false } as const;
+    const MS = 0.012; // screen-space scale (~12px on 1080p)
+    this.passAosMarker = new THREE.Sprite(new THREE.SpriteMaterial({ map: sqTex, ...markerOpts }));
+    this.passAosMarker.scale.set(MS, MS, 1);
+    this.passAosMarker.renderOrder = 999;
+    this.passAosMarker.visible = false;
+    scene.add(this.passAosMarker);
+    this.passLosMarker = new THREE.Sprite(new THREE.SpriteMaterial({ map: sqTex, ...markerOpts }));
+    this.passLosMarker.scale.set(MS, MS, 1);
+    this.passLosMarker.renderOrder = 999;
+    this.passLosMarker.visible = false;
+    scene.add(this.passLosMarker);
+    this.passTcaMarker = new THREE.Sprite(new THREE.SpriteMaterial({ map: dmTex, ...markerOpts }));
+    this.passTcaMarker.scale.set(MS, MS, 1);
+    this.passTcaMarker.renderOrder = 999;
+    this.passTcaMarker.visible = false;
+    scene.add(this.passTcaMarker);
   }
 
   /**
@@ -329,7 +357,8 @@ export class OrbitRenderer {
     selectedSatsVersion: number,
     unselectedFade: number,
     orbitsToDraw: number,
-    colorConfig: { orbitNormal: string; orbitHighlighted: string }
+    colorConfig: { orbitNormal: string; orbitHighlighted: string },
+    cameraPos?: THREE.Vector3
   ) {
     // --- Periodic recomputation ---
     if (this.precomputedAll) {
@@ -485,24 +514,87 @@ export class OrbitRenderer {
             this.passArcGeo.setPositions(positions);
             this.passArcGeo.setColors(colors);
             this.passArcLine.geometry = this.passArcGeo;
+
+            // Position AOS/LOS markers at arc endpoints
+            this.passAosMarker.position.set(positions[0], positions[1], positions[2]);
+            this.passLosMarker.position.set(
+              positions[positions.length - 3],
+              positions[positions.length - 2],
+              positions[positions.length - 1]
+            );
+
+            // TCA marker at max elevation point
+            const tcaPos = calculatePosition(arcSat, pass.maxElEpoch);
+            this.passTcaMarker.position.set(
+              tcaPos.x / DRAW_SCALE, tcaPos.y / DRAW_SCALE, tcaPos.z / DRAW_SCALE
+            );
+
+            // Store draw-space positions for label projection
+            uiStore.passAosDrawPos = { x: positions[0], y: positions[1], z: positions[2] };
+            uiStore.passLosDrawPos = {
+              x: positions[positions.length - 3],
+              y: positions[positions.length - 2],
+              z: positions[positions.length - 1],
+            };
+            uiStore.passTcaDrawPos = {
+              x: tcaPos.x / DRAW_SCALE, y: tcaPos.y / DRAW_SCALE, z: tcaPos.z / DRAW_SCALE,
+            };
+            uiStore.passAosText = `AOS ${pass.aosAz.toFixed(0)}°`;
+            uiStore.passLosText = `LOS ${pass.losAz.toFixed(0)}°`;
+            uiStore.passTcaText = `TCA ${pass.maxEl.toFixed(0)}°`;
           } else {
             this.passArcLine.visible = false;
+            this.passAosMarker.visible = false;
+            this.passLosMarker.visible = false;
+            this.passTcaMarker.visible = false;
           }
         }
         if (this.lastPassArcKey === arcKey && this.passArcLine.geometry.attributes.position) {
           this.passArcMat.resolution.set(window.innerWidth, window.innerHeight);
           this.passArcMat.opacity = cHL.a;
           this.passArcLine.visible = true;
+          // Update marker colors from theme (clamped below bloom threshold)
+          const setMarkerColor = (s: THREE.Sprite, c: string) => {
+            const col = (s.material as THREE.SpriteMaterial).color.set(c);
+            const m = Math.max(col.r, col.g, col.b);
+            if (m > 0.9) col.multiplyScalar(0.9 / m);
+          };
+          setMarkerColor(this.passAosMarker, palette.markerAos || '#00ffcc');
+          setMarkerColor(this.passLosMarker, palette.markerLos || '#666');
+          setMarkerColor(this.passTcaMarker, palette.markerTca || '#ff66cc');
+          // Earth occlusion: hide markers behind Earth
+          const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
+          if (cameraPos) {
+            this.passAosMarker.visible = !this.isOccludedByEarth(cameraPos, this.passAosMarker.position, earthR);
+            this.passLosMarker.visible = !this.isOccludedByEarth(cameraPos, this.passLosMarker.position, earthR);
+            this.passTcaMarker.visible = !this.isOccludedByEarth(cameraPos, this.passTcaMarker.position, earthR);
+          } else {
+            this.passAosMarker.visible = true;
+            this.passLosMarker.visible = true;
+            this.passTcaMarker.visible = true;
+          }
         }
       } else {
         this.passArcLine.visible = false;
+        this.passAosMarker.visible = false;
+        this.passLosMarker.visible = false;
+        this.passTcaMarker.visible = false;
         this.lastPassArcKey = '';
+        uiStore.passAosDrawPos = null;
+        uiStore.passLosDrawPos = null;
+        uiStore.passTcaDrawPos = null;
       }
     } else {
       this.highlightLine.visible = false;
       this.nadirLine.visible = false;
       this.passArcLine.visible = false;
+      this.passAosMarker.visible = false;
+      this.passLosMarker.visible = false;
+      this.passTcaMarker.visible = false;
       this.lastPassArcKey = '';
+      uiStore.passAosDrawPos = null;
+      uiStore.passLosDrawPos = null;
+      uiStore.passTcaDrawPos = null;
     }
 
     // --- Normal orbits: assembled from precomputed analytical data ---
@@ -642,11 +734,29 @@ export class OrbitRenderer {
     }
   }
 
+  private isOccludedByEarth(camPos: THREE.Vector3, p: THREE.Vector3, earthR: number): boolean {
+    const vx = p.x - camPos.x, vy = p.y - camPos.y, vz = p.z - camPos.z;
+    const L = Math.sqrt(vx * vx + vy * vy + vz * vz);
+    if (L === 0) return false;
+    const dx = vx / L, dy = vy / L, dz = vz / L;
+    const t = -(camPos.x * dx + camPos.y * dy + camPos.z * dz);
+    if (t > 0 && t < L) {
+      const cx = camPos.x + dx * t;
+      const cy = camPos.y + dy * t;
+      const cz = camPos.z + dz * t;
+      if (Math.sqrt(cx * cx + cy * cy + cz * cz) < earthR * 0.99) return true;
+    }
+    return false;
+  }
+
   clear() {
     this.highlightLine.visible = false;
     this.nadirLine.visible = false;
     this.normalLines.visible = false;
     this.passArcLine.visible = false;
+    this.passAosMarker.visible = false;
+    this.passLosMarker.visible = false;
+    this.passTcaMarker.visible = false;
     this.lastPassArcKey = '';
   }
 }

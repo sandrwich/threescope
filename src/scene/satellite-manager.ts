@@ -31,7 +31,7 @@ export class SatelliteManager {
     const material = new THREE.ShaderMaterial({
       uniforms: {
         pointTexture: { value: satTexture },
-        pointSize: { value: 24.0 },
+        pointSize: { value: 16.0 },
       },
       vertexShader: `
         attribute float alpha;
@@ -42,9 +42,7 @@ export class SatelliteManager {
           vColor = color;
           vAlpha = alpha;
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          float dist = -mvPos.z;
-          gl_PointSize = pointSize * (5.0 / max(dist, 0.5));
-          gl_PointSize = clamp(gl_PointSize, 3.0, pointSize);
+          gl_PointSize = pointSize;
           gl_Position = projectionMatrix * mvPos;
         }
       `,
@@ -54,13 +52,13 @@ export class SatelliteManager {
         varying float vAlpha;
         void main() {
           vec4 texel = texture2D(pointTexture, gl_PointCoord);
-          if (texel.a > 0.1) {
+          if (texel.a > 0.3) {
             gl_FragColor = vec4(vColor * texel.rgb, texel.a * vAlpha);
             return;
           }
-          // Dark outline: sample at two distances for a thick, strong outline
+          // Dark outline: two passes for a crisp 2px-ish border
           float na = 0.0;
-          for (float s = 0.06; s <= 0.14; s += 0.04) {
+          for (float s = 0.035; s <= 0.07; s += 0.035) {
             na = max(na, max(
               max(texture2D(pointTexture, gl_PointCoord + vec2(s, 0.0)).a,
                   texture2D(pointTexture, gl_PointCoord - vec2(s, 0.0)).a),
@@ -74,7 +72,7 @@ export class SatelliteManager {
                   texture2D(pointTexture, gl_PointCoord - vec2(s, -s) * 0.707).a)
             ));
           }
-          if (na > 0.1) {
+          if (na > 0.3) {
             gl_FragColor = vec4(0.0, 0.0, 0.0, 0.9 * vAlpha);
             return;
           }

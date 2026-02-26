@@ -326,15 +326,18 @@ export class App {
 
     // 3D apsis sprites (diamond icons at periapsis/apoapsis)
     const diamondTex = createDiamondTexture();
-    const periMat = new THREE.SpriteMaterial({ map: diamondTex, color: 0x87ceeb, depthTest: false, transparent: true, alphaTest: 0.1 });
+    const apsisOpts = { map: diamondTex, depthTest: false, transparent: true, alphaTest: 0.1, sizeAttenuation: false, toneMapped: false } as const;
+    const periMat = new THREE.SpriteMaterial({ ...apsisOpts, color: 0x87ceeb });
     this.periSprite3d = new THREE.Sprite(periMat);
-    this.periSprite3d.scale.set(0.03, 0.03, 1);
+    this.periSprite3d.scale.set(0.012, 0.012, 1);
+    this.periSprite3d.renderOrder = 999;
     this.periSprite3d.visible = false;
     this.scene3d.add(this.periSprite3d);
 
-    const apoMat = new THREE.SpriteMaterial({ map: diamondTex, color: 0xffa500, depthTest: false, transparent: true, alphaTest: 0.1 });
+    const apoMat = new THREE.SpriteMaterial({ ...apsisOpts, color: 0xffa500 });
     this.apoSprite3d = new THREE.Sprite(apoMat);
-    this.apoSprite3d.scale.set(0.03, 0.03, 1);
+    this.apoSprite3d.scale.set(0.012, 0.012, 1);
+    this.apoSprite3d.renderOrder = 999;
     this.apoSprite3d.visible = false;
     this.scene3d.add(this.apoSprite3d);
   }
@@ -1044,6 +1047,7 @@ export class App {
     const earthRotRad = (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD;
     const isOrreryOrPlanet = this.activeLock === TargetLock.PLANET || this.orreryCtrl.isOrreryMode;
     this.camera.updateFrame(dt, earthRotRad, isOrreryOrPlanet);
+    this.camera3d.updateMatrixWorld();
 
     // Hover detection (skip when pointer is over UI or in planet/orrery view)
     this.hoveredSat = null;
@@ -1157,7 +1161,8 @@ export class App {
         this.orbitRenderer.update(
           this.satellites, epoch, this.hoveredSat, this.selectedSats,
           this.selectedSatsVersion, this.unselectedFade, this.sim.orbitsToDraw,
-          { orbitNormal: this.cfg.orbitNormal, orbitHighlighted: this.cfg.orbitHighlighted }
+          { orbitNormal: this.cfg.orbitNormal, orbitHighlighted: this.cfg.orbitHighlighted },
+          this.camera3d.position
         );
 
         // Footprints for all selected sats + hovered (per-sat orbit color)
