@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import type { Satellite } from '../types';
 import { DRAW_SCALE, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, SAT_COLORS } from '../constants';
 import { parseHexColor } from '../config';
@@ -71,6 +74,12 @@ export class OrbitRenderer {
   private selectedSatsVersion = 0; // bumped externally when selection changes
   showNormalOrbits = true;
 
+  // Fat pass arc (AOS → LOS thick line overlay)
+  private passArcLine: Line2;
+  private passArcMat: LineMaterial;
+  private passArcGeo: LineGeometry;
+  private lastPassArcKey = '';
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
 
@@ -118,6 +127,14 @@ export class OrbitRenderer {
     this.normalLines.frustumCulled = false;
     this.normalLines.visible = false;
     scene.add(this.normalLines);
+
+    // Fat pass arc
+    this.passArcGeo = new LineGeometry();
+    this.passArcMat = new LineMaterial({ linewidth: 3, vertexColors: true, transparent: true });
+    this.passArcLine = new Line2(this.passArcGeo, this.passArcMat);
+    this.passArcLine.frustumCulled = false;
+    this.passArcLine.visible = false;
+    scene.add(this.passArcLine);
   }
 
   /**
@@ -430,9 +447,62 @@ export class OrbitRenderer {
       this.nadirMat.color.setRGB(1, 1, 1);
       this.nadirMat.opacity = cHL.a * 0.5;
       this.nadirLine.visible = true;
+
+      // --- Fat pass arc (AOS → LOS) ---
+      const passIdx = uiStore.selectedPassIdx;
+      const passList = uiStore.activePassList;
+      if (passIdx >= 0 && passIdx < passList.length) {
+        const pass = passList[passIdx];
+        const arcKey = `${passIdx}:${pass.satNoradId}:${pass.aosEpoch}`;
+        if (arcKey !== this.lastPassArcKey) {
+          this.lastPassArcKey = arcKey;
+          // Find matching satellite index in highlightSats
+          let satIdx = -1;
+          let arcSat: Satellite | null = null;
+          for (let si = 0; si < highlightSats.length; si++) {
+            if (highlightSats[si].noradId === pass.satNoradId) {
+              satIdx = si;
+              arcSat = highlightSats[si];
+              break;
+            }
+          }
+          if (arcSat && satIdx >= 0) {
+            const [cr, cg, cb] = ORBIT_COLORS[satIdx % ORBIT_COLORS.length];
+            const arcDuration = pass.losEpoch - pass.aosEpoch;
+            const arcSteps = 60;
+            const arcTimeStep = arcDuration / arcSteps;
+            const positions: number[] = [];
+            const colors: number[] = [];
+            for (let i = 0; i <= arcSteps; i++) {
+              const t = pass.aosEpoch + i * arcTimeStep;
+              const pos = calculatePosition(arcSat, t);
+              const dim = isEclipsed(pos.x, pos.y, pos.z, sunRender) ? ECLIPSE_DIM : 1.0;
+              positions.push(pos.x / DRAW_SCALE, pos.y / DRAW_SCALE, pos.z / DRAW_SCALE);
+              colors.push(cr * dim, cg * dim, cb * dim);
+            }
+            this.passArcGeo.dispose();
+            this.passArcGeo = new LineGeometry();
+            this.passArcGeo.setPositions(positions);
+            this.passArcGeo.setColors(colors);
+            this.passArcLine.geometry = this.passArcGeo;
+          } else {
+            this.passArcLine.visible = false;
+          }
+        }
+        if (this.lastPassArcKey === arcKey && this.passArcLine.geometry.attributes.position) {
+          this.passArcMat.resolution.set(window.innerWidth, window.innerHeight);
+          this.passArcMat.opacity = cHL.a;
+          this.passArcLine.visible = true;
+        }
+      } else {
+        this.passArcLine.visible = false;
+        this.lastPassArcKey = '';
+      }
     } else {
       this.highlightLine.visible = false;
       this.nadirLine.visible = false;
+      this.passArcLine.visible = false;
+      this.lastPassArcKey = '';
     }
 
     // --- Normal orbits: assembled from precomputed analytical data ---
@@ -576,5 +646,7 @@ export class OrbitRenderer {
     this.highlightLine.visible = false;
     this.nadirLine.visible = false;
     this.normalLines.visible = false;
+    this.passArcLine.visible = false;
+    this.lastPassArcKey = '';
   }
 }
