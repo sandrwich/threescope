@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import type { Satellite } from '../types';
 import { DRAW_SCALE, EARTH_RADIUS_KM, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, SAT_COLORS } from '../constants';
 import { parseHexColor } from '../config';
@@ -9,6 +11,8 @@ import { calculatePosition, getCorrectedElements } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
 import { sunDirectionECI, isEclipsed } from '../astro/eclipse';
 import { uiStore } from '../stores/ui.svelte';
+import { observerStore } from '../stores/observer.svelte';
+import { latLonToSurface } from '../astro/coordinates';
 import { palette } from '../ui/shared/theme';
 import { createSquareTexture, createDiamondTexture } from './marker-manager';
 
@@ -31,11 +35,15 @@ export class OrbitRenderer {
   private highlightSegmentsPerOrbit = 400;
   private maxHighlightOrbits = 20;
 
-  // Nadir lines (one per highlighted sat)
-  private nadirLine: THREE.LineSegments;
-  private nadirBuffer: THREE.BufferAttribute;
-  private nadirColorBuffer: THREE.BufferAttribute;
-  private nadirMat: THREE.LineBasicMaterial;
+  // Nadir lines (fat, one per highlighted sat)
+  private nadirLine: LineSegments2;
+  private nadirGeo: LineSegmentsGeometry;
+  private nadirMat: LineMaterial;
+
+  // Observer lines (dashed, sat → observer ground position)
+  private observerLine: LineSegments2;
+  private observerGeo: LineSegmentsGeometry;
+  private observerMat: LineMaterial;
 
   // Normal orbits (batched LineSegments)
   private normalLines: THREE.LineSegments;
@@ -107,20 +115,21 @@ export class OrbitRenderer {
     this.highlightLine.visible = false;
     scene.add(this.highlightLine);
 
-    // Pre-allocate nadir line buffer (one line segment per highlighted sat)
-    const ndGeo = new THREE.BufferGeometry();
-    this.nadirBuffer = new THREE.BufferAttribute(new Float32Array(this.maxHighlightOrbits * 2 * 3), 3);
-    this.nadirBuffer.setUsage(THREE.DynamicDrawUsage);
-    this.nadirColorBuffer = new THREE.BufferAttribute(new Float32Array(this.maxHighlightOrbits * 2 * 3), 3);
-    this.nadirColorBuffer.setUsage(THREE.DynamicDrawUsage);
-    ndGeo.setAttribute('position', this.nadirBuffer);
-    ndGeo.setAttribute('color', this.nadirColorBuffer);
-    ndGeo.setDrawRange(0, 0);
-    this.nadirMat = new THREE.LineBasicMaterial({ transparent: true, vertexColors: true });
-    this.nadirLine = new THREE.LineSegments(ndGeo, this.nadirMat);
+    // Fat nadir lines (sat → earth center, one segment per highlighted sat)
+    this.nadirGeo = new LineSegmentsGeometry();
+    this.nadirMat = new LineMaterial({ linewidth: 2, vertexColors: true, transparent: true });
+    this.nadirLine = new LineSegments2(this.nadirGeo, this.nadirMat);
     this.nadirLine.frustumCulled = false;
     this.nadirLine.visible = false;
     scene.add(this.nadirLine);
+
+    // Dashed observer lines (sat → observer ground position)
+    this.observerGeo = new LineSegmentsGeometry();
+    this.observerMat = new LineMaterial({ linewidth: 2, vertexColors: true, transparent: true, dashed: true, dashSize: 0.06, gapSize: 0.025 });
+    this.observerLine = new LineSegments2(this.observerGeo, this.observerMat);
+    this.observerLine.frustumCulled = false;
+    this.observerLine.visible = false;
+    scene.add(this.observerLine);
 
     // Pre-allocate normal orbits buffer — sized for configured segments
     this.maxNormalVerts = 15000 * this.configuredSegments * 2;
@@ -358,7 +367,9 @@ export class OrbitRenderer {
     unselectedFade: number,
     orbitsToDraw: number,
     colorConfig: { orbitNormal: string; orbitHighlighted: string },
-    cameraPos?: THREE.Vector3
+    cameraPos?: THREE.Vector3,
+    gmstDeg = 0,
+    earthRotationOffset = 0,
   ) {
     // --- Periodic recomputation ---
     if (this.precomputedAll) {
@@ -452,30 +463,70 @@ export class OrbitRenderer {
       this.highlightMat.opacity = cHL.a;
       this.highlightLine.visible = true;
 
-      // Nadir lines (one per highlighted sat)
-      const nd = this.nadirBuffer.array as Float32Array;
-      const ndCol = this.nadirColorBuffer.array as Float32Array;
-      let ni = 0;
-      for (let si = 0; si < highlightSats.length; si++) {
-        const sat = highlightSats[si];
-        if (hiddenIds.has(sat.noradId)) continue;
-        const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
-        if (ni + 6 > this.maxHighlightOrbits * 6) break;
-        nd[ni] = 0; nd[ni+1] = 0; nd[ni+2] = 0;
-        ndCol[ni] = cr; ndCol[ni+1] = cg; ndCol[ni+2] = cb;
-        ni += 3;
-        nd[ni] = sat.currentPos.x / DRAW_SCALE;
-        nd[ni+1] = sat.currentPos.y / DRAW_SCALE;
-        nd[ni+2] = sat.currentPos.z / DRAW_SCALE;
-        ndCol[ni] = cr; ndCol[ni+1] = cg; ndCol[ni+2] = cb;
-        ni += 3;
+      // Nadir lines (fat, one per highlighted sat: earth center → sat)
+      {
+        const ndPos: number[] = [];
+        const ndCol: number[] = [];
+        for (let si = 0; si < highlightSats.length; si++) {
+          const sat = highlightSats[si];
+          if (hiddenIds.has(sat.noradId)) continue;
+          const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
+          ndPos.push(0, 0, 0, sat.currentPos.x / DRAW_SCALE, sat.currentPos.y / DRAW_SCALE, sat.currentPos.z / DRAW_SCALE);
+          ndCol.push(cr, cg, cb, cr, cg, cb);
+        }
+        if (ndPos.length > 0) {
+          this.nadirGeo.dispose();
+          this.nadirGeo = new LineSegmentsGeometry();
+          this.nadirGeo.setPositions(ndPos);
+          this.nadirGeo.setColors(ndCol);
+          this.nadirLine.geometry = this.nadirGeo;
+          this.nadirMat.resolution.set(window.innerWidth, window.innerHeight);
+          this.nadirMat.opacity = cHL.a * 0.5;
+          this.nadirLine.visible = true;
+        } else {
+          this.nadirLine.visible = false;
+        }
       }
-      this.nadirBuffer.needsUpdate = true;
-      this.nadirColorBuffer.needsUpdate = true;
-      this.nadirLine.geometry.setDrawRange(0, ni / 3);
-      this.nadirMat.color.setRGB(1, 1, 1);
-      this.nadirMat.opacity = cHL.a * 0.5;
-      this.nadirLine.visible = true;
+
+      // Observer lines (dashed, sat → observer ground position)
+      {
+        const obsLoc = observerStore.location;
+        const obsPos = observerStore.isSet
+          ? latLonToSurface(obsLoc.lat, obsLoc.lon, gmstDeg, earthRotationOffset)
+          : null;
+        if (obsPos) {
+          const olPos: number[] = [];
+          const olCol: number[] = [];
+          for (let si = 0; si < highlightSats.length; si++) {
+            const sat = highlightSats[si];
+            if (hiddenIds.has(sat.noradId)) continue;
+            const sx = sat.currentPos.x / DRAW_SCALE;
+            const sy = sat.currentPos.y / DRAW_SCALE;
+            const sz = sat.currentPos.z / DRAW_SCALE;
+            // Skip if sat is below observer's horizon (line would go through Earth)
+            const toSatX = sx - obsPos.x, toSatY = sy - obsPos.y, toSatZ = sz - obsPos.z;
+            if (toSatX * obsPos.x + toSatY * obsPos.y + toSatZ * obsPos.z <= 0) continue;
+            const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
+            olPos.push(sx, sy, sz, obsPos.x, obsPos.y, obsPos.z);
+            olCol.push(cr, cg, cb, cr, cg, cb);
+          }
+          if (olPos.length > 0) {
+            this.observerGeo.dispose();
+            this.observerGeo = new LineSegmentsGeometry();
+            this.observerGeo.setPositions(olPos);
+            this.observerGeo.setColors(olCol);
+            this.observerLine.geometry = this.observerGeo;
+            this.observerLine.computeLineDistances();
+            this.observerMat.resolution.set(window.innerWidth, window.innerHeight);
+            this.observerMat.opacity = cHL.a;
+            this.observerLine.visible = true;
+          } else {
+            this.observerLine.visible = false;
+          }
+        } else {
+          this.observerLine.visible = false;
+        }
+      }
 
       // --- Fat pass arc (AOS → LOS) ---
       const passIdx = uiStore.selectedPassIdx;
@@ -587,6 +638,7 @@ export class OrbitRenderer {
     } else {
       this.highlightLine.visible = false;
       this.nadirLine.visible = false;
+      this.observerLine.visible = false;
       this.passArcLine.visible = false;
       this.passAosMarker.visible = false;
       this.passLosMarker.visible = false;
@@ -752,6 +804,7 @@ export class OrbitRenderer {
   clear() {
     this.highlightLine.visible = false;
     this.nadirLine.visible = false;
+    this.observerLine.visible = false;
     this.normalLines.visible = false;
     this.passArcLine.visible = false;
     this.passAosMarker.visible = false;

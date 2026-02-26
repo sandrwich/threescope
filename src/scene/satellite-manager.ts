@@ -11,6 +11,7 @@ export class SatelliteManager {
   private posAttr: THREE.BufferAttribute;
   private colorAttr: THREE.BufferAttribute;
   private alphaAttr: THREE.BufferAttribute;
+  private sizeAttr: THREE.BufferAttribute;
   private maxSats: number;
   private updateFrame = 0;
 
@@ -19,14 +20,17 @@ export class SatelliteManager {
     const positions = new Float32Array(maxSats * 3);
     const colors = new Float32Array(maxSats * 3);
     const alphas = new Float32Array(maxSats);
+    const sizes = new Float32Array(maxSats).fill(1.0);
 
     const geometry = new THREE.BufferGeometry();
     this.posAttr = new THREE.BufferAttribute(positions, 3);
     this.colorAttr = new THREE.BufferAttribute(colors, 3);
     this.alphaAttr = new THREE.BufferAttribute(alphas, 1);
+    this.sizeAttr = new THREE.BufferAttribute(sizes, 1);
     geometry.setAttribute('position', this.posAttr);
     geometry.setAttribute('color', this.colorAttr);
     geometry.setAttribute('alpha', this.alphaAttr);
+    geometry.setAttribute('sizeScale', this.sizeAttr);
 
     const material = new THREE.ShaderMaterial({
       uniforms: {
@@ -35,6 +39,7 @@ export class SatelliteManager {
       },
       vertexShader: `
         attribute float alpha;
+        attribute float sizeScale;
         varying vec3 vColor;
         varying float vAlpha;
         uniform float pointSize;
@@ -42,7 +47,7 @@ export class SatelliteManager {
           vColor = color;
           vAlpha = alpha;
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = pointSize;
+          gl_PointSize = pointSize * sizeScale;
           gl_Position = projectionMatrix * mvPos;
         }
       `,
@@ -53,7 +58,7 @@ export class SatelliteManager {
         void main() {
           vec4 texel = texture2D(pointTexture, gl_PointCoord);
           if (texel.a > 0.3) {
-            gl_FragColor = vec4(vColor * texel.rgb, texel.a * vAlpha);
+            gl_FragColor = vec4(vColor * texel.rgb, vAlpha);
             return;
           }
           // Dark outline: two passes for a crisp 2px-ish border
@@ -73,7 +78,7 @@ export class SatelliteManager {
             ));
           }
           if (na > 0.3) {
-            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.9 * vAlpha);
+            gl_FragColor = vec4(0.0, 0.0, 0.0, vAlpha);
             return;
           }
           discard;
@@ -86,6 +91,7 @@ export class SatelliteManager {
 
     this.points = new THREE.Points(geometry, material);
     this.points.frustumCulled = false;
+    this.points.renderOrder = 998;
   }
 
   setVisible(visible: boolean) {
@@ -197,6 +203,9 @@ export class SatelliteManager {
       }
       const c = rainbow ? cSelected : cNormal;
 
+      // Size: selected/hovered sats are bigger
+      this.sizeAttr.array[i] = (selectedSats.has(sat) || sat === hoveredSat) ? 1.5 : 1.0;
+
       // Alpha: handle occlusion + fade
       let alpha = c.a;
       if (!selectedSats.has(sat) && sat !== hoveredSat && !fadingInSats.has(sat)) {
@@ -218,6 +227,7 @@ export class SatelliteManager {
     this.posAttr.needsUpdate = true;
     this.colorAttr.needsUpdate = true;
     this.alphaAttr.needsUpdate = true;
+    this.sizeAttr.needsUpdate = true;
   }
 
   private isOccludedByEarth(camPos: THREE.Vector3, tx: number, ty: number, tz: number, earthRadius: number): boolean {

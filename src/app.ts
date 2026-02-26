@@ -1162,7 +1162,7 @@ export class App {
           this.satellites, epoch, this.hoveredSat, this.selectedSats,
           this.selectedSatsVersion, this.unselectedFade, this.sim.orbitsToDraw,
           { orbitNormal: this.cfg.orbitNormal, orbitHighlighted: this.cfg.orbitHighlighted },
-          this.camera3d.position
+          this.camera3d.position, gmstDeg, this.cfg.earthRotationOffset,
         );
 
         // Footprints for all selected sats + hovered (per-sat orbit color)
