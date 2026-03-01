@@ -16,6 +16,16 @@ export class SatelliteManager {
   private updateFrame = 0;
   private _tmpPos = new THREE.Vector3();
 
+  // Dirty tracking — skip buffer uploads when data hasn't changed
+  private _prevHoveredSat: Satellite | null = null;
+  private _prevSelectedVersion = -1;
+  private _prevBloomEnabled = false;
+  private _prevHiddenVersion = -1;
+  private _prevCamX = NaN;
+  private _prevCamY = NaN;
+  private _prevCamZ = NaN;
+  private _prevFade = NaN;
+
   constructor(satTexture: THREE.Texture, maxSats = 25000) {
     this.maxSats = maxSats;
     const positions = new Float32Array(maxSats * 3);
@@ -28,6 +38,10 @@ export class SatelliteManager {
     this.colorAttr = new THREE.BufferAttribute(colors, 3);
     this.alphaAttr = new THREE.BufferAttribute(alphas, 1);
     this.sizeAttr = new THREE.BufferAttribute(sizes, 1);
+    this.posAttr.setUsage(THREE.DynamicDrawUsage);
+    this.colorAttr.setUsage(THREE.DynamicDrawUsage);
+    this.alphaAttr.setUsage(THREE.DynamicDrawUsage);
+    this.sizeAttr.setUsage(THREE.DynamicDrawUsage);
     geometry.setAttribute('position', this.posAttr);
     geometry.setAttribute('color', this.colorAttr);
     geometry.setAttribute('alpha', this.alphaAttr);
@@ -147,97 +161,131 @@ export class SatelliteManager {
     cameraPos: THREE.Vector3,
     hoveredSat: Satellite | null,
     selectedSats: Set<Satellite>,
+    selectedSatsVersion: number,
     unselectedFade: number,
     hideUnselected: boolean,
     colorConfig: { normal: string; highlighted: string; selected: string },
     bloomEnabled = false,
     fadingInSats: Set<Satellite> = new Set()
   ) {
-    const earthRadius = EARTH_RADIUS_KM / DRAW_SCALE;
-    const cNormal = parseHexColor(colorConfig.normal);
-    const cHighlight = parseHexColor(colorConfig.highlighted);
-    const cSelected = parseHexColor(colorConfig.selected);
-    const bloomBoost = bloomEnabled ? 2.0 : 1.0;
-
-    // Build rainbow color map for selected sats (index matches orbit color)
-    // Hidden sats get no color entry but still advance the index for color stability
-    const hiddenIds = uiStore.hiddenSelectedSats;
-    const selectedColorMap = new Map<Satellite, number[]>();
-    let selIdx = 0;
-    for (const s of selectedSats) {
-      if (!hiddenIds.has(s.noradId)) {
-        selectedColorMap.set(s, ORBIT_COLORS[selIdx % ORBIT_COLORS.length]);
-      }
-      selIdx++;
-    }
-
     const count = Math.min(satellites.length, this.maxSats);
-    const drawRange = this.points.geometry.drawRange;
-    drawRange.count = count;
+    this.points.geometry.drawRange.count = count;
 
+    // --- Dirty checks: skip buffer uploads when data hasn't changed ---
+    const hiddenVersion = uiStore.hiddenSelectedSatsVersion;
+    const colorSizeDirty = hoveredSat !== this._prevHoveredSat
+      || selectedSatsVersion !== this._prevSelectedVersion
+      || bloomEnabled !== this._prevBloomEnabled
+      || hiddenVersion !== this._prevHiddenVersion;
+
+    const cameraMoved = cameraPos.x !== this._prevCamX
+      || cameraPos.y !== this._prevCamY
+      || cameraPos.z !== this._prevCamZ;
+
+    const fadeStable = unselectedFade === 0 || unselectedFade === 1;
+    const alphaDirty = colorSizeDirty || cameraMoved || unselectedFade !== this._prevFade;
+
+    this._prevHoveredSat = hoveredSat;
+    this._prevSelectedVersion = selectedSatsVersion;
+    this._prevBloomEnabled = bloomEnabled;
+    this._prevHiddenVersion = hiddenVersion;
+    this._prevCamX = cameraPos.x;
+    this._prevCamY = cameraPos.y;
+    this._prevCamZ = cameraPos.z;
+    this._prevFade = unselectedFade;
+
+    // --- Position: always update (propagation changes positions every frame) ---
     for (let i = 0; i < count; i++) {
       const sat = satellites[i];
+      if (sat.decayed) continue;
+      this.posAttr.array[i * 3] = sat.currentPos.x / DRAW_SCALE;
+      this.posAttr.array[i * 3 + 1] = sat.currentPos.y / DRAW_SCALE;
+      this.posAttr.array[i * 3 + 2] = sat.currentPos.z / DRAW_SCALE;
+    }
+    this.posAttr.needsUpdate = true;
 
-      if (sat.decayed) {
-        this.alphaAttr.array[i] = 0;
-        continue;
+    // --- Color + Size: only when hover/selection state changes ---
+    if (colorSizeDirty) {
+      const cNormal = parseHexColor(colorConfig.normal);
+      const cSelected = parseHexColor(colorConfig.selected);
+      const bloomBoost = bloomEnabled ? 2.0 : 1.0;
+
+      const hiddenIds = uiStore.hiddenSelectedSats;
+      const selectedColorMap = new Map<Satellite, number[]>();
+      let selIdx = 0;
+      for (const s of selectedSats) {
+        if (!hiddenIds.has(s.noradId)) {
+          selectedColorMap.set(s, ORBIT_COLORS[selIdx % ORBIT_COLORS.length]);
+        }
+        selIdx++;
       }
 
-      const dx = sat.currentPos.x / DRAW_SCALE;
-      const dy = sat.currentPos.y / DRAW_SCALE;
-      const dz = sat.currentPos.z / DRAW_SCALE;
+      for (let i = 0; i < count; i++) {
+        const sat = satellites[i];
+        if (sat.decayed) continue;
 
-      this.posAttr.array[i * 3] = dx;
-      this.posAttr.array[i * 3 + 1] = dy;
-      this.posAttr.array[i * 3 + 2] = dz;
+        const isHovered = sat === hoveredSat;
+        const rainbow = selectedColorMap.get(sat);
+        if (rainbow) {
+          const b = bloomBoost * (isHovered ? 1.5 : 1.0);
+          this.colorAttr.array[i * 3] = rainbow[0] * b;
+          this.colorAttr.array[i * 3 + 1] = rainbow[1] * b;
+          this.colorAttr.array[i * 3 + 2] = rainbow[2] * b;
+        } else if (isHovered) {
+          const nextIdx = selectedSats.size;
+          const rc = ORBIT_COLORS[nextIdx % ORBIT_COLORS.length];
+          this.colorAttr.array[i * 3] = rc[0] * 0.9;
+          this.colorAttr.array[i * 3 + 1] = rc[1] * 0.9;
+          this.colorAttr.array[i * 3 + 2] = rc[2] * 0.9;
+        } else {
+          this.colorAttr.array[i * 3] = cNormal.r;
+          this.colorAttr.array[i * 3 + 1] = cNormal.g;
+          this.colorAttr.array[i * 3 + 2] = cNormal.b;
+        }
 
-      // Determine color: rainbow for selected (brighter if hovered), normal otherwise
-      const isHovered = sat === hoveredSat;
-      const rainbow = selectedColorMap.get(sat);
-      if (rainbow) {
-        const b = bloomBoost * (isHovered ? 1.5 : 1.0);
-        this.colorAttr.array[i * 3] = rainbow[0] * b;
-        this.colorAttr.array[i * 3 + 1] = rainbow[1] * b;
-        this.colorAttr.array[i * 3 + 2] = rainbow[2] * b;
-      } else if (isHovered) {
-        // Unselected hover: use next rainbow color at lower brightness
-        const nextIdx = selectedSats.size;
-        const rc = ORBIT_COLORS[nextIdx % ORBIT_COLORS.length];
-        this.colorAttr.array[i * 3] = rc[0] * 0.9;
-        this.colorAttr.array[i * 3 + 1] = rc[1] * 0.9;
-        this.colorAttr.array[i * 3 + 2] = rc[2] * 0.9;
-      } else {
-        this.colorAttr.array[i * 3] = cNormal.r;
-        this.colorAttr.array[i * 3 + 1] = cNormal.g;
-        this.colorAttr.array[i * 3 + 2] = cNormal.b;
-      }
-      const c = rainbow ? cSelected : cNormal;
-
-      // Size: selected/hovered sats are bigger
-      this.sizeAttr.array[i] = (selectedSats.has(sat) || sat === hoveredSat) ? 1.5 : 1.0;
-
-      // Alpha: handle occlusion + fade
-      let alpha = c.a;
-      if (!selectedSats.has(sat) && sat !== hoveredSat && !fadingInSats.has(sat)) {
-        alpha *= unselectedFade;
-      }
-      if (alpha <= 0) {
-        this.alphaAttr.array[i] = 0;
-        continue;
+        this.sizeAttr.array[i] = (selectedSats.has(sat) || isHovered) ? 1.5 : 1.0;
       }
 
-      // Earth occlusion check
-      if (this.isOccludedByEarth(cameraPos, dx, dy, dz, earthRadius)) {
-        alpha = 0;
-      }
-
-      this.alphaAttr.array[i] = alpha;
+      this.colorAttr.needsUpdate = true;
+      this.sizeAttr.needsUpdate = true;
     }
 
-    this.posAttr.needsUpdate = true;
-    this.colorAttr.needsUpdate = true;
-    this.alphaAttr.needsUpdate = true;
-    this.sizeAttr.needsUpdate = true;
+    // --- Alpha + occlusion: only when camera moved, fade changed, or color/size dirty ---
+    if (alphaDirty) {
+      const earthRadius = EARTH_RADIUS_KM / DRAW_SCALE;
+      const cNormal = parseHexColor(colorConfig.normal);
+      const cSelected = parseHexColor(colorConfig.selected);
+
+      for (let i = 0; i < count; i++) {
+        const sat = satellites[i];
+        if (sat.decayed) {
+          this.alphaAttr.array[i] = 0;
+          continue;
+        }
+
+        const isSelected = selectedSats.has(sat);
+        const c = isSelected ? cSelected : cNormal;
+        let alpha = c.a;
+        if (!isSelected && sat !== hoveredSat && !fadingInSats.has(sat)) {
+          alpha *= unselectedFade;
+        }
+        if (alpha <= 0) {
+          this.alphaAttr.array[i] = 0;
+          continue;
+        }
+
+        const dx = this.posAttr.array[i * 3];
+        const dy = this.posAttr.array[i * 3 + 1];
+        const dz = this.posAttr.array[i * 3 + 2];
+        if (this.isOccludedByEarth(cameraPos, dx, dy, dz, earthRadius)) {
+          alpha = 0;
+        }
+
+        this.alphaAttr.array[i] = alpha;
+      }
+
+      this.alphaAttr.needsUpdate = true;
+    }
   }
 
   private isOccludedByEarth(camPos: THREE.Vector3, tx: number, ty: number, tz: number, earthRadius: number): boolean {

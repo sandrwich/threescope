@@ -215,7 +215,11 @@ export class App {
     this.scene2d = new THREE.Scene();
     this.scene2d.background = new THREE.Color(palette.bg);
 
-    this.setLoading(0.2, 'Loading textures...');
+    // Start TLE network fetch in parallel with texture loading (populates sourceData)
+    sourcesStore.load();
+    const tleFetchDone = this.prefetchSources();
+
+    this.setLoading(0.1, 'Loading textures (0/4)...');
     await this.loadTextures();
 
     // Orrery controller (after scene + camera + textures are ready)
@@ -231,11 +235,21 @@ export class App {
       },
     });
 
-    sourcesStore.load();
-    this.setLoading(0.6, 'Fetching satellite data...');
+    // Wait for TLE fetch to finish, then apply (orbitRenderer now exists)
+    if (this._prefetchTotal > 1 && this._prefetchLoaded < this._prefetchTotal) {
+      // Prefetch still in progress — poll for progress updates
+      const total = this._prefetchTotal;
+      while (this._prefetchLoaded < total) {
+        this.setLoading(0.55 + (this._prefetchLoaded / total) * 0.2, `Loading satellites (${this._prefetchLoaded}/${total} sources)...`);
+        await new Promise(r => setTimeout(r, 100));
+      }
+    }
+    this.setLoading(0.75, this._prefetchTotal > 1 ? `Loading satellites (${this._prefetchTotal}/${this._prefetchTotal} sources)...` : 'Loading satellites...');
+    await tleFetchDone;
+    this.setLoading(0.8, 'Computing orbits...');
     await this.loadSources();
 
-    this.setLoading(0.9, 'Setting up...');
+    this.setLoading(0.9, 'Wiring controls...');
     this.wireStores();
     this.input = new InputHandler(this.renderer.domElement, this.renderer, this.camera, this.camera3d, this.postProcessing, {
       getViewMode: () => this.viewMode,
@@ -261,7 +275,7 @@ export class App {
     });
 
     this.setLoading(1.0, 'Ready!');
-    setTimeout(() => { this.loadingScreen.style.display = 'none'; }, 300);
+    setTimeout(() => { this.loadingScreen.style.display = 'none'; }, 150);
 
     this.mcChannel.port1.onmessage = () => this.animate();
     this.clock.start();
@@ -275,20 +289,25 @@ export class App {
 
   private async loadTextures() {
     const loader = new THREE.TextureLoader();
-    const load = (url: string) => new Promise<THREE.Texture>((resolve) => {
-      loader.load(url, resolve, undefined, () => resolve(new THREE.Texture()));
+    let texLoaded = 0;
+    const texTotal = 4;
+    const load = (url: string, label: string) => new Promise<THREE.Texture>((resolve) => {
+      loader.load(url, (tex) => {
+        texLoaded++;
+        this.setLoading(0.1 + (texLoaded / texTotal) * 0.35, `Loading textures (${texLoaded}/${texTotal})...`);
+        resolve(tex);
+      }, undefined, () => resolve(new THREE.Texture()));
     });
 
-    const [dayTex, nightTex, cloudTex, moonTex, satTex, starTex] = await Promise.all([
-      load('/textures/earth/color.webp'),
-      load('/textures/earth/night.webp'),
-      load('/textures/earth/clouds.webp'),
-      load('/textures/moon/color.webp'),
-      load('/textures/ui/sat_icon.png'),
-      load('/textures/stars.webp'),
+    // Only block on textures needed for first frame — defer clouds (4.6MB) and moon (2.4MB)
+    const [dayTex, nightTex, satTex, starTex] = await Promise.all([
+      load('/textures/earth/color.webp', 'earth'),
+      load('/textures/earth/night.webp', 'night'),
+      load('/textures/ui/sat_icon.png', 'icons'),
+      load('/textures/stars.webp', 'stars'),
     ]);
 
-    for (const tex of [dayTex, nightTex, cloudTex, moonTex]) {
+    for (const tex of [dayTex, nightTex]) {
       tex.flipY = false;
       tex.colorSpace = THREE.NoColorSpace;
     }
@@ -299,23 +318,43 @@ export class App {
     this.starTex = starTex;
     this.scene3d.background = starTex;
 
-    this.setLoading(0.4, 'Building scene...');
+    // GPU uploads happen on first animate() behind the loading screen — no initTexture needed here
+
+    this.setLoading(0.5, 'Building scene...');
 
     // Earth
-    this.earth = new Earth(dayTex, nightTex);
+    this.earth = new Earth(dayTex, nightTex, this.renderer);
     this.scene3d.add(this.earth.mesh);
 
     // Atmosphere (Fresnel rim glow, rendered before clouds)
     this.atmosphere = new Atmosphere();
     this.scene3d.add(this.atmosphere.mesh);
 
-    // Clouds
-    this.cloudLayer = new CloudLayer(cloudTex);
+    // Clouds — start with 1×1 transparent placeholder, load real texture async
+    const cloudPlaceholder = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
+    cloudPlaceholder.needsUpdate = true;
+    this.cloudLayer = new CloudLayer(cloudPlaceholder);
     this.scene3d.add(this.cloudLayer.mesh);
+    loader.load('/textures/earth/clouds.webp', (tex) => {
+      tex.flipY = false;
+      tex.colorSpace = THREE.NoColorSpace;
+      this.cloudLayer.setTexture(tex);
+      this.renderer.initTexture(tex);
+    });
 
-    // Moon
-    this.moonScene = new MoonScene(moonTex);
+    // Moon — start with 1×1 gray placeholder, load real texture async
+    const moonPlaceholder = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1, THREE.RGBAFormat);
+    moonPlaceholder.flipY = false;
+    moonPlaceholder.colorSpace = THREE.NoColorSpace;
+    moonPlaceholder.needsUpdate = true;
+    this.moonScene = new MoonScene(moonPlaceholder, this.renderer);
     this.scene3d.add(this.moonScene.mesh);
+    loader.load('/textures/moon/color.webp', (tex) => {
+      tex.flipY = false;
+      tex.colorSpace = THREE.NoColorSpace;
+      this.moonScene.setTexture(tex);
+      this.renderer.initTexture(tex);
+    });
 
     // Sun
     this.sunScene = new SunScene();
@@ -363,6 +402,25 @@ export class App {
   }
 
   private sourceData = new Map<string, Satellite[]>();
+
+  private _prefetchTotal = 0;
+  private _prefetchLoaded = 0;
+
+  /** Fetch TLE data into sourceData without touching scene objects. Safe to run before scene is built. */
+  private async prefetchSources() {
+    const toFetch = sourcesStore.enabledSources.filter(s => !this.sourceData.has(s.id));
+    if (toFetch.length === 0) return;
+    this._prefetchTotal = toFetch.length;
+    this._prefetchLoaded = 0;
+    sourcesStore.loading = true;
+    uiStore.satCount = -1;
+    uiStore.satStatusExtra = '';
+    await Promise.allSettled(toFetch.map(async src => {
+      await this.fetchSource(src);
+      this._prefetchLoaded++;
+    }));
+    sourcesStore.loading = false;
+  }
 
   async loadSources() {
     const enabled = sourcesStore.enabledSources;
@@ -1184,10 +1242,12 @@ export class App {
     this.camera.updateFrame(dt, earthRotRad, isOrreryOrPlanet);
     this.camera3d.updateMatrixWorld();
 
-    // Hover detection — only recompute when pointer or camera moved
+    // Hover detection — only recompute when pointer moved
+    // Camera movement alone doesn't trigger hover recompute (user is orbiting, not hovering).
+    // Stale hover persists during camera motion — corrected on next pointer move.
     const cp = this.camera3d.position;
     const cameraMoved = cp.x !== this._lastHoverCamX || cp.y !== this._lastHoverCamY || cp.z !== this._lastHoverCamZ;
-    const hoverDirty = this.input.consumeHoverDirty() || cameraMoved;
+    const hoverDirty = this.input.consumeHoverDirty();
     if (cameraMoved) {
       this._lastHoverCamX = cp.x;
       this._lastHoverCamY = cp.y;
@@ -1204,7 +1264,6 @@ export class App {
         this.renderer.domElement.style.cursor = hovered ? 'pointer' : '';
       }
     } else if (hoverDirty && this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON) {
-      this.hoveredSat = null;
       if (this.viewMode === ViewMode.VIEW_3D) {
         this.detectHover3D();
       } else {
@@ -1318,7 +1377,8 @@ export class App {
       if (earthMode) {
         this.satManager.update(
           this.satellites, this.camera3d.position,
-          this.hoveredSat, this.selectedSats, this.unselectedFade, this.hideUnselected,
+          this.hoveredSat, this.selectedSats, this.selectedSatsVersion,
+          this.unselectedFade, this.hideUnselected,
           { normal: this.cfg.satNormal, highlighted: this.cfg.satHighlighted, selected: this.cfg.satSelected },
           this.bloomEnabled, this.fadingInSats
         );
@@ -1536,6 +1596,20 @@ export class App {
     const disc = b * b - 4 * c;
     const earthHitDist = disc > 0 ? (-b - Math.sqrt(disc)) / 2 : Infinity;
 
+    // Hysteresis: keep current hover with a larger retention radius to prevent blinking
+    if (this.hoveredSat && !this.hoveredSat.decayed) {
+      this.tmpVec3.copy(this.hoveredSat.currentPos).divideScalar(DRAW_SCALE);
+      const distToCam = camPos.distanceTo(this.tmpVec3);
+      if (distToCam <= earthHitDist) {
+        const retainRadius = 0.022 * distToCam * touchScale;
+        this.tmpSphere.set(this.tmpVec3, retainRadius);
+        if (this.raycaster.ray.intersectsSphere(this.tmpSphere)) {
+          return; // still within retention zone, keep current hover
+        }
+      }
+    }
+
+    this.hoveredSat = null;
     let closestRayDist = 9999;
     for (const sat of this.satellites) {
       if (sat.decayed) continue;

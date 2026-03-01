@@ -16,7 +16,7 @@ export class Earth {
   private bumpEnabled = true;
   private aoEnabledState = true;
 
-  constructor(dayTex: THREE.Texture, nightTex: THREE.Texture) {
+  constructor(dayTex: THREE.Texture, nightTex: THREE.Texture, private renderer?: THREE.WebGLRenderer) {
     const radius = EARTH_RADIUS_KM / DRAW_SCALE;
     const geometry = this.genEarthGeometry(radius, 256, 256);
 
@@ -51,6 +51,7 @@ export class Earth {
       this.material.uniforms.normalMap.value = tex;
       this.normalMapLoaded = true;
       if (this.bumpEnabled) this.material.uniforms.hasNormalMap.value = 1.0;
+      this.renderer?.initTexture(tex);
     });
 
     // Load displacement map asynchronously
@@ -59,6 +60,7 @@ export class Earth {
       tex.colorSpace = THREE.NoColorSpace;
       this.material.uniforms.displacementMap.value = tex;
       this.material.uniforms.hasDisplacement.value = 1.0;
+      this.renderer?.initTexture(tex);
     });
   }
 

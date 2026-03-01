@@ -90,6 +90,12 @@ export class OrbitRenderer {
   // Assembly state — only rebuild GPU buffer when visibility changes
   private lastActiveSat: Satellite | null | undefined = undefined; // undefined = never assembled
   private lastSelectedSatsVersion = -1;
+
+  // Highlight orbit dirty tracking — skip SGP4 recompute when nothing changed
+  private _lastHighlightEpoch = NaN;
+  private _lastHighlightVersion = -1;
+  private _lastHighlightHovered: Satellite | null = null;
+  private _lastHighlightHiddenVersion = -1;
   private lastSelectedSatsSize = -1;
   private lastFadedOut = false;
   private assembledVertFloats = 0;
@@ -475,80 +481,96 @@ export class OrbitRenderer {
     // Always use rainbow palette for selected sat orbits
 
     if (highlightSats.length > 0) {
-      const arr = this.highlightBuffer.array as Float32Array;
-      const col = this.highlightColorBuffer.array as Float32Array;
-      let vi = 0;
-
-      // Sun direction in render-space (ECI→render: x=x, y=z, z=-y)
-      const sunEci = sunDirectionECI(currentEpoch);
-      const sunRX = sunEci.x, sunRY = sunEci.z, sunRZ = -sunEci.y;
-      const sunRender = { x: sunRX, y: sunRY, z: sunRZ };
-      // Moon position in render-space for solar eclipse check
-      const moonEci = moonPositionECI(currentEpoch);
-      const moonRender = { x: moonEci.x, y: moonEci.z, z: -moonEci.y };
-      const checkSolarEclipse = solarEclipsePossible(moonRender, sunRender);
-      const ECLIPSE_DIM = 0.3;
       const hiddenIds = uiStore.hiddenSelectedSats;
+      const ECLIPSE_DIM = 0.3;
 
-      // Cache orbit scrub points for the first highlighted sat only
-      const scrubPts: { epoch: number; sx: number; sy: number; sz: number }[] = [];
+      // Dirty check: skip expensive SGP4 recompute when epoch and selection haven't changed
+      const hiddenVersion = uiStore.hiddenSelectedSatsVersion;
+      const hlDirty = currentEpoch !== this._lastHighlightEpoch
+        || selectedSatsVersion !== this._lastHighlightVersion
+        || hoveredSat !== this._lastHighlightHovered
+        || hiddenVersion !== this._lastHighlightHiddenVersion;
 
-      for (let si = 0; si < highlightSats.length; si++) {
-        const sat = highlightSats[si];
-        if (hiddenIds.has(sat.noradId)) continue;
-        const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
-        const periodDays = TWO_PI / sat.meanMotion / 86400.0;
-        // Scale segments by period: LEO gets full 400, long-period sats get fewer but floor at 360.
-        const periodScale = Math.min(1.0, Math.sqrt(0.0625 / periodDays));
-        const baseSegs = Math.max(360, Math.floor(400 * orbitsToDraw * periodScale));
-        // Further reduce during fast time (scrub, high speed)
-        const segments = Math.min(this.highlightSegmentsPerOrbit, fastTime ? Math.max(120, baseSegs >> 1) : baseSegs);
-        const timeStep = (periodDays * orbitsToDraw) / segments;
+      if (hlDirty) {
+        this._lastHighlightEpoch = currentEpoch;
+        this._lastHighlightVersion = selectedSatsVersion;
+        this._lastHighlightHovered = hoveredSat;
+        this._lastHighlightHiddenVersion = hiddenVersion;
 
-        // Compute orbit points with eclipse-aware coloring
-        let px = 0, py = 0, pz = 0;
-        let prevDim = 1.0;
-        for (let i = 0; i <= segments; i++) {
-          const t = currentEpoch + i * timeStep;
-          calculatePosition(sat, t, this._tmpPos);
-          const px2 = this._tmpPos.x, py2 = this._tmpPos.y, pz2 = this._tmpPos.z;
-          // Cache scrub points for first visible highlighted sat (one orbit only)
-          if ((si === 0 || (scrubPts.length === 0 && si > 0)) && t <= currentEpoch + periodDays) {
-            scrubPts.push({ epoch: t, sx: px2 / DRAW_SCALE, sy: py2 / DRAW_SCALE, sz: pz2 / DRAW_SCALE });
-          }
-          // Eclipse check: skip during fast time for performance
-          let dim = 1.0;
-          if (!fastTime) {
-            let shadowFactor = earthShadowFactor(px2, py2, pz2, sunRender);
-            if (shadowFactor >= 1.0 && checkSolarEclipse) {
-              if (isSolarEclipsed(px2, py2, pz2, moonRender, sunRender)) shadowFactor = 0.0;
+        const arr = this.highlightBuffer.array as Float32Array;
+        const col = this.highlightColorBuffer.array as Float32Array;
+        let vi = 0;
+
+        // Sun direction in render-space (ECI→render: x=x, y=z, z=-y)
+        const sunEci = sunDirectionECI(currentEpoch);
+        const sunRX = sunEci.x, sunRY = sunEci.z, sunRZ = -sunEci.y;
+        const sunRender = { x: sunRX, y: sunRY, z: sunRZ };
+        // Moon position in render-space for solar eclipse check
+        const moonEci = moonPositionECI(currentEpoch);
+        const moonRender = { x: moonEci.x, y: moonEci.z, z: -moonEci.y };
+        const checkSolarEclipse = solarEclipsePossible(moonRender, sunRender);
+
+        // Cache orbit scrub points for the first highlighted sat only
+        const scrubPts: { epoch: number; sx: number; sy: number; sz: number }[] = [];
+
+        for (let si = 0; si < highlightSats.length; si++) {
+          const sat = highlightSats[si];
+          if (hiddenIds.has(sat.noradId)) continue;
+          const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
+          const periodDays = TWO_PI / sat.meanMotion / 86400.0;
+          // Scale segments by period: LEO gets full 400, long-period sats get fewer but floor at 360.
+          const periodScale = Math.min(1.0, Math.sqrt(0.0625 / periodDays));
+          const baseSegs = Math.max(360, Math.floor(400 * orbitsToDraw * periodScale));
+          // Further reduce during fast time (scrub, high speed)
+          const segments = Math.min(this.highlightSegmentsPerOrbit, fastTime ? Math.max(120, baseSegs >> 1) : baseSegs);
+          const timeStep = (periodDays * orbitsToDraw) / segments;
+
+          // Compute orbit points with eclipse-aware coloring
+          let px = 0, py = 0, pz = 0;
+          let prevDim = 1.0;
+          for (let i = 0; i <= segments; i++) {
+            const t = currentEpoch + i * timeStep;
+            calculatePosition(sat, t, this._tmpPos);
+            const px2 = this._tmpPos.x, py2 = this._tmpPos.y, pz2 = this._tmpPos.z;
+            // Cache scrub points for first visible highlighted sat (one orbit only)
+            if ((si === 0 || (scrubPts.length === 0 && si > 0)) && t <= currentEpoch + periodDays) {
+              scrubPts.push({ epoch: t, sx: px2 / DRAW_SCALE, sy: py2 / DRAW_SCALE, sz: pz2 / DRAW_SCALE });
             }
-            dim = ECLIPSE_DIM + shadowFactor * (1.0 - ECLIPSE_DIM);
+            // Eclipse check: skip during fast time for performance
+            let dim = 1.0;
+            if (!fastTime) {
+              let shadowFactor = earthShadowFactor(px2, py2, pz2, sunRender);
+              if (shadowFactor >= 1.0 && checkSolarEclipse) {
+                if (isSolarEclipsed(px2, py2, pz2, moonRender, sunRender)) shadowFactor = 0.0;
+              }
+              dim = ECLIPSE_DIM + shadowFactor * (1.0 - ECLIPSE_DIM);
+            }
+            const cx = px2 / DRAW_SCALE;
+            const cy = py2 / DRAW_SCALE;
+            const cz = pz2 / DRAW_SCALE;
+            if (i > 0 && vi + 6 <= this.maxHighlightVerts * 3) {
+              arr[vi] = px; arr[vi+1] = py; arr[vi+2] = pz;
+              col[vi] = cr * prevDim; col[vi+1] = cg * prevDim; col[vi+2] = cb * prevDim;
+              vi += 3;
+              arr[vi] = cx; arr[vi+1] = cy; arr[vi+2] = cz;
+              col[vi] = cr * dim; col[vi+1] = cg * dim; col[vi+2] = cb * dim;
+              vi += 3;
+            }
+            px = cx; py = cy; pz = cz;
+            prevDim = dim;
           }
-          const cx = px2 / DRAW_SCALE;
-          const cy = py2 / DRAW_SCALE;
-          const cz = pz2 / DRAW_SCALE;
-          if (i > 0 && vi + 6 <= this.maxHighlightVerts * 3) {
-            arr[vi] = px; arr[vi+1] = py; arr[vi+2] = pz;
-            col[vi] = cr * prevDim; col[vi+1] = cg * prevDim; col[vi+2] = cb * prevDim;
-            vi += 3;
-            arr[vi] = cx; arr[vi+1] = cy; arr[vi+2] = cz;
-            col[vi] = cr * dim; col[vi+1] = cg * dim; col[vi+2] = cb * dim;
-            vi += 3;
-          }
-          px = cx; py = cy; pz = cz;
-          prevDim = dim;
         }
+
+        this.orbitScrubPoints = scrubPts;
+        if (highlightSats.length > 0) {
+          this.orbitScrubPeriod = TWO_PI / highlightSats[0].meanMotion / 86400.0;
+        }
+
+        this.highlightBuffer.needsUpdate = true;
+        this.highlightColorBuffer.needsUpdate = true;
+        this.highlightLine.geometry.setDrawRange(0, vi / 3);
       }
 
-      this.orbitScrubPoints = scrubPts;
-      if (highlightSats.length > 0) {
-        this.orbitScrubPeriod = TWO_PI / highlightSats[0].meanMotion / 86400.0;
-      }
-
-      this.highlightBuffer.needsUpdate = true;
-      this.highlightColorBuffer.needsUpdate = true;
-      this.highlightLine.geometry.setDrawRange(0, vi / 3);
       this.highlightMat.color.setRGB(1, 1, 1); // vertex colors handle tinting
       this.highlightMat.opacity = cHL.a;
       this.highlightLine.visible = true;

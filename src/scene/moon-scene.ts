@@ -86,7 +86,7 @@ export class MoonScene {
   drawPos = new THREE.Vector3();
   private material: THREE.ShaderMaterial;
 
-  constructor(moonTex: THREE.Texture) {
+  constructor(moonTex: THREE.Texture, private renderer?: THREE.WebGLRenderer) {
     const radius = MOON_RADIUS_KM / DRAW_SCALE;
     const geometry = new THREE.SphereGeometry(radius, 256, 256);
     this.material = new THREE.ShaderMaterial({
@@ -111,7 +111,12 @@ export class MoonScene {
       tex.colorSpace = THREE.NoColorSpace;
       this.material.uniforms.displacementMap.value = tex;
       this.material.uniforms.hasDisplacement.value = 1.0;
+      this.renderer?.initTexture(tex);
     });
+  }
+
+  setTexture(tex: THREE.Texture) {
+    this.material.uniforms.map.value = tex;
   }
 
   updateSunDir(sunDir: THREE.Vector3) {

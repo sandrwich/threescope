@@ -49,12 +49,14 @@ class UIStore {
   singleSelectMode = $state(false);
   selectedSatData = $state<SelectedSatInfo[]>([]);
   hiddenSelectedSats = $state(new Set<number>());
+  hiddenSelectedSatsVersion = $state(0);
 
   toggleSatVisibility(noradId: number) {
     const next = new Set(this.hiddenSelectedSats);
     if (next.has(noradId)) next.delete(noradId);
     else next.add(noradId);
     this.hiddenSelectedSats = next;
+    this.hiddenSelectedSatsVersion++;
   }
 
   // Pass predictor

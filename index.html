@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Threescope</title>
   <link rel="icon" type="image/png" href="/textures/ui/sat_icon.png">
+  <link rel="preload" href="/textures/earth/color.webp" as="image">
   <meta name="description" content="Real-time 3D satellite tracker with pass predictions, orbit visualization, and Doppler analysis. Works on desktop and mobile.">
   <meta name="theme-color" content="#101010">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -31,7 +32,7 @@
     }
     #loading-screen .bar-outer { width: 400px; height: 30px; border: 2px solid var(--text, #fff); }
     #loading-screen .bar-inner {
-      height: 100%; width: 0%; background: var(--text-muted, #ccc); transition: width 0.3s;
+      height: 100%; width: 0%; background: var(--text-muted, #ccc); transition: width 0.15s;
       margin: 4px; height: calc(100% - 8px);
     }
     #loading-screen .msg { margin-bottom: 16px; font-size: 18px; color: var(--text, #fff); }

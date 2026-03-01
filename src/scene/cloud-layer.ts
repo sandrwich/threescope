@@ -39,6 +39,12 @@ export class CloudLayer {
     this.mesh.visible = false;
   }
 
+  setTexture(tex: THREE.Texture) {
+    this.shaderMat.uniforms.cloudTexture.value = tex;
+    this.defaultMat.map = tex;
+    this.defaultMat.needsUpdate = true;
+  }
+
   setScale(s: number) {
     this.mesh.scale.setScalar(s);
   }
