@@ -2,7 +2,7 @@ import * as satellite from 'satellite.js';
 import * as THREE from 'three';
 import type { Satellite } from '../types';
 import { normalizeEpoch, epochToUnix } from './epoch';
-import { J2, EARTH_RADIUS_EQ_KM } from '../constants';
+import { J2, EARTH_RADIUS_EQ_KM, MU } from '../constants';
 import stdmagData from '../data/stdmag.json';
 
 /**
@@ -44,7 +44,6 @@ export function parseTLE(name: string, line1: string, line2: string): Satellite 
     const meanAnomaly = parseFloat(line2.substring(43, 51)) * (Math.PI / 180);
     const revsPerDay = parseFloat(line2.substring(52, 63));
     const meanMotion = (revsPerDay * 2.0 * Math.PI) / 86400.0; // rad/s
-    const MU = 398600.4418;
     const semiMajorAxis = Math.pow(MU / (meanMotion * meanMotion), 1.0 / 3.0);
 
     // Parse ndot (first derivative of mean motion / 2) from TLE line 1 cols 33-43
@@ -98,8 +97,9 @@ export function getCorrectedElements(sat: Satellite, currentEpoch: number): { ra
   };
 }
 
-export function calculatePosition(sat: Satellite, currentEpoch: number): THREE.Vector3 {
+export function calculatePosition(sat: Satellite, currentEpoch: number, target?: THREE.Vector3): THREE.Vector3 {
   currentEpoch = normalizeEpoch(currentEpoch);
+  const out = target ?? new THREE.Vector3();
 
   // Convert epoch to Date for satellite.js
   const yy = Math.floor(currentEpoch / 1000.0);
@@ -112,11 +112,11 @@ export function calculatePosition(sat: Satellite, currentEpoch: number): THREE.V
   const result = satellite.propagate(sat.satrec, date);
 
   if (!result.position || typeof result.position === 'boolean') {
-    return new THREE.Vector3();
+    return out.set(0, 0, 0);
   }
 
   const eci = result.position as satellite.EciVec3<number>;
 
   // ECI to render coords: x=eci.x, y=eci.z, z=-eci.y
-  return new THREE.Vector3(eci.x, eci.z, -eci.y);
+  return out.set(eci.x, eci.z, -eci.y);
 }

@@ -16,6 +16,11 @@ export class CameraController {
   private _target3d = new THREE.Vector3();
   private _targetTarget3d = new THREE.Vector3();
 
+  // ---- Reusable temp vectors for pan3d (avoid per-call allocations) ----
+  private _panFwd = new THREE.Vector3();
+  private _panRight = new THREE.Vector3();
+  private _panUp = new THREE.Vector3();
+
   // ---- Touch inertia velocity state ----
   private _orbitVelX = 0;
   private _orbitVelY = 0;
@@ -122,12 +127,12 @@ export class CameraController {
 
   /** Apply 3D pan (shift+drag or two-finger) to targetTarget3d. */
   pan3d(dx: number, dy: number): void {
-    const forward = new THREE.Vector3().subVectors(this._target3d, this.camera3d.position).normalize();
-    const right = new THREE.Vector3().crossVectors(forward, this.camera3d.up).normalize();
-    const upVec = new THREE.Vector3().crossVectors(right, forward).normalize();
+    this._panFwd.subVectors(this._target3d, this.camera3d.position).normalize();
+    this._panRight.crossVectors(this._panFwd, this.camera3d.up).normalize();
+    this._panUp.crossVectors(this._panRight, this._panFwd).normalize();
     const panSpeed = this._targetCamDistance * 0.001;
-    this._targetTarget3d.add(right.multiplyScalar(-dx * panSpeed));
-    this._targetTarget3d.add(upVec.multiplyScalar(dy * panSpeed));
+    this._targetTarget3d.add(this._panRight.multiplyScalar(-dx * panSpeed));
+    this._targetTarget3d.add(this._panUp.multiplyScalar(dy * panSpeed));
   }
 
   /** Apply 3D pan with velocity tracking (for touch inertia). */
@@ -269,6 +274,7 @@ export class CameraController {
       this.camera3d.updateProjectionMatrix();
       const ndcOffset = this._viewOffsetY * 2 / window.innerHeight;
       this.camera3d.projectionMatrix.elements[9] -= ndcOffset;
+      this.camera3d.projectionMatrixInverse.copy(this.camera3d.projectionMatrix).invert();
     }
 
     // Clamp 2D target Y to map bounds

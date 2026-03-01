@@ -101,7 +101,7 @@ export function epochToDatetimeStr(epoch: number): string {
   const h = Math.floor(hours);
   const minutes = (hours - h) * 60.0;
   const m = Math.floor(minutes);
-  const seconds = Math.round((minutes - m) * 60.0);
+  const seconds = Math.floor((minutes - m) * 60.0);
 
   const pad = (n: number, w = 2) => String(n).padStart(w, '0');
   return `${pad(year, 4)}-${pad(month)}-${pad(day)} ${pad(h)}:${pad(m)}:${pad(seconds)} UTC`;

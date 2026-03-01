@@ -71,6 +71,11 @@ class UIStore {
       this.passFilterWindowOpen = true;
     }
   }
+  /** True when passes UI is visible (desktop window or mobile sheet). */
+  get passesVisible(): boolean {
+    return this._passesWindowOpen || this.activeMobileSheet === 'passes';
+  }
+
   polarPlotOpen = $state(false);
   dopplerWindowOpen = $state(false);
   dopplerWindowFocus = $state(0);

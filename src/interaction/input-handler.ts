@@ -198,9 +198,6 @@ export class InputHandler {
       // Check if left button was released after a drag (distance > threshold)
       if (this._leftDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY)) > 8) return;
 
-      // Ignore clicks on UI area
-      if (e.clientX < 220 && e.clientY > 110 && e.clientY < 210) return;
-
       // Orrery mode: pick planet
       if (this.cb.getOrreryMode()) {
         this.cb.onOrreryClick();

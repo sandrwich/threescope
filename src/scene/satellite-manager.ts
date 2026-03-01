@@ -14,6 +14,7 @@ export class SatelliteManager {
   private sizeAttr: THREE.BufferAttribute;
   private maxSats: number;
   private updateFrame = 0;
+  private _tmpPos = new THREE.Vector3();
 
   constructor(satTexture: THREE.Texture, maxSats = 15000) {
     this.maxSats = maxSats;
@@ -131,10 +132,10 @@ export class SatelliteManager {
     for (let i = 0; i < count; i++) {
       const sat = satellites[i];
       if (i % batchCount === batch || sat === hoveredSat || selectedSats.has(sat)) {
-        const pos = calculatePosition(sat, currentEpoch);
-        const r2 = pos.x * pos.x + pos.y * pos.y + pos.z * pos.z;
+        calculatePosition(sat, currentEpoch, this._tmpPos);
+        const r2 = this._tmpPos.x * this._tmpPos.x + this._tmpPos.y * this._tmpPos.y + this._tmpPos.z * this._tmpPos.z;
         if (r2 > EARTH_RADIUS_KM * EARTH_RADIUS_KM) {
-          sat.currentPos = pos;
+          sat.currentPos.copy(this._tmpPos);
           sat.decayed = false;
         } else {
           sat.decayed = true;

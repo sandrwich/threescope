@@ -43,14 +43,6 @@ import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } f
 import { loadElevation, getElevation, isElevationLoaded } from './astro/elevation';
 import { palette } from './ui/shared/theme';
 
-function formatAge(ms: number): string {
-  const mins = Math.floor(ms / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
 export class App {
   private renderer!: THREE.WebGLRenderer;
   private scene3d!: THREE.Scene;
@@ -128,6 +120,7 @@ export class App {
   private unselectedFade = 1.0;
   private fadingInSats = new Set<Satellite>();
   private prevSelectedSats = new Set<Satellite>();
+  private prevSelVersion = -1;
   private cfg = { ...defaultConfig };
   private passPredictor = new PassPredictor();
   private nearbyPredictor = new PassPredictor();
@@ -138,6 +131,7 @@ export class App {
   private raycaster = new THREE.Raycaster();
   private tmpVec3 = new THREE.Vector3();
   private tmpSphere = new THREE.Sphere();
+  private static readonly Y_AXIS = new THREE.Vector3(0, 1, 0);
 
   // Camera state (3D orbital + 2D orthographic)
   private camera!: CameraController;
@@ -413,7 +407,10 @@ export class App {
         const age = result.cacheAge;
         sourcesStore.setLoadState(src.id, { satCount: satellites.length, status: 'loaded', cacheAge: age });
       } else if (src.type === 'url') {
-        const resp = await fetch(src.url!);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const resp = await fetch(src.url!, { signal: controller.signal });
+        clearTimeout(timeout);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const text = await resp.text();
         satellites = parseTLEText(text);
@@ -475,7 +472,7 @@ export class App {
     uiStore.nearbyComputing = false;
     this.nearbyPredictor.dispose();
     // Auto-recompute if nearby tab is active
-    if (uiStore.passesWindowOpen && uiStore.passesTab === 'nearby') {
+    if (uiStore.passesVisible && uiStore.passesTab === 'nearby') {
       this.requestNearbyPasses();
     }
 
@@ -715,7 +712,7 @@ export class App {
       else this.requestPasses();
     };
     uiStore.onFiltersChanged = () => {
-      if (!uiStore.passesWindowOpen) return;
+      if (!uiStore.passesVisible) return;
       if (uiStore.passFilterInteracting) {
         // Pointer held — just mark dirty, recompute on release
         filterDirty = true;
@@ -736,8 +733,8 @@ export class App {
     uiStore.onSelectSatFromNearbyPass = uiStore.onSelectSatellite;
 
     observerStore.onLocationChange = () => {
-      if (uiStore.passesWindowOpen && uiStore.passesTab === 'selected') this.requestPasses();
-      if (uiStore.passesWindowOpen && uiStore.passesTab === 'nearby') this.requestNearbyPasses();
+      if (uiStore.passesVisible && uiStore.passesTab === 'selected') this.requestPasses();
+      if (uiStore.passesVisible && uiStore.passesTab === 'nearby') this.requestNearbyPasses();
       this.updateObserverMarker();
     };
     // Load elevation grid in background
@@ -1029,7 +1026,8 @@ export class App {
 
   /** Handle click/tap satellite selection */
   private handleClick() {
-    // If hoveredSat is stale (e.g. pointer was over UI last frame), do a fresh raycast
+    // On touch, mouseNDC updates in touchstart but detectHover3D() may not
+    // have run yet — do a fresh raycast if hoveredSat is still null
     if (!this.hoveredSat) {
       if (this.viewMode === ViewMode.VIEW_3D) {
         this.detectHover3D();
@@ -1128,7 +1126,10 @@ export class App {
         this.fadingInSats.clear();
       }
     }
-    this.prevSelectedSats = new Set(this.selectedSats);
+    if (this.prevSelVersion !== this.selectedSatsVersion) {
+      this.prevSelectedSats = new Set(this.selectedSats);
+      this.prevSelVersion = this.selectedSatsVersion;
+    }
 
     // Earth rotation (needed for target lock + camera update)
     const earthRotRad = (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD;
@@ -1179,7 +1180,7 @@ export class App {
     this.camera.updateFrame(dt, earthRotRad, isOrreryOrPlanet);
     this.camera3d.updateMatrixWorld();
 
-    // Hover detection (skip during orbit scrub, over UI, or in planet/orrery view)
+    // Hover detection (skip during orbit scrub, over UI, mobile sheet, or in planet/orrery view)
     this.hoveredSat = null;
     if (this.input.isDraggingOrbit) {
       // Don't detect hover during orbit scrub — prevents accidental selection changes
@@ -1230,7 +1231,7 @@ export class App {
         this.tmpSphere.set(this.tmpVec3.set(0, 0, 0), earthR);
         const hit = this.raycaster.ray.intersectSphere(this.tmpSphere, this.tmpVec3);
         if (hit) {
-          this.tmpVec3.applyAxisAngle(new THREE.Vector3(0, 1, 0), -earthRotRad);
+          this.tmpVec3.applyAxisAngle(App.Y_AXIS, -earthRotRad);
           const r = this.tmpVec3.length();
           uiStore.cursorLatLon = {
             lat: Math.asin(this.tmpVec3.y / r) * RAD2DEG,
@@ -1374,7 +1375,7 @@ export class App {
     uiStore.selectedSatCount = this.selectedSats.size;
 
     // Pass predictor: auto-trigger when selection changes and window is open
-    if (uiStore.passesWindowOpen && this.lastPassSatsVersion !== this.selectedSatsVersion) {
+    if (uiStore.passesVisible && this.lastPassSatsVersion !== this.selectedSatsVersion) {
       // Always allow clearing (0 sats); only gate recomputation on not-busy
       if (this.selectedSats.size === 0 || !this.passPredictor.isComputing()) {
         this.requestPasses();
@@ -1503,7 +1504,7 @@ export class App {
 
   private detectHover3D() {
     this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
-    const touchScale = this.input.isTouchActive ? 3.0 : 1.0;
+    const touchScale = this.input.isTouchActive ? 2.0 : 1.0;
     const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
     const camPos = this.camera3d.position;
 

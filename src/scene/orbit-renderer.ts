@@ -26,6 +26,7 @@ const SEGMENTS_LARGE = 30;
 
 export class OrbitRenderer {
   private scene: THREE.Scene;
+  private _tmpPos = new THREE.Vector3(); // reusable temp for calculatePosition
 
   // Highlight orbits (SGP4 for accuracy — supports multiple selected sats)
   private highlightLine: THREE.LineSegments;
@@ -449,22 +450,23 @@ export class OrbitRenderer {
         let prevDim = 1.0;
         for (let i = 0; i <= segments; i++) {
           const t = currentEpoch + i * timeStep;
-          const pos = calculatePosition(sat, t);
+          calculatePosition(sat, t, this._tmpPos);
+          const px2 = this._tmpPos.x, py2 = this._tmpPos.y, pz2 = this._tmpPos.z;
           // Cache scrub points for first visible highlighted sat (one orbit only)
           if ((si === 0 || (scrubPts.length === 0 && si > 0)) && t <= currentEpoch + periodDays) {
-            scrubPts.push({ epoch: t, sx: pos.x / DRAW_SCALE, sy: pos.y / DRAW_SCALE, sz: pos.z / DRAW_SCALE });
+            scrubPts.push({ epoch: t, sx: px2 / DRAW_SCALE, sy: py2 / DRAW_SCALE, sz: pz2 / DRAW_SCALE });
           }
           // Eclipse check: Earth shadow (penumbra gradient) + Moon shadow (solar eclipse)
-          let shadowFactor = earthShadowFactor(pos.x, pos.y, pos.z, sunRender);
+          let shadowFactor = earthShadowFactor(px2, py2, pz2, sunRender);
           if (shadowFactor >= 1.0 && checkSolarEclipse) {
             // Per-vertex Moon position for accuracy over multi-hour orbits
             const me = moonPositionECI(t);
-            if (isSolarEclipsed(pos.x, pos.y, pos.z, { x: me.x, y: me.z, z: -me.y }, sunRender)) shadowFactor = 0.0;
+            if (isSolarEclipsed(px2, py2, pz2, { x: me.x, y: me.z, z: -me.y }, sunRender)) shadowFactor = 0.0;
           }
           const dim = ECLIPSE_DIM + shadowFactor * (1.0 - ECLIPSE_DIM);
-          const cx = pos.x / DRAW_SCALE;
-          const cy = pos.y / DRAW_SCALE;
-          const cz = pos.z / DRAW_SCALE;
+          const cx = px2 / DRAW_SCALE;
+          const cy = py2 / DRAW_SCALE;
+          const cz = pz2 / DRAW_SCALE;
           if (i > 0 && vi + 6 <= this.maxHighlightVerts * 3) {
             arr[vi] = px; arr[vi+1] = py; arr[vi+2] = pz;
             col[vi] = cr * prevDim; col[vi+1] = cg * prevDim; col[vi+2] = cb * prevDim;
@@ -502,11 +504,8 @@ export class OrbitRenderer {
           ndCol.push(cr, cg, cb, cr, cg, cb);
         }
         if (ndPos.length > 0) {
-          this.nadirGeo.dispose();
-          this.nadirGeo = new LineSegmentsGeometry();
           this.nadirGeo.setPositions(ndPos);
           this.nadirGeo.setColors(ndCol);
-          this.nadirLine.geometry = this.nadirGeo;
           this.nadirMat.resolution.set(window.innerWidth, window.innerHeight);
           this.nadirMat.opacity = cHL.a * 0.5;
           this.nadirLine.visible = true;
@@ -538,11 +537,8 @@ export class OrbitRenderer {
             olCol.push(cr, cg, cb, cr, cg, cb);
           }
           if (olPos.length > 0) {
-            this.observerGeo.dispose();
-            this.observerGeo = new LineSegmentsGeometry();
             this.observerGeo.setPositions(olPos);
             this.observerGeo.setColors(olCol);
-            this.observerLine.geometry = this.observerGeo;
             this.observerLine.computeLineDistances();
             this.observerMat.resolution.set(window.innerWidth, window.innerHeight);
             this.observerMat.opacity = cHL.a;
@@ -589,18 +585,15 @@ export class OrbitRenderer {
             const colors: number[] = [];
             for (let i = 0; i <= arcSteps; i++) {
               const t = pass.aosEpoch + i * arcTimeStep;
-              const pos = calculatePosition(arcSat, t);
-              let arcShadow = earthShadowFactor(pos.x, pos.y, pos.z, arcSunR);
-              if (arcShadow >= 1.0 && arcSolarEcl && isSolarEclipsed(pos.x, pos.y, pos.z, arcMoonR, arcSunR)) arcShadow = 0.0;
+              calculatePosition(arcSat, t, this._tmpPos);
+              let arcShadow = earthShadowFactor(this._tmpPos.x, this._tmpPos.y, this._tmpPos.z, arcSunR);
+              if (arcShadow >= 1.0 && arcSolarEcl && isSolarEclipsed(this._tmpPos.x, this._tmpPos.y, this._tmpPos.z, arcMoonR, arcSunR)) arcShadow = 0.0;
               const dim = ECLIPSE_DIM + arcShadow * (1.0 - ECLIPSE_DIM);
-              positions.push(pos.x / DRAW_SCALE, pos.y / DRAW_SCALE, pos.z / DRAW_SCALE);
+              positions.push(this._tmpPos.x / DRAW_SCALE, this._tmpPos.y / DRAW_SCALE, this._tmpPos.z / DRAW_SCALE);
               colors.push(cr * dim, cg * dim, cb * dim);
             }
-            this.passArcGeo.dispose();
-            this.passArcGeo = new LineGeometry();
             this.passArcGeo.setPositions(positions);
             this.passArcGeo.setColors(colors);
-            this.passArcLine.geometry = this.passArcGeo;
 
             // Position AOS/LOS markers at arc endpoints
             this.passAosMarker.position.set(positions[0], positions[1], positions[2]);
@@ -611,9 +604,9 @@ export class OrbitRenderer {
             );
 
             // TCA marker at max elevation point
-            const tcaPos = calculatePosition(arcSat, pass.maxElEpoch);
+            calculatePosition(arcSat, pass.maxElEpoch, this._tmpPos);
             this.passTcaMarker.position.set(
-              tcaPos.x / DRAW_SCALE, tcaPos.y / DRAW_SCALE, tcaPos.z / DRAW_SCALE
+              this._tmpPos.x / DRAW_SCALE, this._tmpPos.y / DRAW_SCALE, this._tmpPos.z / DRAW_SCALE
             );
 
             // Store draw-space positions for label projection
@@ -624,7 +617,7 @@ export class OrbitRenderer {
               z: positions[positions.length - 1],
             };
             uiStore.passTcaDrawPos = {
-              x: tcaPos.x / DRAW_SCALE, y: tcaPos.y / DRAW_SCALE, z: tcaPos.z / DRAW_SCALE,
+              x: this._tmpPos.x / DRAW_SCALE, y: this._tmpPos.y / DRAW_SCALE, z: this._tmpPos.z / DRAW_SCALE,
             };
             uiStore.passAosText = `AOS ${pass.aosAz.toFixed(0)}°`;
             uiStore.passLosText = `LOS ${pass.losAz.toFixed(0)}°`;
@@ -763,10 +756,10 @@ export class OrbitRenderer {
 
       for (let i = 0; i <= segs; i++) {
         const t = currentEpoch + i * timeStep;
-        const pos = calculatePosition(sat, t);
-        const cx = pos.x / DRAW_SCALE;
-        const cy = pos.y / DRAW_SCALE;
-        const cz = pos.z / DRAW_SCALE;
+        calculatePosition(sat, t, this._tmpPos);
+        const cx = this._tmpPos.x / DRAW_SCALE;
+        const cy = this._tmpPos.y / DRAW_SCALE;
+        const cz = this._tmpPos.z / DRAW_SCALE;
 
         if (i > 0) {
           this.precomputedAll![eciIdx++] = px;

@@ -5,6 +5,9 @@ import { calculateSunPosition } from '../astro/sun';
 import cloudVertSrc from '../shaders/cloud.vert.glsl?raw';
 import cloudFragSrc from '../shaders/cloud.frag.glsl?raw';
 
+const _yAxis = new THREE.Vector3(0, 1, 0);
+const _tmpSun = new THREE.Vector3();
+
 export class CloudLayer {
   mesh: THREE.Mesh;
   private shaderMat: THREE.ShaderMaterial;
@@ -55,8 +58,8 @@ export class CloudLayer {
 
     if (showNightLights) {
       const sunEci = calculateSunPosition(currentEpoch);
-      const sunCloudSpace = sunEci.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -cloudAngle);
-      this.shaderMat.uniforms.sunDir.value.copy(sunCloudSpace);
+      _tmpSun.copy(sunEci).applyAxisAngle(_yAxis, -cloudAngle);
+      this.shaderMat.uniforms.sunDir.value.copy(_tmpSun);
     }
   }
 }

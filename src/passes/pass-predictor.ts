@@ -29,7 +29,8 @@ export class PassPredictor {
           this.onProgress?.(e.data.percent);
         }
       };
-      this.worker.onerror = () => {
+      this.worker.onerror = (e) => {
+        console.warn('Pass predictor worker error:', e.message ?? e);
         this.computing = false;
       };
     }

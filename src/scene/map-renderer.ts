@@ -37,6 +37,7 @@ export interface MapUpdateParams {
 }
 
 export class MapRenderer {
+  private _tmpPos = new THREE.Vector3();
   // 2D scene objects
   mapPlane!: THREE.Mesh;
   mapMaterial!: THREE.ShaderMaterial;
@@ -353,7 +354,7 @@ export class MapRenderer {
     const mouseWorldX = camera2d.left + (mousePos.x / window.innerWidth) * (camera2d.right - camera2d.left);
     const mouseWorldY = camera2d.top + (mousePos.y / window.innerHeight) * (camera2d.bottom - camera2d.top);
 
-    const touchScale = touchCount > 0 || ('ontouchstart' in window) ? 3.0 : 1.0;
+    const touchScale = touchCount > 0 || ('ontouchstart' in window) ? 2.0 : 1.0;
     const hitRadius = 12.0 * 1.0 * touchScale / cam2dZoom;
     let closestDist = 9999;
     let hoveredSat: Satellite | null = null;
@@ -432,11 +433,11 @@ export class MapRenderer {
         const eclipseDim: number[] = [];
         for (let j = 0; j <= segments; j++) {
           const t = epoch + j * timeStep;
-          const pos = calculatePosition(sat, t);
+          calculatePosition(sat, t, this._tmpPos);
           const gm = epochToGmst(t);
-          trackPts.push(getMapCoordinates(pos, gm, cfg.earthRotationOffset));
-          let shadowFactor = earthShadowFactor(pos.x, pos.y, pos.z, sunRender);
-          if (shadowFactor >= 1.0 && checkSolarEclipse && isSolarEclipsed(pos.x, pos.y, pos.z, moonRender, sunRender)) shadowFactor = 0.0;
+          trackPts.push(getMapCoordinates(this._tmpPos, gm, cfg.earthRotationOffset));
+          let shadowFactor = earthShadowFactor(this._tmpPos.x, this._tmpPos.y, this._tmpPos.z, sunRender);
+          if (shadowFactor >= 1.0 && checkSolarEclipse && isSolarEclipsed(this._tmpPos.x, this._tmpPos.y, this._tmpPos.z, moonRender, sunRender)) shadowFactor = 0.0;
           eclipseDim.push(ECLIPSE_DIM + shadowFactor * (1.0 - ECLIPSE_DIM));
         }
 

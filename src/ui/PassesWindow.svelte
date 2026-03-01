@@ -132,7 +132,7 @@
 
   // When restored from localStorage on nearby tab, trigger computation
   $effect(() => {
-    if (uiStore.passesWindowOpen && uiStore.passesTab === 'nearby' && uiStore.nearbyPhase === 'idle') {
+    if (uiStore.passesVisible && uiStore.passesTab === 'nearby' && uiStore.nearbyPhase === 'idle') {
       uiStore.onRequestNearbyPasses?.();
     }
   });

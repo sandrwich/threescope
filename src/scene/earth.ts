@@ -6,6 +6,9 @@ import { calculateMoonPosition } from '../astro/moon';
 import earthVertSrc from '../shaders/earth-daynight.vert.glsl?raw';
 import earthFragSrc from '../shaders/earth-daynight.frag.glsl?raw';
 
+const _yAxis = new THREE.Vector3(0, 1, 0);
+const _tmpSun = new THREE.Vector3();
+
 export class Earth {
   mesh: THREE.Mesh;
   private material: THREE.ShaderMaterial;
@@ -118,14 +121,13 @@ export class Earth {
 
     const sunEci = calculateSunPosition(currentEpoch);
     const earthRotRad = (gmstDeg + earthOffset) * DEG2RAD;
-    const yAxis = new THREE.Vector3(0, 1, 0);
-    const sunEcef = sunEci.clone().applyAxisAngle(yAxis, -earthRotRad);
-    this.material.uniforms.sunDir.value.copy(sunEcef);
+    _tmpSun.copy(sunEci).applyAxisAngle(_yAxis, -earthRotRad);
+    this.material.uniforms.sunDir.value.copy(_tmpSun);
 
     // Moon position in ECEF for solar eclipse shadow
     const moonRender = calculateMoonPosition(currentEpoch);
-    const moonEcef = moonRender.applyAxisAngle(yAxis, -earthRotRad);
-    this.material.uniforms.moonPos.value.copy(moonEcef);
+    moonRender.applyAxisAngle(_yAxis, -earthRotRad);
+    this.material.uniforms.moonPos.value.copy(moonRender);
   }
 
   setNightEmission(value: number) {

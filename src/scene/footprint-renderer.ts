@@ -74,8 +74,8 @@ export class FootprintRenderer {
   }
 
   clear() {
-    for (const m of this.fillMeshes) { this.scene.remove(m); m.geometry.dispose(); }
-    for (const l of this.borderLines) { this.scene.remove(l); l.geometry.dispose(); }
+    for (const m of this.fillMeshes) { this.scene.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
+    for (const l of this.borderLines) { this.scene.remove(l); l.geometry.dispose(); (l.material as THREE.Material).dispose(); }
     this.fillMeshes.length = 0;
     this.borderLines.length = 0;
   }
