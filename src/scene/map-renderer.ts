@@ -45,7 +45,7 @@ export class MapRenderer {
   private satPoints2d!: THREE.Points;
   private satPosBuffer2d!: THREE.BufferAttribute;
   private satColorBuffer2d!: THREE.BufferAttribute;
-  private maxSatVerts2d = 15000 * 3; // 3 offsets per sat
+  private maxSatVerts2d = 25000 * 3; // 3 offsets per sat
   private hlTrack2d!: THREE.LineSegments;
   private hlTrackBuffer2d!: THREE.BufferAttribute;
   private hlTrackColorBuffer2d!: THREE.BufferAttribute;

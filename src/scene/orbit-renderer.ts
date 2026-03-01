@@ -24,6 +24,9 @@ export const ORBIT_COLORS = SAT_COLORS.map(c => [c[0] / 255, c[1] / 255, c[2] / 
 const SEGMENTS_NORMAL = 90;
 const SEGMENTS_LARGE = 30;
 
+// Above this time multiplier, use analytical orbits for background (dynamic quality scaling)
+const SGP4_SPEED_THRESHOLD = 10;
+
 export class OrbitRenderer {
   private scene: THREE.Scene;
   private _tmpPos = new THREE.Vector3(); // reusable temp for calculatePosition
@@ -67,6 +70,13 @@ export class OrbitRenderer {
   private lastRecomputeEpoch = 0;
   private lastRecomputeWallMs = 0;
   private lastPeriCheckEpoch = 0;
+  private _prevEpoch = 0;
+  private _prevEpochWallMs = 0;
+  private _effectiveSpeed = 1; // smoothed |sim-seconds per real-second|
+  private _wasFastTime = false;
+  private _recomputeBatch = 0; // frame counter for chunked recomputeECI
+  private _sgp4Batch = 0;      // frame counter for chunked computeSGP4Orbits
+  private _sgp4ChunksRemaining = 0; // >0 while SGP4 chunked recompute is in progress
   private satellites: Satellite[] = [];
   private currentSegments = 0;
 
@@ -138,7 +148,7 @@ export class OrbitRenderer {
     scene.add(this.observerLine);
 
     // Pre-allocate normal orbits buffer — sized for configured segments
-    this.maxNormalVerts = 15000 * this.configuredSegments * 2;
+    this.maxNormalVerts = 25000 * this.configuredSegments * 2;
     const normGeo = new THREE.BufferGeometry();
     this.normalBuffer = new THREE.BufferAttribute(new Float32Array(this.maxNormalVerts * 3), 3);
     this.normalBuffer.setUsage(THREE.DynamicDrawUsage);
@@ -250,16 +260,24 @@ export class OrbitRenderer {
    * Cost: ~6 trig calls per satellite + (segs+1) matrix multiplies.
    * For 10k sats at 30 segs: ~5ms.
    */
-  private recomputeECI(currentEpoch: number) {
-    if (!this.perifocalAll || !this.precomputedAll) return;
+  /**
+   * Recompute ECI positions from perifocal frame.
+   * When chunks > 1, only processes 1/chunks of the satellites per call,
+   * spreading the work across frames. Returns true when a full cycle completes.
+   */
+  private recomputeECI(currentEpoch: number, chunks = 1): boolean {
+    if (!this.perifocalAll || !this.precomputedAll) return true;
 
     const sats = this.satellites;
     const segs = this.currentSegments;
     const periVertsPerOrbit = this.perifocalVertsPerOrbit;
     const periFloatsPerOrbit = periVertsPerOrbit * 2;
     const eciFloatsPerOrbit = this.precomputedFloatsPerOrbit;
+    const batch = this._recomputeBatch++ % chunks;
 
     for (let s = 0; s < sats.length; s++) {
+      if (chunks > 1 && s % chunks !== batch) continue;
+
       const sat = sats[s];
 
       // Orientation angles (with or without J2 secular correction)
@@ -311,8 +329,10 @@ export class OrbitRenderer {
       }
     }
 
-    // Force GPU buffer reassembly
-    this.lastActiveSat = undefined;
+    // Only force GPU buffer reassembly when full cycle completes
+    const cycleComplete = chunks <= 1 || batch === chunks - 1;
+    if (cycleComplete) this.lastActiveSat = undefined;
+    return cycleComplete;
   }
 
   /**
@@ -377,27 +397,63 @@ export class OrbitRenderer {
     gmstDeg = 0,
     earthRotationOffset = 0,
   ) {
+    // --- Measure effective time speed (accounts for scrub, chart drag, multiplier, etc.) ---
+    const now = performance.now();
+    const wallDt = (now - this._prevEpochWallMs) / 1000;
+    if (wallDt > 0.001) {
+      const simDt = Math.abs(epochToUnix(currentEpoch) - epochToUnix(this._prevEpoch));
+      const instantSpeed = simDt / wallDt;
+      // Fast ramp-up, fast decay (~0.2s to settle)
+      this._effectiveSpeed += (instantSpeed - this._effectiveSpeed) * Math.min(1, wallDt * 30);
+    }
+    this._prevEpoch = currentEpoch;
+    this._prevEpochWallMs = now;
+    const fastTime = this._effectiveSpeed > SGP4_SPEED_THRESHOLD;
+
     // --- Periodic recomputation ---
     if (this.precomputedAll) {
-      const now = performance.now();
-      // Wall-clock guard: max ~30 Hz recompute rate
-      if (now - this.lastRecomputeWallMs > 33) {
+      // On fast→normal transition: force immediate SGP4 recompute to restore accuracy
+      const becameNormal = this._wasFastTime && !fastTime;
+      this._wasFastTime = fastTime;
+
+      // On fast→normal transition: instant analytical snap, then gradual SGP4 refinement
+      if (becameNormal && this.orbitMode === 'sgp4') {
+        this.recomputeECI(currentEpoch); // cheap analytical for immediate visual accuracy
+        this._sgp4ChunksRemaining = 64;  // spread SGP4 refinement across 64 frames
+        this._sgp4Batch = 0;
+        this.lastRecomputeEpoch = currentEpoch;
+        this.lastRecomputeWallMs = now;
+        this.lastConfigEpoch = currentEpoch;
+      }
+
+      // Continue chunked SGP4 recompute if in progress
+      if (this._sgp4ChunksRemaining > 0 && now - this.lastRecomputeWallMs > 33) {
+        const done = this.computeSGP4Orbits(currentEpoch, this._sgp4ChunksRemaining);
+        this.lastRecomputeWallMs = now;
+        if (done) this._sgp4ChunksRemaining = 0;
+      }
+
+      // Chunked analytical recompute: at high speeds, spread across frames
+      const eciChunks = fastTime ? Math.min(16, Math.ceil(Math.sqrt(this._effectiveSpeed / SGP4_SPEED_THRESHOLD))) : 1;
+      const inChunkedCycle = eciChunks > 1 && this._recomputeBatch % eciChunks !== 0;
+
+      // Wall-clock guard: 30Hz — normal periodic recompute
+      if (this._sgp4ChunksRemaining === 0 && now - this.lastRecomputeWallMs > 33) {
         const deltaSim = Math.abs(
           epochToUnix(currentEpoch) - epochToUnix(this.lastRecomputeEpoch)
         );
-        if (deltaSim > ORBIT_RECOMPUTE_INTERVAL_S) {
-          if (this.orbitMode === 'sgp4') {
+        if (deltaSim > ORBIT_RECOMPUTE_INTERVAL_S || inChunkedCycle) {
+          if (this.orbitMode === 'sgp4' && !fastTime) {
             this.computeSGP4Orbits(currentEpoch);
           } else {
-            this.recomputeECI(currentEpoch);
+            this.recomputeECI(currentEpoch, eciChunks);
           }
           this.lastRecomputeEpoch = currentEpoch;
           this.lastRecomputeWallMs = now;
           this.lastConfigEpoch = currentEpoch;
         }
       }
-      // ndot perifocal rebuild (rare, analytical mode only)
-      if (this.orbitMode === 'analytical') {
+      if (this.orbitMode === 'analytical' || fastTime) {
         this.checkPeifocalRebuild(currentEpoch);
       }
     }
@@ -441,8 +497,12 @@ export class OrbitRenderer {
         const sat = highlightSats[si];
         if (hiddenIds.has(sat.noradId)) continue;
         const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
-        const segments = Math.min(this.highlightSegmentsPerOrbit, Math.max(90, Math.floor(400 * orbitsToDraw)));
         const periodDays = TWO_PI / sat.meanMotion / 86400.0;
+        // Scale segments by period: LEO gets full 400, long-period sats get fewer but floor at 360.
+        const periodScale = Math.min(1.0, Math.sqrt(0.0625 / periodDays));
+        const baseSegs = Math.max(360, Math.floor(400 * orbitsToDraw * periodScale));
+        // Further reduce during fast time (scrub, high speed)
+        const segments = Math.min(this.highlightSegmentsPerOrbit, fastTime ? Math.max(120, baseSegs >> 1) : baseSegs);
         const timeStep = (periodDays * orbitsToDraw) / segments;
 
         // Compute orbit points with eclipse-aware coloring
@@ -456,14 +516,15 @@ export class OrbitRenderer {
           if ((si === 0 || (scrubPts.length === 0 && si > 0)) && t <= currentEpoch + periodDays) {
             scrubPts.push({ epoch: t, sx: px2 / DRAW_SCALE, sy: py2 / DRAW_SCALE, sz: pz2 / DRAW_SCALE });
           }
-          // Eclipse check: Earth shadow (penumbra gradient) + Moon shadow (solar eclipse)
-          let shadowFactor = earthShadowFactor(px2, py2, pz2, sunRender);
-          if (shadowFactor >= 1.0 && checkSolarEclipse) {
-            // Per-vertex Moon position for accuracy over multi-hour orbits
-            const me = moonPositionECI(t);
-            if (isSolarEclipsed(px2, py2, pz2, { x: me.x, y: me.z, z: -me.y }, sunRender)) shadowFactor = 0.0;
+          // Eclipse check: skip during fast time for performance
+          let dim = 1.0;
+          if (!fastTime) {
+            let shadowFactor = earthShadowFactor(px2, py2, pz2, sunRender);
+            if (shadowFactor >= 1.0 && checkSolarEclipse) {
+              if (isSolarEclipsed(px2, py2, pz2, moonRender, sunRender)) shadowFactor = 0.0;
+            }
+            dim = ECLIPSE_DIM + shadowFactor * (1.0 - ECLIPSE_DIM);
           }
-          const dim = ECLIPSE_DIM + shadowFactor * (1.0 - ECLIPSE_DIM);
           const cx = px2 / DRAW_SCALE;
           const cy = py2 / DRAW_SCALE;
           const cz = pz2 / DRAW_SCALE;
@@ -739,15 +800,20 @@ export class OrbitRenderer {
   /**
    * Compute all background orbits using full SGP4 propagation.
    * Accurate but expensive — O(satCount × segments) SGP4 calls.
+   * When chunks > 1, only processes 1/chunks of the satellites per call.
+   * Returns true when full cycle completes.
    */
-  private computeSGP4Orbits(currentEpoch: number) {
-    if (!this.precomputedAll) return;
+  private computeSGP4Orbits(currentEpoch: number, chunks = 1): boolean {
+    if (!this.precomputedAll) return true;
 
     const sats = this.satellites;
     const segs = this.currentSegments;
     const eciFloatsPerOrbit = this.precomputedFloatsPerOrbit;
+    const batch = this._sgp4Batch++ % chunks;
 
     for (let s = 0; s < sats.length; s++) {
+      if (chunks > 1 && s % chunks !== batch) continue;
+
       const sat = sats[s];
       const periodDays = TWO_PI / sat.meanMotion / 86400.0;
       const timeStep = periodDays / segs;
@@ -773,7 +839,9 @@ export class OrbitRenderer {
       }
     }
 
-    this.lastActiveSat = undefined; // force GPU buffer reassembly
+    const cycleComplete = chunks <= 1 || batch === chunks - 1;
+    if (cycleComplete) this.lastActiveSat = undefined;
+    return cycleComplete;
   }
 
   setOrbitSegments(n: number) {
@@ -781,7 +849,7 @@ export class OrbitRenderer {
     this.configuredSegments = n;
 
     // Reallocate GPU buffer if new segment count needs more space
-    const needed = 15000 * n * 2;
+    const needed = 25000 * n * 2;
     if (needed > this.maxNormalVerts) {
       this.maxNormalVerts = needed;
       const newBuf = new THREE.BufferAttribute(new Float32Array(needed * 3), 3);

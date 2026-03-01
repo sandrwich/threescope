@@ -16,7 +16,7 @@ export class SatelliteManager {
   private updateFrame = 0;
   private _tmpPos = new THREE.Vector3();
 
-  constructor(satTexture: THREE.Texture, maxSats = 15000) {
+  constructor(satTexture: THREE.Texture, maxSats = 25000) {
     this.maxSats = maxSats;
     const positions = new Float32Array(maxSats * 3);
     const colors = new Float32Array(maxSats * 3);
@@ -62,22 +62,19 @@ export class SatelliteManager {
             gl_FragColor = vec4(vColor * texel.rgb, vAlpha);
             return;
           }
-          // Dark outline: two passes for a crisp 2px-ish border
-          float na = 0.0;
-          for (float s = 0.035; s <= 0.07; s += 0.035) {
-            na = max(na, max(
-              max(texture2D(pointTexture, gl_PointCoord + vec2(s, 0.0)).a,
-                  texture2D(pointTexture, gl_PointCoord - vec2(s, 0.0)).a),
-              max(texture2D(pointTexture, gl_PointCoord + vec2(0.0, s)).a,
-                  texture2D(pointTexture, gl_PointCoord - vec2(0.0, s)).a)
-            ));
-            na = max(na, max(
-              max(texture2D(pointTexture, gl_PointCoord + vec2(s, s) * 0.707).a,
-                  texture2D(pointTexture, gl_PointCoord - vec2(s, s) * 0.707).a),
-              max(texture2D(pointTexture, gl_PointCoord + vec2(s, -s) * 0.707).a,
-                  texture2D(pointTexture, gl_PointCoord - vec2(s, -s) * 0.707).a)
-            ));
-          }
+          // Dark outline: 8-tap single-radius border (cardinal + diagonal)
+          float s = 0.05;
+          float d = s * 0.707;
+          float na = max(
+            max(max(texture2D(pointTexture, gl_PointCoord + vec2(s, 0.0)).a,
+                    texture2D(pointTexture, gl_PointCoord - vec2(s, 0.0)).a),
+                max(texture2D(pointTexture, gl_PointCoord + vec2(0.0, s)).a,
+                    texture2D(pointTexture, gl_PointCoord - vec2(0.0, s)).a)),
+            max(max(texture2D(pointTexture, gl_PointCoord + vec2(d, d)).a,
+                    texture2D(pointTexture, gl_PointCoord - vec2(d, d)).a),
+                max(texture2D(pointTexture, gl_PointCoord + vec2(d, -d)).a,
+                    texture2D(pointTexture, gl_PointCoord - vec2(d, -d)).a))
+          );
           if (na > 0.3) {
             gl_FragColor = vec4(0.0, 0.0, 0.0, vAlpha);
             return;

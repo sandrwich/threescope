@@ -6,11 +6,11 @@ export function eciToDrawPos(posKm: THREE.Vector3): THREE.Vector3 {
 }
 
 export function getMapCoordinates(
-  pos: THREE.Vector3,
+  pos: { x: number; y: number; z: number },
   gmstDeg: number,
   earthOffset: number
 ): { x: number; y: number } {
-  const r = pos.length();
+  const r = Math.sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
   const phi = Math.acos(pos.y / r);
   const v = phi / Math.PI;
 

@@ -55,6 +55,9 @@ export class InputHandler {
   // Left-drag orbit (fallback when observer/orbit scrub don't activate)
   private _isLeftDragging = false;
 
+  // Hover dirty flag: set when mouseNDC changes, consumed by app to skip redundant raycasts
+  private _hoverDirty = false;
+
   // UI overlay tracking
   private _pointerOverUI = false;
   private _canvas!: HTMLCanvasElement;
@@ -84,6 +87,16 @@ export class InputHandler {
   get isDraggingOrbit(): boolean { return this._isDraggingOrbit; }
   get isOverUI(): boolean { return this._pointerOverUI; }
 
+  /** Returns true if mouseNDC changed since last call, then resets. */
+  consumeHoverDirty(): boolean {
+    const d = this._hoverDirty;
+    this._hoverDirty = false;
+    return d;
+  }
+
+  /** Mark hover as needing recomputation (called when camera moves). */
+  markHoverDirty(): void { this._hoverDirty = true; }
+
   // ====================== Event setup ======================
 
   private setupEvents(canvas: HTMLCanvasElement): void {
@@ -109,6 +122,7 @@ export class InputHandler {
         (e.clientX / window.innerWidth) * 2 - 1,
         -(e.clientY / window.innerHeight) * 2 + 1,
       );
+      this._hoverDirty = true;
       this._pointerOverUI = e.target !== this._canvas;
 
       // Observer marker drag / orbit scrub / left-drag orbit
@@ -345,6 +359,7 @@ export class InputHandler {
         (touches[0].x / window.innerWidth) * 2 - 1,
         -(touches[0].y / window.innerHeight) * 2 + 1,
       );
+      this._hoverDirty = true;
     } else if (touches.length === 2) {
       const dx = touches[1].x - touches[0].x;
       const dy = touches[1].y - touches[0].y;
@@ -392,6 +407,7 @@ export class InputHandler {
         (tx / window.innerWidth) * 2 - 1,
         -(ty / window.innerHeight) * 2 + 1,
       );
+      this._hoverDirty = true;
 
       // Observer drag / orbit scrub detection
       if (!this._touchDragChecked && !this._isDraggingObserver && !this._isDraggingOrbit) {

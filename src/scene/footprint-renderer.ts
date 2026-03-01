@@ -1,82 +1,102 @@
 import * as THREE from 'three';
-import { DRAW_SCALE, FP_RINGS, FP_PTS } from '../constants';
-import { computeFootprintGrid } from '../astro/footprint';
+import { FP_FILL_FLOATS, FP_BORDER_FLOATS, computeFootprintFill, computeFootprintBorder } from '../astro/footprint';
 
 export interface FootprintEntry {
   position: THREE.Vector3;
   color: [number, number, number]; // RGB 0-1
 }
 
+/** Pre-allocated pool entry: one fill mesh + one border line, permanently in the scene. */
+interface PoolEntry {
+  fillMesh: THREE.Mesh;
+  fillAttr: THREE.BufferAttribute;
+  fillMat: THREE.MeshBasicMaterial;
+  borderLine: THREE.LineLoop;
+  borderAttr: THREE.BufferAttribute;
+  borderMat: THREE.LineBasicMaterial;
+}
+
+const POOL_SIZE = 21; // 20 selected + 1 hovered
+
+// Shared scratch buffers for computation (avoid per-call allocations)
+const _fillBuf = new Float32Array(FP_FILL_FLOATS);
+const _borderBuf = new Float32Array(FP_BORDER_FLOATS);
+
 export class FootprintRenderer {
-  private scene: THREE.Scene;
-  private fillMeshes: THREE.Mesh[] = [];
-  private borderLines: THREE.LineLoop[] = [];
+  private pool: PoolEntry[] = [];
 
-  constructor(scene: THREE.Scene) {
-    this.scene = scene;
-  }
-
-  update(entries: FootprintEntry[], baseOpacity = 0.13, borderOpacity = 0.53) {
-    this.clear();
-    if (entries.length === 0) return;
-
-    for (const entry of entries) {
-      const grid = computeFootprintGrid(entry.position);
-      if (!grid) continue;
-
-      const [cr, cg, cb] = entry.color;
-
-      // Build triangle mesh
-      const vertices: number[] = [];
-      for (let i = 0; i < FP_RINGS; i++) {
-        for (let k = 0; k < FP_PTS; k++) {
-          const next = (k + 1) % FP_PTS;
-          const p1 = grid[i][k], p2 = grid[i][next];
-          const p3 = grid[i + 1][k], p4 = grid[i + 1][next];
-          const s = 1.01 / DRAW_SCALE;
-
-          vertices.push(p1.x * s, p1.y * s, p1.z * s);
-          vertices.push(p3.x * s, p3.y * s, p3.z * s);
-          vertices.push(p2.x * s, p2.y * s, p2.z * s);
-
-          vertices.push(p2.x * s, p2.y * s, p2.z * s);
-          vertices.push(p3.x * s, p3.y * s, p3.z * s);
-          vertices.push(p4.x * s, p4.y * s, p4.z * s);
-        }
-      }
-
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-      const mat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(cr, cg, cb),
+  constructor(private scene: THREE.Scene) {
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const fillPositions = new Float32Array(FP_FILL_FLOATS);
+      const fillAttr = new THREE.BufferAttribute(fillPositions, 3);
+      fillAttr.setUsage(THREE.DynamicDrawUsage);
+      const fillGeo = new THREE.BufferGeometry();
+      fillGeo.setAttribute('position', fillAttr);
+      const fillMat = new THREE.MeshBasicMaterial({
         transparent: true,
-        opacity: baseOpacity,
         side: THREE.DoubleSide,
         depthWrite: false,
       });
-      const mesh = new THREE.Mesh(geo, mat);
-      this.scene.add(mesh);
-      this.fillMeshes.push(mesh);
+      const fillMesh = new THREE.Mesh(fillGeo, fillMat);
+      fillMesh.visible = false;
+      fillMesh.frustumCulled = false;
+      this.scene.add(fillMesh);
 
-      // Border ring (outermost ring)
-      const outerRing = grid[FP_RINGS];
-      const borderPts = outerRing.map(p => new THREE.Vector3(p.x * 1.01 / DRAW_SCALE, p.y * 1.01 / DRAW_SCALE, p.z * 1.01 / DRAW_SCALE));
-      const borderGeo = new THREE.BufferGeometry().setFromPoints(borderPts);
-      const borderMat = new THREE.LineBasicMaterial({
-        color: new THREE.Color(cr, cg, cb),
-        transparent: true,
-        opacity: borderOpacity,
-      });
-      const line = new THREE.LineLoop(borderGeo, borderMat);
-      this.scene.add(line);
-      this.borderLines.push(line);
+      const borderPositions = new Float32Array(FP_BORDER_FLOATS);
+      const borderAttr = new THREE.BufferAttribute(borderPositions, 3);
+      borderAttr.setUsage(THREE.DynamicDrawUsage);
+      const borderGeo = new THREE.BufferGeometry();
+      borderGeo.setAttribute('position', borderAttr);
+      const borderMat = new THREE.LineBasicMaterial({ transparent: true });
+      const borderLine = new THREE.LineLoop(borderGeo, borderMat);
+      borderLine.visible = false;
+      borderLine.frustumCulled = false;
+      this.scene.add(borderLine);
+
+      this.pool.push({ fillMesh, fillAttr, fillMat, borderLine, borderAttr, borderMat });
+    }
+  }
+
+  update(entries: FootprintEntry[], baseOpacity = 0.13, borderOpacity = 0.53) {
+    let used = 0;
+
+    for (const entry of entries) {
+      if (used >= POOL_SIZE) break;
+
+      if (!computeFootprintFill(entry.position, _fillBuf)) continue;
+      computeFootprintBorder(entry.position, _borderBuf);
+
+      const slot = this.pool[used];
+      const [cr, cg, cb] = entry.color;
+
+      // Update fill
+      (slot.fillAttr.array as Float32Array).set(_fillBuf);
+      slot.fillAttr.needsUpdate = true;
+      slot.fillMat.color.setRGB(cr, cg, cb);
+      slot.fillMat.opacity = baseOpacity;
+      slot.fillMesh.visible = true;
+
+      // Update border
+      (slot.borderAttr.array as Float32Array).set(_borderBuf);
+      slot.borderAttr.needsUpdate = true;
+      slot.borderMat.color.setRGB(cr, cg, cb);
+      slot.borderMat.opacity = borderOpacity;
+      slot.borderLine.visible = true;
+
+      used++;
+    }
+
+    // Hide unused pool entries
+    for (let i = used; i < POOL_SIZE; i++) {
+      this.pool[i].fillMesh.visible = false;
+      this.pool[i].borderLine.visible = false;
     }
   }
 
   clear() {
-    for (const m of this.fillMeshes) { this.scene.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
-    for (const l of this.borderLines) { this.scene.remove(l); l.geometry.dispose(); (l.material as THREE.Material).dispose(); }
-    this.fillMeshes.length = 0;
-    this.borderLines.length = 0;
+    for (const slot of this.pool) {
+      slot.fillMesh.visible = false;
+      slot.borderLine.visible = false;
+    }
   }
 }

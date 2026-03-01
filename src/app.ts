@@ -73,6 +73,10 @@ export class App {
   private satellites: Satellite[] = [];
   private satByNorad = new Map<number, Satellite>();
   private hoveredSat: Satellite | null = null;
+  private _hoverSettleFrames = 0;
+  private _lastHoverCamX = 0;
+  private _lastHoverCamY = 0;
+  private _lastHoverCamZ = 0;
   private selectedSats = new Set<Satellite>();
   private selectedSatsVersion = 0;
 
@@ -1180,22 +1184,37 @@ export class App {
     this.camera.updateFrame(dt, earthRotRad, isOrreryOrPlanet);
     this.camera3d.updateMatrixWorld();
 
-    // Hover detection (skip during orbit scrub, over UI, mobile sheet, or in planet/orrery view)
-    this.hoveredSat = null;
+    // Hover detection — only recompute when pointer or camera moved
+    const cp = this.camera3d.position;
+    const cameraMoved = cp.x !== this._lastHoverCamX || cp.y !== this._lastHoverCamY || cp.z !== this._lastHoverCamZ;
+    const hoverDirty = this.input.consumeHoverDirty() || cameraMoved;
+    if (cameraMoved) {
+      this._lastHoverCamX = cp.x;
+      this._lastHoverCamY = cp.y;
+      this._lastHoverCamZ = cp.z;
+    }
     if (this.input.isDraggingOrbit) {
-      // Don't detect hover during orbit scrub — prevents accidental selection changes
+      this.hoveredSat = null;
     } else if (this.input.isOverUI) {
+      this.hoveredSat = null;
       this.renderer.domElement.style.cursor = '';
     } else if (this.orreryCtrl.isOrreryMode) {
-      const hovered = this.orreryCtrl.updateHover(this.raycaster, this.input.mouseNDC);
-      this.renderer.domElement.style.cursor = hovered ? 'pointer' : '';
-    } else if (this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON) {
+      if (hoverDirty) {
+        const hovered = this.orreryCtrl.updateHover(this.raycaster, this.input.mouseNDC);
+        this.renderer.domElement.style.cursor = hovered ? 'pointer' : '';
+      }
+    } else if (hoverDirty && this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON) {
+      this.hoveredSat = null;
       if (this.viewMode === ViewMode.VIEW_3D) {
         this.detectHover3D();
       } else {
         this.hoveredSat = this.mapRenderer.detectHover(this.input.mousePos, this.camera2d, this.satellites, this.timeSystem.getGmstDeg(), this.cfg, this.hideUnselected, this.selectedSats, this.camera.zoom2d, this.input.touchCount);
       }
     }
+
+    // Track hover settle time (for delaying expensive hover effects like footprints)
+    if (hoverDirty) this._hoverSettleFrames = 0;
+    else this._hoverSettleFrames = Math.min(this._hoverSettleFrames + 1, 10);
 
     // Drag cursors (observer / orbit scrub)
     if (this.input.isDraggingObserver || this.input.isDraggingOrbit) {
@@ -1325,7 +1344,7 @@ export class App {
             }
             fpIdx++;
           }
-          if (this.hoveredSat && !this.selectedSats.has(this.hoveredSat)) {
+          if (this.hoveredSat && !this.selectedSats.has(this.hoveredSat) && this._hoverSettleFrames >= 6) {
             const rc = ORBIT_COLORS[this.selectedSats.size % ORBIT_COLORS.length];
             fpEntries.push({
               position: (this.hoveredSat as Satellite).currentPos,
