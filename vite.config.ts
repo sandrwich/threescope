@@ -31,8 +31,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: false,
       manifest: {
-        name: 'Threescope',
-        short_name: 'Threescope',
+        name: 'Satvisor',
+        short_name: 'Satvisor',
         description: 'Real-time 3D/2D satellite tracker with pass predictions, orbit visualization, and Doppler analysis. Works on desktop and mobile.',
         theme_color: '#101010',
         background_color: '#101010',

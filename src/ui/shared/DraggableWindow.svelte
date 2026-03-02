@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  const WIN_PREFIX = 'threescope_win_';
+  const WIN_PREFIX = 'satvisor_win_';
 
   // Shared z-index counter — must be in module scope so ALL instances share it
   let topZ = 100;

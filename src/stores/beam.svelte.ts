@@ -4,7 +4,7 @@
  */
 
 const DEG2RAD = Math.PI / 180;
-const PREFIX = 'threescope_beam_';
+const PREFIX = 'satvisor_beam_';
 
 /** Snapshot of beam tracking state for external consumers. */
 export interface BeamTrackingState {

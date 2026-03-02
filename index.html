@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Threescope</title>
+  <title>Satvisor</title>
   <link rel="icon" type="image/png" href="/textures/ui/sat_icon.png">
   <link rel="preload" href="/textures/earth/color.webp" as="image">
   <meta name="description" content="Real-time 3D satellite tracker with pass predictions, orbit visualization, and Doppler analysis. Works on desktop and mobile.">
@@ -45,7 +45,7 @@
     // Apply saved theme before first paint to prevent flash
     (function() {
       try {
-        var id = localStorage.getItem('threescope_theme_active');
+        var id = localStorage.getItem('satvisor_theme_active');
         if (!id || id === 'dark') return;
         var vars = null;
         var minimal = {
@@ -60,7 +60,7 @@
         if (minimal[id]) {
           vars = minimal[id];
         } else {
-          var raw = localStorage.getItem('threescope_themes_custom');
+          var raw = localStorage.getItem('satvisor_themes_custom');
           var customs = raw ? JSON.parse(raw) : [];
           var match = customs.find(function(t) { return t.id === id; });
           if (match && match.vars) vars = match.vars;

@@ -267,35 +267,35 @@ class UIStore {
       const saved = localStorage.getItem(key);
       return saved !== null ? (defaultVal ? saved !== 'false' : saved === 'true') : defaultVal;
     };
-    this.hideUnselected = load('threescope_spotlight', false);
-    this.showOrbits = load('threescope_orbits', false);
-    this.showClouds = load('threescope_clouds', true);
-    this.showNightLights = load('threescope_night', true);
-    this.showSkybox = load('threescope_skybox', true);
-    this.showCountries = load('threescope_countries', false);
-    this.showGrid = load('threescope_grid', false);
-    this.showSkyGrid = load('threescope_skygrid', true);
-    this.radarVfx = load('threescope_radar_vfx', false);
-    this.singleSelectMode = load('threescope_single_select', this.isMobile);
-    const savedTab = localStorage.getItem('threescope_passes_tab');
+    this.hideUnselected = load('satvisor_spotlight', false);
+    this.showOrbits = load('satvisor_orbits', false);
+    this.showClouds = load('satvisor_clouds', true);
+    this.showNightLights = load('satvisor_night', true);
+    this.showSkybox = load('satvisor_skybox', true);
+    this.showCountries = load('satvisor_countries', false);
+    this.showGrid = load('satvisor_grid', false);
+    this.showSkyGrid = load('satvisor_skygrid', true);
+    this.radarVfx = load('satvisor_radar_vfx', false);
+    this.singleSelectMode = load('satvisor_single_select', this.isMobile);
+    const savedTab = localStorage.getItem('satvisor_passes_tab');
     if (savedTab === 'selected' || savedTab === 'nearby') this.passesTab = savedTab;
   }
 
   setSingleSelectMode(value: boolean) {
     this.singleSelectMode = value;
-    localStorage.setItem('threescope_single_select', String(value));
+    localStorage.setItem('satvisor_single_select', String(value));
   }
 
   setPassesTab(tab: 'selected' | 'nearby') {
     this.passesTab = tab;
-    localStorage.setItem('threescope_passes_tab', tab);
+    localStorage.setItem('satvisor_passes_tab', tab);
   }
 
   /** Initialize marker group visibility from config defaults + localStorage */
   loadMarkerGroups(groups: { id: string; defaultVisible: boolean }[]) {
     const vis: Record<string, boolean> = {};
     for (const g of groups) {
-      const saved = localStorage.getItem(`threescope_markers_${g.id}`);
+      const saved = localStorage.getItem(`satvisor_markers_${g.id}`);
       vis[g.id] = saved !== null ? saved === 'true' : g.defaultVisible;
     }
     this.markerVisibility = vis;
@@ -303,7 +303,7 @@ class UIStore {
 
   setMarkerGroupVisible(groupId: string, visible: boolean) {
     this.markerVisibility = { ...this.markerVisibility, [groupId]: visible };
-    localStorage.setItem(`threescope_markers_${groupId}`, String(visible));
+    localStorage.setItem(`satvisor_markers_${groupId}`, String(visible));
     this.onMarkerGroupChange?.(groupId, visible);
   }
 
@@ -312,23 +312,23 @@ class UIStore {
       const v = localStorage.getItem(key);
       return v !== null ? Number(v) : def;
     };
-    this.passMinEl = num('threescope_pass_min_el', 0);
-    this.passMaxEl = num('threescope_pass_max_el', 90);
-    this.passAzFrom = num('threescope_pass_az_from', 0);
-    this.passAzTo = num('threescope_pass_az_to', 360);
-    this.passMinDuration = num('threescope_pass_min_dur', 0);
-    const vis = localStorage.getItem('threescope_pass_visibility');
+    this.passMinEl = num('satvisor_pass_min_el', 0);
+    this.passMaxEl = num('satvisor_pass_max_el', 90);
+    this.passAzFrom = num('satvisor_pass_az_from', 0);
+    this.passAzTo = num('satvisor_pass_az_to', 360);
+    this.passMinDuration = num('satvisor_pass_min_dur', 0);
+    const vis = localStorage.getItem('satvisor_pass_visibility');
     if (vis === 'observable' || vis === 'visible') this.passVisibility = vis;
-    this.passFreqMinMHz = num('threescope_pass_freq_min_mhz', 0);
-    this.passFreqMaxMHz = num('threescope_pass_freq_max_mhz', 0);
-    const mask = localStorage.getItem('threescope_pass_horizon_mask');
+    this.passFreqMinMHz = num('satvisor_pass_freq_min_mhz', 0);
+    this.passFreqMaxMHz = num('satvisor_pass_freq_max_mhz', 0);
+    const mask = localStorage.getItem('satvisor_pass_horizon_mask');
     if (mask) {
       try { this.passHorizonMask = JSON.parse(mask); } catch { /* use default */ }
     }
   }
 
   savePassFilter(key: string, value: string | number) {
-    localStorage.setItem(`threescope_pass_${key}`, String(value));
+    localStorage.setItem(`satvisor_pass_${key}`, String(value));
   }
 
   setPassMinEl(v: number) {
@@ -382,7 +382,7 @@ class UIStore {
       mask.every((m, i) => m.az === this.passHorizonMask[i].az && m.minEl === this.passHorizonMask[i].minEl);
     if (same) return;
     this.passHorizonMask = mask;
-    localStorage.setItem('threescope_pass_horizon_mask', JSON.stringify(mask));
+    localStorage.setItem('satvisor_pass_horizon_mask', JSON.stringify(mask));
     this.onFiltersChanged?.();
   }
 
@@ -403,22 +403,22 @@ class UIStore {
     this.passHorizonMask = [];
     this.passFreqMinMHz = 0; this.passFreqMaxMHz = 0;
     for (const k of ['min_el', 'max_el', 'az_from', 'az_to', 'visibility', 'min_dur', 'horizon_mask', 'freq_min_mhz', 'freq_max_mhz']) {
-      localStorage.removeItem(`threescope_pass_${k}`);
+      localStorage.removeItem(`satvisor_pass_${k}`);
     }
     this.onFiltersChanged?.();
   }
 
   setToggle(key: string, value: boolean) {
     switch (key) {
-      case 'hideUnselected': this.hideUnselected = value; localStorage.setItem('threescope_spotlight', String(value)); break;
-      case 'showOrbits': this.showOrbits = value; localStorage.setItem('threescope_orbits', String(value)); break;
-      case 'showClouds': this.showClouds = value; localStorage.setItem('threescope_clouds', String(value)); break;
-      case 'showNightLights': this.showNightLights = value; localStorage.setItem('threescope_night', String(value)); break;
-      case 'showSkybox': this.showSkybox = value; localStorage.setItem('threescope_skybox', String(value)); break;
-      case 'showCountries': this.showCountries = value; localStorage.setItem('threescope_countries', String(value)); break;
-      case 'showGrid': this.showGrid = value; localStorage.setItem('threescope_grid', String(value)); break;
-      case 'showSkyGrid': this.showSkyGrid = value; localStorage.setItem('threescope_skygrid', String(value)); break;
-      case 'radarVfx': this.radarVfx = value; localStorage.setItem('threescope_radar_vfx', String(value)); break;
+      case 'hideUnselected': this.hideUnselected = value; localStorage.setItem('satvisor_spotlight', String(value)); break;
+      case 'showOrbits': this.showOrbits = value; localStorage.setItem('satvisor_orbits', String(value)); break;
+      case 'showClouds': this.showClouds = value; localStorage.setItem('satvisor_clouds', String(value)); break;
+      case 'showNightLights': this.showNightLights = value; localStorage.setItem('satvisor_night', String(value)); break;
+      case 'showSkybox': this.showSkybox = value; localStorage.setItem('satvisor_skybox', String(value)); break;
+      case 'showCountries': this.showCountries = value; localStorage.setItem('satvisor_countries', String(value)); break;
+      case 'showGrid': this.showGrid = value; localStorage.setItem('satvisor_grid', String(value)); break;
+      case 'showSkyGrid': this.showSkyGrid = value; localStorage.setItem('satvisor_skygrid', String(value)); break;
+      case 'radarVfx': this.radarVfx = value; localStorage.setItem('satvisor_radar_vfx', String(value)); break;
       case 'radarOpen': this.radarOpen = value; break; // persisted by DraggableWindow
     }
     this.onToggleChange?.(key, value);

@@ -25,10 +25,10 @@ interface CustomSourceDef {
   url?: string;
 }
 
-const ENABLED_KEY = 'threescope_sources_enabled';
-const CUSTOM_KEY = 'threescope_sources_custom';
-const TEXT_KEY_PREFIX = 'threescope_source_text_';
-const LEGACY_GROUP_KEY = 'threescope_tle_group';
+const ENABLED_KEY = 'satvisor_sources_enabled';
+const CUSTOM_KEY = 'satvisor_sources_custom';
+const TEXT_KEY_PREFIX = 'satvisor_source_text_';
+const LEGACY_GROUP_KEY = 'satvisor_tle_group';
 
 class SourcesStore {
   sources = $state<TLESourceConfig[]>([]);

@@ -4,8 +4,8 @@ import {
 } from '../themes';
 import { refreshTheme } from '../ui/shared/theme';
 
-const ACTIVE_KEY = 'threescope_theme_active';
-const CUSTOM_KEY = 'threescope_themes_custom';
+const ACTIVE_KEY = 'satvisor_theme_active';
+const CUSTOM_KEY = 'satvisor_themes_custom';
 
 class ThemeStore {
   activeId = $state(DEFAULT_THEME_ID);

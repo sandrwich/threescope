@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Threescope",
-  "mainBinaryName": "threescope",
+  "productName": "Satvisor",
+  "mainBinaryName": "satvisor",
   "version": "1.0.0",
-  "identifier": "fyi.imsandra.threescope",
+  "identifier": "fyi.imsandra.satvisor",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "Threescope",
+        "title": "Satvisor",
         "width": 1280,
         "height": 720,
         "minWidth": 800,

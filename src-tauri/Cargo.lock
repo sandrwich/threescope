@@ -3802,7 +3802,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "threescope"
+name = "satvisor"
 version = "1.0.0"
 dependencies = [
  "serde",

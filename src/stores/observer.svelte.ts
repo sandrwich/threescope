@@ -5,7 +5,7 @@ export interface ObserverLocation {
   alt: number;    // meters above sea level
 }
 
-const STORAGE_KEY = 'threescope_observer';
+const STORAGE_KEY = 'satvisor_observer';
 
 class ObserverStore {
   location = $state<ObserverLocation>({

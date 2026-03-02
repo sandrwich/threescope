@@ -1,6 +1,6 @@
 # Satellite Visual Magnitude Estimation
 
-Threescope estimates how bright a satellite appears during a pass. The estimate
+Satvisor estimates how bright a satellite appears during a pass. The estimate
 is shown in the Mag column of the Passes window and in the hover tooltip.
 
 ## How It Works

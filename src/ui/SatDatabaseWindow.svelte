@@ -159,7 +159,7 @@
       } else if (src.type === 'url') {
         cacheKey = 'tlescope_tle_custom_' + src.id;
       } else if (src.type === 'text') {
-        cacheKey = 'threescope_source_text_' + src.id;
+        cacheKey = 'satvisor_source_text_' + src.id;
         isJson = false;
       } else {
         continue;

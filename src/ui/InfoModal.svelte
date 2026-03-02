@@ -56,8 +56,8 @@
     </div>
     <div class="section">
       <h3>License</h3>
-      <a href="https://github.com/sandrwich/threescope/blob/master/LICENSE" target="_blank">AGPL-3.0</a>
-      &middot; <a href="https://github.com/sandrwich/threescope" target="_blank">Source code</a>
+      <a href="https://github.com/satvisorcom/satvisor/blob/master/LICENSE" target="_blank">AGPL-3.0</a>
+      &middot; <a href="https://github.com/satvisorcom/satvisor" target="_blank">Source code</a>
     </div>
   </div>
 </DraggableWindow>

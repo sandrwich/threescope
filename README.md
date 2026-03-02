@@ -1,8 +1,8 @@
-# Threescope
+# Satvisor
 
 A browser-based satellite tracker built with Three.js and Svelte. Runs as a static web app with PWA support — installable and usable offline on any device.
 
-**[threescope.imsandra.fyi](https://threescope.imsandra.fyi/)**
+**[satvisor.com](https://satvisor.com/)**
 
 ![Main view](docs/screenshots/main.webp)
 ![Moon view](docs/screenshots/moon.webp)

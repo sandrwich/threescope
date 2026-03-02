@@ -63,7 +63,7 @@ export function getAzEl(
 }
 
 /**
- * Convert threescope render coordinates to standard ECI.
+ * Convert render coordinates to standard ECI.
  * Render: x=eci.x, y=eci.z (up), z=-eci.y
  * Standard ECI: x=toward vernal equinox, y=completes RHS, z=north pole
  */
