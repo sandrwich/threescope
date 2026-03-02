@@ -6,8 +6,9 @@
   import Input from './shared/Input.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { sourcesStore } from '../stores/sources.svelte';
-  import { ICON_SELECTION, ICON_PASSES, ICON_DATABASE } from './shared/icons';
+  import { ICON_SELECTION, ICON_PASSES, ICON_DATABASE, ICON_RADAR } from './shared/icons';
   import { hasSatnogsData } from '../data/satnogs';
+  import { beamStore } from '../stores/beam.svelte';
 
   let expandedSats = $state(new Set<number>());
   let searchQuery = $state('');
@@ -211,13 +212,22 @@
                     <span class="dl">Magnitude</span><span class="dv">{sat.magStr}</span>
                   {/if}
                 </div>
-                {#if hasSatnogsData(sat.noradId)}
-                  <Button size="xs" onclick={() => {
-                    uiStore.satDatabaseNoradId = sat.noradId;
-                    uiStore.satDatabaseOpen = true;
-                    if (uiStore.isMobile) uiStore.openMobileSheet('sat-database');
-                  }} title="View SatNOGS database entry">{@html ICON_DATABASE} SatNOGS</Button>
-                {/if}
+                <div class="detail-actions">
+                  <Button size="xs" active={beamStore.locked && beamStore.lockedNoradId === sat.noradId} onclick={() => {
+                      if (beamStore.locked && beamStore.lockedNoradId === sat.noradId) {
+                        beamStore.unlock();
+                      } else {
+                        beamStore.lockToSatellite(sat.noradId, sat.name);
+                      }
+                    }} title="Track this satellite with the antenna beam">{@html ICON_RADAR} {beamStore.locked && beamStore.lockedNoradId === sat.noradId ? 'Untrack' : 'Track'}</Button>
+                  {#if hasSatnogsData(sat.noradId)}
+                    <Button size="xs" onclick={() => {
+                      uiStore.satDatabaseNoradId = sat.noradId;
+                      uiStore.satDatabaseOpen = true;
+                      if (uiStore.isMobile) uiStore.openMobileSheet('sat-database');
+                    }} title="View SatNOGS database entry">{@html ICON_DATABASE} SatNOGS</Button>
+                  {/if}
+                </div>
               </div>
             {/if}
           </div>
@@ -379,6 +389,11 @@
 
   .sat-detail {
     padding: 2px 0 4px 14px;
+  }
+  .detail-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 5px;
   }
   .detail-grid {
     display: grid;

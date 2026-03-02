@@ -59,6 +59,7 @@ class UIStore {
   showSkybox = $state(true);
   showCountries = $state(false);
   showGrid = $state(false);
+  radarVfx = $state(false);
 
   // Marker group visibility (keyed by group id)
   markerVisibility = $state<Record<string, boolean>>({});
@@ -112,6 +113,7 @@ class UIStore {
   }
 
   polarPlotOpen = $state(false);
+  radarOpen = $state(false);
   dopplerWindowOpen = $state(false);
   dopplerWindowFocus = $state(0);
   passes = $state<SatellitePass[]>([]);
@@ -186,6 +188,10 @@ class UIStore {
   // Doppler frequency prefill (set by SatDatabaseWindow, consumed by DopplerWindow)
   dopplerPrefillHz = $state(0);
 
+  // Radar — packed [az, el, satIndex, flags] per blip, written by app.ts
+  radarBlips = new Float32Array(25000 * 4);
+  radarBlipCount = $state(0);
+
   // Earth-specific toggles visibility (hidden in orrery/planet mode)
   earthTogglesVisible = $state(true);
   nightToggleVisible = $state(true);
@@ -237,8 +243,10 @@ class UIStore {
   onDeselectSatellite: ((noradId: number) => void) | null = null;
   onToggleViewMode: (() => void) | null = null;
   getSatelliteList: (() => { noradId: number; name: string }[]) | null = null;
+  getSatelliteByIndex: ((index: number) => { name: string; noradId: number } | null) | null = null;
   getSelectedSatelliteList: (() => { noradId: number; name: string }[]) | null = null;
   onSelectSatellite: ((noradId: number) => void) | null = null;
+  onLockCameraToSat: ((noradId: number) => void) | null = null;
   onRefreshTLE: (() => void) | null = null;
   onRequestPasses: (() => void) | null = null;
   onRequestNearbyPasses: (() => void) | null = null;
@@ -259,6 +267,7 @@ class UIStore {
     this.showSkybox = load('threescope_skybox', true);
     this.showCountries = load('threescope_countries', false);
     this.showGrid = load('threescope_grid', false);
+    this.radarVfx = load('threescope_radar_vfx', false);
     this.singleSelectMode = load('threescope_single_select', this.isMobile);
     const savedTab = localStorage.getItem('threescope_passes_tab');
     if (savedTab === 'selected' || savedTab === 'nearby') this.passesTab = savedTab;
@@ -400,6 +409,8 @@ class UIStore {
       case 'showSkybox': this.showSkybox = value; localStorage.setItem('threescope_skybox', String(value)); break;
       case 'showCountries': this.showCountries = value; localStorage.setItem('threescope_countries', String(value)); break;
       case 'showGrid': this.showGrid = value; localStorage.setItem('threescope_grid', String(value)); break;
+      case 'radarVfx': this.radarVfx = value; localStorage.setItem('threescope_radar_vfx', String(value)); break;
+      case 'radarOpen': this.radarOpen = value; break; // persisted by DraggableWindow
     }
     this.onToggleChange?.(key, value);
   }

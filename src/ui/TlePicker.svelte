@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { sourcesStore } from '../stores/sources.svelte';
-  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_OBSERVER, ICON_HELP, ICON_2D, ICON_3D, ICON_PASSES, ICON_DATA_SOURCES, ICON_DATABASE } from './shared/icons';
+  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_OBSERVER, ICON_HELP, ICON_2D, ICON_3D, ICON_PASSES, ICON_DATA_SOURCES, ICON_DATABASE, ICON_RADAR } from './shared/icons';
   import { ViewMode } from '../types';
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -64,6 +64,9 @@
       </button>
       <button class="icon-btn" class:active={uiStore.passesWindowOpen} title="Passes (P)" onclick={() => uiStore.passesWindowOpen = !uiStore.passesWindowOpen}>
         {@html ICON_PASSES}
+      </button>
+      <button class="icon-btn" class:active={uiStore.radarOpen} title="Radar (R)" onclick={() => uiStore.radarOpen = !uiStore.radarOpen}>
+        {@html ICON_RADAR}
       </button>
       <button class="icon-btn" class:active={uiStore.viewWindowOpen} title="View" onclick={() => uiStore.viewWindowOpen = !uiStore.viewWindowOpen}>
         {@html ICON_VIEW}

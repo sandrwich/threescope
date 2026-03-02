@@ -3,7 +3,7 @@
   import MobileSheet from './shared/MobileSheet.svelte';
   import {
     ICON_DATA_SOURCES, ICON_SELECTION, ICON_PASSES, ICON_TIME, ICON_MORE,
-    ICON_OBSERVER, ICON_VIEW, ICON_SETTINGS, ICON_DATABASE, ICON_HELP,
+    ICON_OBSERVER, ICON_VIEW, ICON_SETTINGS, ICON_DATABASE, ICON_HELP, ICON_RADAR,
   } from './shared/icons';
 
   const tabs: { id: string; label: string; icon: string }[] = [
@@ -16,6 +16,7 @@
 
   const moreItems: { id: string; label: string; icon: string }[] = [
     { id: 'sat-database', label: 'SatNOGS Database', icon: ICON_DATABASE },
+    { id: 'radar', label: 'Radar', icon: ICON_RADAR },
     { id: 'observer', label: 'Observer', icon: ICON_OBSERVER },
     { id: 'view', label: 'View', icon: ICON_VIEW },
   ];

@@ -22,6 +22,12 @@ export function initTheme() {
     magDay: r('--mag-day'), magTwilight: r('--mag-twilight'),
     markerAos: r('--marker-aos'), markerLos: r('--marker-los'), markerTca: r('--marker-tca'),
     apsisPeri: r('--apsis-peri'), apsisApo: r('--apsis-apo'),
+    radarBg: r('--radar-bg'), radarGrid: r('--radar-grid'),
+    radarBlip: r('--radar-blip'), radarBlipDim: r('--radar-blip-dim'),
+    radarText: r('--radar-text'), radarSweep: r('--radar-sweep'),
+    heatmapLow: r('--heatmap-low'), heatmapMid: r('--heatmap-mid'), heatmapHigh: r('--heatmap-high'),
+    beamReticle: r('--beam-reticle'), beamReticleLocked: r('--beam-reticle-locked'),
+    beamCone: r('--beam-cone'), beamHighlight: r('--beam-highlight'), beamArc: r('--beam-arc'),
   };
 }
 

@@ -71,6 +71,22 @@
   --apsis-apo: #ffa500;
   --marker-range: #eeeeee;
 
+  /* ── Domain: radar / heatmap ── */
+  --radar-bg: #050a05;
+  --radar-grid: #0a3a0a;
+  --radar-blip: #44ff44;
+  --radar-blip-dim: #227722;
+  --radar-text: #33cc33;
+  --radar-sweep: rgba(68, 255, 68, 0.06);
+  --heatmap-low: #000050;
+  --heatmap-mid: #00c8ff;
+  --heatmap-high: #ffff37;
+  --beam-reticle: #ffcc33;
+  --beam-reticle-locked: #44ff44;
+  --beam-cone: #ffcc33;
+  --beam-highlight: #ffcc33;
+  --beam-arc: rgba(100, 180, 255, 0.4);
+
   /* ── Accent ── */
   --accent: #66aaff;
 

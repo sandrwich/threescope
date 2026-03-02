@@ -203,6 +203,14 @@
       }
     }
     if (peak === 0) { heatmapCanvas = null; return; }
+    // Parse gradient stops from palette vars
+    const hex = (s: string) => {
+      const h = s.replace('#', '');
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    };
+    const cLow = hex(palette.heatmapLow);
+    const cMid = hex(palette.heatmapMid);
+    const cHigh = hex(palette.heatmapHigh);
     const dpr = window.devicePixelRatio || 1;
     const offscreen = document.createElement('canvas');
     offscreen.width = SIZE * dpr;
@@ -214,9 +222,12 @@
         const count = bins[ai * EL_BINS + ei];
         if (count === 0) continue;
         const t = count / peak;
-        const r = Math.round(t < 0.5 ? 0 : (t - 0.5) * 2 * 255);
-        const g = Math.round(t < 0.5 ? t * 2 * 200 : 200 + (t - 0.5) * 2 * 55);
-        const b = Math.round(t < 0.5 ? 80 + t * 2 * 175 : 255 - (t - 0.5) * 2 * 200);
+        const a = t < 0.5 ? cLow : cMid;
+        const bCol = t < 0.5 ? cMid : cHigh;
+        const u = t < 0.5 ? t * 2 : (t - 0.5) * 2;
+        const r = Math.round(a[0] + (bCol[0] - a[0]) * u);
+        const g = Math.round(a[1] + (bCol[1] - a[1]) * u);
+        const b = Math.round(a[2] + (bCol[2] - a[2]) * u);
         const alpha = 0.15 + t * 0.5;
         oc.fillStyle = `rgba(${r},${g},${b},${alpha})`;
         const az0 = ai * AZ_STEP;

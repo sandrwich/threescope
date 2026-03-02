@@ -126,7 +126,7 @@ export class InputHandler {
       this._pointerOverUI = e.target !== this._canvas;
 
       // Observer marker drag / orbit scrub / left-drag orbit
-      if (this._leftDown && !this._isDraggingObserver && !this._isDraggingOrbit && !this._isLeftDragging) {
+      if (this._leftDown && !this._pointerOverUI && !this._isDraggingObserver && !this._isDraggingOrbit && !this._isLeftDragging) {
         const dist = this._leftDownPos.distanceTo(this._mousePos);
         if (dist > 8) {
           // Moved enough to start drag — check observer first, then orbit scrub, then orbit
@@ -278,6 +278,10 @@ export class InputHandler {
         case 'o':
         case 'O':
           uiStore.observerWindowOpen = !uiStore.observerWindowOpen;
+          break;
+        case 'r':
+        case 'R':
+          uiStore.radarOpen = !uiStore.radarOpen;
           break;
       }
     });

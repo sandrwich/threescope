@@ -11,6 +11,7 @@ import { SunScene } from './scene/sun-scene';
 import { SatelliteManager } from './scene/satellite-manager';
 import { OrbitRenderer, ORBIT_COLORS } from './scene/orbit-renderer';
 import { FootprintRenderer, type FootprintEntry } from './scene/footprint-renderer';
+import { BeamConeRenderer } from './scene/beam-cone-renderer';
 import { MarkerManager, createDiamondTexture } from './scene/marker-manager';
 import { PostProcessing } from './scene/post-processing';
 import { getMinZoom, BODIES, PLANETS, type PlanetDef } from './bodies';
@@ -28,13 +29,15 @@ import { getSatellitesByFreqRange } from './data/satnogs';
 import { sourcesStore, type TLESourceConfig } from './stores/sources.svelte';
 import { timeStore } from './stores/time.svelte';
 import { uiStore } from './stores/ui.svelte';
+import { beamStore } from './stores/beam.svelte';
+import { Tracker } from './tracker/tracker';
 import { settingsStore } from './stores/settings.svelte';
 import { observerStore } from './stores/observer.svelte';
 import { themeStore } from './stores/theme.svelte';
 import { UIUpdater } from './ui/ui-updater';
 import { GeoOverlay } from './scene/geo-overlay';
 import { PassPredictor } from './passes/pass-predictor';
-import { getAzEl } from './astro/az-el';
+import { getAzEl, renderToEci } from './astro/az-el';
 import { propagate } from 'satellite.js';
 import { epochToUnix, epochToGmst } from './astro/epoch';
 import { sunDirectionECI, earthShadowFactor, isSolarEclipsed, solarEclipsePossible } from './astro/eclipse';
@@ -58,6 +61,7 @@ export class App {
   private satManager!: SatelliteManager;
   private orbitRenderer!: OrbitRenderer;
   private footprintRenderer!: FootprintRenderer;
+  private beamConeRenderer!: BeamConeRenderer;
   private markerManager!: MarkerManager;
   private postProcessing!: PostProcessing;
   private atmosphere!: Atmosphere;
@@ -79,6 +83,7 @@ export class App {
   private _lastHoverCamZ = 0;
   private selectedSats = new Set<Satellite>();
   private selectedSatsVersion = 0;
+  private tracker = new Tracker();
 
   // ── Selection helpers (centralized mutation) ──
 
@@ -364,6 +369,7 @@ export class App {
     // Orbits + Footprint
     this.orbitRenderer = new OrbitRenderer(this.scene3d);
     this.footprintRenderer = new FootprintRenderer(this.scene3d);
+    this.beamConeRenderer = new BeamConeRenderer(this.scene3d);
 
     // Markers
     const overlay = this.overlayEl = document.getElementById('svelte-ui')!;
@@ -576,6 +582,7 @@ export class App {
     };
     settingsStore.load();
     uiStore.loadToggles();
+    beamStore.load();
     uiStore.loadPassFilters();
     uiStore.loadMarkerGroups(this.cfg.markerGroups);
 
@@ -714,6 +721,10 @@ export class App {
     uiStore.getSatelliteList = () => {
       return this.satellites.map(s => ({ noradId: s.noradId, name: s.name }));
     };
+    uiStore.getSatelliteByIndex = (i: number) => {
+      const s = this.satellites[i];
+      return s ? { name: s.name, noradId: s.noradId } : null;
+    };
 
     // Command palette: get selected satellite list
     uiStore.getSelectedSatelliteList = () => {
@@ -724,6 +735,19 @@ export class App {
     uiStore.onSelectSatellite = (noradId: number) => {
       const sat = this.satByNorad.get(noradId);
       if (sat) this.selectSat(sat);
+    };
+
+    // Lock camera to satellite (same as double-click)
+    uiStore.onLockCameraToSat = (noradId: number) => {
+      const sat = this.satByNorad.get(noradId);
+      if (!sat) return;
+      if (!this.selectedSats.has(sat)) this.selectSat(sat);
+      const earthRotRad = (epochToGmst(timeStore.epoch) + this.cfg.earthRotationOffset) * DEG2RAD;
+      if (this.activeLock !== TargetLock.SAT) {
+        this.camera.setAngleX(this.camera.angleX + earthRotRad);
+      }
+      this.activeLock = TargetLock.SAT;
+      this.lockedSat = sat;
     };
 
     // Doppler: get TLE lines by NORAD ID
@@ -1345,6 +1369,12 @@ export class App {
       this.timeSystem.timeMultiplier, dt, this.maxBatch
     );
 
+    // Tracking: lock aim (every frame), radar blips + sky path (throttled)
+    if (observerStore.isSet && (uiStore.radarOpen || beamStore.locked)) {
+      const obs = observerStore.location;
+      this.tracker.update(this.satellites, this.selectedSats, epoch, gmstDeg, obs.lat, obs.lon, obs.alt, this.timeSystem.timeMultiplier);
+    }
+
     if (this.viewMode === ViewMode.VIEW_3D) {
       // Update 3D scene
       if (!this.orreryCtrl.isOrreryMode) {
@@ -1419,6 +1449,18 @@ export class App {
         }
         this.footprintRenderer.update(fpEntries);
 
+        // Beam cone visualization
+        if (observerStore.isSet && beamStore.coneVisible) {
+          const obs = observerStore.location;
+          this.beamConeRenderer.update(
+            obs.lat, obs.lon, gmstDeg, this.cfg.earthRotationOffset,
+            beamStore.aimAz, beamStore.aimEl, beamStore.beamWidth, true,
+            beamStore.locked ? beamStore.trackRange : null,
+          );
+        } else {
+          this.beamConeRenderer.hide();
+        }
+
         this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camera.distance);
       }
 
@@ -1441,6 +1483,7 @@ export class App {
       this.markerManager.hide();
       this.orbitRenderer.clear();
       this.footprintRenderer.clear();
+      this.beamConeRenderer.hide();
       this.periSprite3d.visible = false;
       this.apoSprite3d.visible = false;
 

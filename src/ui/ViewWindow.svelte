@@ -3,6 +3,7 @@
   import MobileSheet from './shared/MobileSheet.svelte';
   import Checkbox from './shared/Checkbox.svelte';
   import { uiStore } from '../stores/ui.svelte';
+  import { beamStore } from '../stores/beam.svelte';
   import { ICON_VIEW } from './shared/icons';
   import { settingsStore } from '../stores/settings.svelte';
   import { findMatchingPreset, getPresetSettings } from '../graphics';
@@ -89,16 +90,32 @@
       </div>
 
       <div class="section">
-        <div class="section-header">Markers</div>
-        {#each defaultConfig.markerGroups as group}
-          <label class="toggle-label" title={group.label}>
-            <Checkbox
-              checked={uiStore.markerVisibility[group.id] ?? false}
-              onchange={() => uiStore.setMarkerGroupVisible(group.id, !(uiStore.markerVisibility[group.id] ?? false))} />
-            {group.label}
-          </label>
-        {/each}
+        <div class="section-header">Observer</div>
+        <label class="toggle-label" title="Show observer location marker">
+          <Checkbox
+            checked={uiStore.markerVisibility['observer'] ?? false}
+            onchange={() => uiStore.setMarkerGroupVisible('observer', !(uiStore.markerVisibility['observer'] ?? false))} />
+          Location
+        </label>
+        <label class="toggle-label" title="Show antenna beam cone in 3D view">
+          <Checkbox checked={beamStore.coneVisible} onchange={() => beamStore.setConeVisible(!beamStore.coneVisible)} />
+          Beam Cone
+        </label>
       </div>
+
+      {#if defaultConfig.markerGroups.some(g => g.id !== 'observer')}
+        <div class="section">
+          <div class="section-header">Markers</div>
+          {#each defaultConfig.markerGroups.filter(g => g.id !== 'observer') as group}
+            <label class="toggle-label" title={group.label}>
+              <Checkbox
+                checked={uiStore.markerVisibility[group.id] ?? false}
+                onchange={() => uiStore.setMarkerGroupVisible(group.id, !(uiStore.markerVisibility[group.id] ?? false))} />
+              {group.label}
+            </label>
+          {/each}
+        </div>
+      {/if}
     {/if}
   </div>
 {/snippet}

@@ -71,6 +71,7 @@
     initialX = 10,
     initialY = 50,
     modal = false,
+    noPad = false,
     children,
   }: {
     title?: string;
@@ -83,6 +84,7 @@
     initialX?: number;
     initialY?: number;
     modal?: boolean;
+    noPad?: boolean;
     children: any;
   } = $props();
 
@@ -324,7 +326,7 @@
           <button class="window-close" onclick={() => open = false}>{@html ICON_CLOSE}</button>
         </div>
       </div>
-      <div class="window-body" class:has-footer={!!footer}>
+      <div class="window-body" class:has-footer={!!footer} class:no-pad={noPad}>
         {@render children()}
       </div>
       {#if footer}
@@ -357,7 +359,7 @@
     </div>
     {#if !collapsed}
       <div class="window-collapsible" transition:slide={{ duration: 150 }}>
-        <div class="window-body" class:has-footer={!!footer}>
+        <div class="window-body" class:has-footer={!!footer} class:no-pad={noPad}>
           {@render children()}
         </div>
         {#if footer}
@@ -458,9 +460,12 @@
   .window-body {
     padding: 12px 14px;
   }
+  .window-body.no-pad {
+    padding: 0;
+  }
   .window-footer {
     border-top: 1px solid var(--border);
-    padding: 4px 14px 3px;
+    padding: 5px 14px;
   }
   .window-footer:not(:has(*)) {
     display: none;

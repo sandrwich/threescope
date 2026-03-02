@@ -22,6 +22,7 @@
   import PassFilterWindow from './PassFilterWindow.svelte';
   import ThemeEditorWindow from './ThemeEditorWindow.svelte';
   import SatDatabaseWindow from './SatDatabaseWindow.svelte';
+  import RadarWindow from './RadarWindow.svelte';
 
   onMount(() => {
     uiStore.updateMobileState();
@@ -56,6 +57,7 @@
   <PassFilterWindow />
   <ThemeEditorWindow />
   <SatDatabaseWindow />
+  <RadarWindow />
 </div>
 
 <style>

@@ -5,6 +5,7 @@
   import Input from './shared/Input.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { observerStore } from '../stores/observer.svelte';
+  import { beamStore } from '../stores/beam.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { ICON_OBSERVER } from './shared/icons';
   import { getElevation, isElevationLoaded } from '../astro/elevation';
@@ -57,6 +58,16 @@
     obsAlt = String(observerStore.location.alt);
     obsName = observerStore.location.name;
   });
+
+  // --- Beam width ---
+  let inputBW = $state(beamStore.beamWidth.toFixed(1));
+  let editingBW = $state(false);
+  $effect(() => { if (!editingBW) inputBW = beamStore.beamWidth.toFixed(1); });
+  function applyBW() {
+    const bw = parseFloat(inputBW);
+    if (!isNaN(bw)) beamStore.setBeamWidth(bw);
+    editingBW = false;
+  }
 
   // --- Sky data (real-time) ---
   let sunEl = $derived.by(() => {
@@ -186,6 +197,19 @@
       </div>
     </div>
     <Button class="geo-btn" onclick={useMyLocation}>Use My Location</Button>
+
+    <!-- Antenna -->
+    <h4 class="section-header">Antenna</h4>
+    <div class="bw-row">
+      <label>Beam Width</label>
+      <Input class="bw-input" type="number" min="0" step="0.1"
+        bind:value={inputBW}
+        onfocus={() => editingBW = true}
+        onblur={applyBW}
+        onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+      />
+      <span class="bw-unit">&deg;</span>
+    </div>
 
     {#if observerStore.isSet}
       <!-- Sky -->
@@ -331,5 +355,21 @@
   .window-hint {
     font-size: 10px;
     color: var(--text-ghost);
+  }
+  .bw-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .bw-row label {
+    color: var(--text-dim);
+    font-size: 12px;
+    flex: 1;
+  }
+  :global(.bw-input) { width: 64px; }
+  .bw-unit {
+    color: var(--text-ghost);
+    font-size: 11px;
+    flex-shrink: 0;
   }
 </style>
