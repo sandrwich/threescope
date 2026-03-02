@@ -4,6 +4,8 @@
   import Checkbox from './shared/Checkbox.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { beamStore } from '../stores/beam.svelte';
+  import { observerStore } from '../stores/observer.svelte';
+  import { ViewMode } from '../types';
   import { ICON_VIEW } from './shared/icons';
   import { settingsStore } from '../stores/settings.svelte';
   import { findMatchingPreset, getPresetSettings } from '../graphics';
@@ -74,7 +76,7 @@
       </div>
     {/if}
 
-    {#if uiStore.earthTogglesVisible}
+    {#if uiStore.satTogglesVisible}
       <div class="section">
         <div class="section-header">Satellites</div>
         <label class="toggle-label" title="Focus on selected satellite only">
@@ -82,27 +84,40 @@
             onchange={() => uiStore.setToggle('hideUnselected', uiStore.hideUnselected)} />
           Spotlight
         </label>
-        <label class="toggle-label" title="Show orbit trajectories for all satellites">
+        <label class="toggle-label" title="Show orbit trajectories">
           <Checkbox bind:checked={uiStore.showOrbits}
             onchange={() => uiStore.setToggle('showOrbits', uiStore.showOrbits)} />
           Orbits
         </label>
       </div>
 
-      <div class="section">
-        <div class="section-header">Observer</div>
-        <label class="toggle-label" title="Show observer location marker">
-          <Checkbox
-            checked={uiStore.markerVisibility['observer'] ?? false}
-            onchange={() => uiStore.setMarkerGroupVisible('observer', !(uiStore.markerVisibility['observer'] ?? false))} />
-          Location
-        </label>
-        <label class="toggle-label" title="Show antenna beam cone in 3D view">
-          <Checkbox checked={beamStore.coneVisible} onchange={() => beamStore.setConeVisible(!beamStore.coneVisible)} />
-          Beam Cone
-        </label>
-      </div>
+      {#if uiStore.earthTogglesVisible || uiStore.viewMode === ViewMode.VIEW_SKY}
+        <div class="section">
+          <div class="section-header">Observer</div>
+          {#if uiStore.earthTogglesVisible}
+            <label class="toggle-label" title="Show observer location marker">
+              <Checkbox
+                checked={uiStore.markerVisibility['observer'] ?? false}
+                onchange={() => uiStore.setMarkerGroupVisible('observer', !(uiStore.markerVisibility['observer'] ?? false))} />
+              Location
+            </label>
+            <label class="toggle-label" title="Show antenna beam cone in 3D view">
+              <Checkbox checked={beamStore.coneVisible} onchange={() => beamStore.setConeVisible(!beamStore.coneVisible)} />
+              Beam Cone
+            </label>
+          {/if}
+          {#if uiStore.viewMode === ViewMode.VIEW_SKY}
+            <label class="toggle-label" title="Show azimuth/elevation reference grid">
+              <Checkbox bind:checked={uiStore.showSkyGrid}
+                onchange={() => uiStore.setToggle('showSkyGrid', uiStore.showSkyGrid)} />
+              Az/El Grid
+            </label>
+          {/if}
+        </div>
+      {/if}
+    {/if}
 
+    {#if uiStore.earthTogglesVisible}
       {#if defaultConfig.markerGroups.some(g => g.id !== 'observer')}
         <div class="section">
           <div class="section-header">Markers</div>

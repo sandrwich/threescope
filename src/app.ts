@@ -12,6 +12,7 @@ import { SatelliteManager } from './scene/satellite-manager';
 import { OrbitRenderer, ORBIT_COLORS } from './scene/orbit-renderer';
 import { FootprintRenderer, type FootprintEntry } from './scene/footprint-renderer';
 import { BeamConeRenderer } from './scene/beam-cone-renderer';
+import { SkyGridRenderer } from './scene/sky-grid-renderer';
 import { MarkerManager, createDiamondTexture } from './scene/marker-manager';
 import { PostProcessing } from './scene/post-processing';
 import { getMinZoom, BODIES, PLANETS, type PlanetDef } from './bodies';
@@ -22,7 +23,7 @@ import { MapRenderer } from './scene/map-renderer';
 import { CameraController } from './interaction/camera-controller';
 import { InputHandler } from './interaction/input-handler';
 import { OrreryController } from './scene/orrery-controller';
-import { getMapCoordinates, latLonToSurface } from './astro/coordinates';
+import { getMapCoordinates, latLonToSurface, observerFrame, observerFrameInto } from './astro/coordinates';
 import { calculateSunPosition } from './astro/sun';
 import { fetchTLEData, parseTLETextParallel, warmupTLEWorkers } from './data/tle-loader';
 import { getSatellitesByFreqRange } from './data/satnogs';
@@ -62,6 +63,7 @@ export class App {
   private orbitRenderer!: OrbitRenderer;
   private footprintRenderer!: FootprintRenderer;
   private beamConeRenderer!: BeamConeRenderer;
+  private skyGridRenderer!: SkyGridRenderer;
   private markerManager!: MarkerManager;
   private postProcessing!: PostProcessing;
   private atmosphere!: Atmosphere;
@@ -71,6 +73,11 @@ export class App {
   private atmosphereGlowEnabled = true;
   private lastSphereDetail = 0;
   private starTex!: THREE.Texture;
+  private skyGround!: THREE.Mesh; // flat ground disc with projected Earth texture
+  private _skyFrame = {
+    origin: new THREE.Vector3(), up: new THREE.Vector3(),
+    north: new THREE.Vector3(), east: new THREE.Vector3(),
+  };
 
   private orreryCtrl!: OrreryController;
 
@@ -89,7 +96,15 @@ export class App {
 
   /** Add a satellite to selection, respecting single-select mode. */
   private selectSat(sat: Satellite) {
-    if (uiStore.singleSelectMode) this.selectedSats.clear();
+    if (uiStore.singleSelectMode) {
+      // Properly clean up each deselected satellite (release locks, hidden state)
+      for (const prev of this.selectedSats) {
+        if (prev === sat) continue;
+        if (this.lockedSat === prev) this.exitSatLock();
+      }
+      this.selectedSats.clear();
+      if (uiStore.hiddenSelectedSats.size > 0) uiStore.hiddenSelectedSats = new Set();
+    }
     this.selectedSats.add(sat);
     this.selectedSatsVersion++;
     uiStore.lastAddedSatNoradId = sat.noradId;
@@ -141,6 +156,7 @@ export class App {
   private tmpVec3 = new THREE.Vector3();
   private tmpSphere = new THREE.Sphere();
   private static readonly Y_AXIS = new THREE.Vector3(0, 1, 0);
+  private static readonly Z_AXIS = new THREE.Vector3(0, 0, 1);
 
   // Camera state (3D orbital + 2D orthographic)
   private camera!: CameraController;
@@ -271,14 +287,19 @@ export class App {
       clearTargetLock: () => { if (this.lockedSat) this.exitSatLock(); else this.activeLock = TargetLock.NONE; },
       onSelect: () => this.handleClick(),
       onDoubleClick3D: () => this.handleDoubleClickLock(),
-      onDoubleClick2D: () => { if (!this.hoveredSat && this.selectedSats.size > 0) this.clearSelection(); this.activeLock = TargetLock.EARTH; },
+      onDoubleClick2D: () => { if (this.hitTestObserver()) { this.enterSkyView(); return; } if (!this.hoveredSat && this.selectedSats.size > 0) this.clearSelection(); this.activeLock = TargetLock.EARTH; },
+      onDoubleClickSky: () => this.handleDoubleClickSky(),
       onOrreryClick: () => this.orreryCtrl.handleClick(this.raycaster, this.input.mouseNDC),
       onToggleViewMode: () => {
+        if (this.viewMode === ViewMode.VIEW_SKY) return;
         if (!this.orreryCtrl.isOrreryMode) {
           this.viewMode = this.viewMode === ViewMode.VIEW_3D ? ViewMode.VIEW_2D : ViewMode.VIEW_3D;
           uiStore.viewMode = this.viewMode;
         }
       },
+      onToggleSkyView: () => this.toggleSkyView(),
+      onSkyClick: (ndcX, ndcY) => this.handleSkyClick(ndcX, ndcY),
+      onSkyDrag: (dx, dy) => this.handleSkyDrag(dx, dy),
       onResize: () => {},
       tryStartObserverDrag: () => this.tryStartObserverDrag(),
       onObserverDrag: () => this.handleObserverDrag(),
@@ -346,6 +367,43 @@ export class App {
     this.earth = new Earth(dayTex, nightTex, earthNormal, earthDisp);
     this.scene3d.add(this.earth.mesh);
 
+    // Sky-view ground disc: flat plane with projected Earth texture for realistic ground
+    this.skyGround = new THREE.Mesh(
+      new THREE.CircleGeometry(5, 64),
+      new THREE.ShaderMaterial({
+        uniforms: {
+          dayTexture: { value: dayTex },
+          gmstRad: { value: 0 },
+        },
+        vertexShader: `
+          varying vec3 vWorldPos;
+          void main() {
+            vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D dayTexture;
+          uniform float gmstRad;
+          varying vec3 vWorldPos;
+          const float PI = 3.14159265;
+          void main() {
+            vec3 dir = normalize(vWorldPos);
+            // ECI to ECEF: rotate around Y by -gmstRad
+            float c = cos(gmstRad), s = sin(gmstRad);
+            vec3 ecef = vec3(c * dir.x - s * dir.z, dir.y, s * dir.x + c * dir.z);
+            // Match Earth UV: theta = atan(-z, x), phi = acos(y)
+            float phi = acos(clamp(ecef.y, -1.0, 1.0));
+            float theta = atan(-ecef.z, ecef.x);
+            vec2 uv = vec2(theta / (2.0 * PI) + 0.5, phi / PI);
+            gl_FragColor = texture2D(dayTexture, uv);
+          }
+        `,
+      }),
+    );
+    this.skyGround.visible = false;
+    this.scene3d.add(this.skyGround);
+
     // Atmosphere (Fresnel rim glow, rendered before clouds)
     this.atmosphere = new Atmosphere();
     this.scene3d.add(this.atmosphere.mesh);
@@ -370,6 +428,7 @@ export class App {
     this.orbitRenderer = new OrbitRenderer(this.scene3d);
     this.footprintRenderer = new FootprintRenderer(this.scene3d);
     this.beamConeRenderer = new BeamConeRenderer(this.scene3d);
+    this.skyGridRenderer = new SkyGridRenderer(this.scene3d, document.getElementById('svelte-ui')!);
 
     // Markers
     const overlay = this.overlayEl = document.getElementById('svelte-ui')!;
@@ -570,6 +629,117 @@ export class App {
     this.markerManager.hide();
   }
 
+  /** Set visibility for sky view — hide ground objects, keep sky objects.
+   *  A flat ground disc with projected Earth texture replaces the sphere for realistic horizon. */
+  private setSkyViewVisible(sky: boolean) {
+    this.earth.mesh.visible = !sky;
+    this.atmosphere.mesh.visible = !sky;
+    this.cloudLayer.mesh.visible = !sky;
+    this.geoOverlay.set3dVisible(!sky);
+    this.skyGround.visible = sky;
+    if (sky) {
+      // Ground-only renderers: clear when entering sky view
+      this.footprintRenderer.clear();
+      this.beamConeRenderer.hide();
+      this.markerManager.hide();
+      // Orbits stay — they're visible arcs across the sky
+    }
+    // Moon, sun, sats, orbits stay visible — they're in the sky
+  }
+
+  private enterSkyView() {
+    if (!observerStore.isSet) return;
+    if (this.viewMode === ViewMode.VIEW_SKY) return;
+    if (this.orreryCtrl.isOrreryMode) return;
+    const gmstDeg = this.timeSystem.getGmstDeg();
+    const frame = observerFrame(observerStore.location.lat, observerStore.location.lon, gmstDeg, this.cfg.earthRotationOffset);
+    this.camera.enterSkyView(frame.origin, frame.up, frame.north, frame.east);
+    this.viewMode = ViewMode.VIEW_SKY;
+    uiStore.viewMode = ViewMode.VIEW_SKY;
+    this.setSkyViewVisible(true);
+    this.skyGridRenderer.setVisible(uiStore.showSkyGrid);
+    this.skyGridRenderer.update(frame.origin, frame.up, frame.north, frame.east);
+    this.activeLock = TargetLock.NONE;
+    if (this.lockedSat) this.lockedSat = null;
+  }
+
+  private exitSkyView() {
+    if (this.viewMode !== ViewMode.VIEW_SKY) return;
+    this.camera.exitSkyView();
+    this.viewMode = ViewMode.VIEW_3D;
+    uiStore.viewMode = ViewMode.VIEW_3D;
+    this.setSkyViewVisible(false);
+    this.skyGridRenderer.setVisible(false);
+    this.activeLock = TargetLock.EARTH;
+  }
+
+  private toggleSkyView() {
+    if (this.viewMode === ViewMode.VIEW_SKY) this.exitSkyView();
+    else this.enterSkyView();
+  }
+
+  /** Double-click/tap in sky view — beam-lock to hovered satellite. */
+  private handleDoubleClickSky() {
+    if (this.hoveredSat) {
+      if (beamStore.locked && beamStore.lockedNoradId === this.hoveredSat.noradId) {
+        beamStore.unlock();
+      } else {
+        beamStore.lockToSatellite(this.hoveredSat.noradId, this.hoveredSat.name);
+      }
+    }
+  }
+
+  /** Convert NDC click coords to az/el in the observer's ENU frame, then aim beam. */
+  private handleSkyClick(ndcX: number, ndcY: number) {
+    if (!this.camera.isSkyView) return;
+    if (beamStore.locked) return; // locked beam is controlled by tracker only
+    // Unproject click to world-space ray direction
+    this.tmpVec3.set(ndcX, ndcY, 0.5).unproject(this.camera3d);
+    this.tmpVec3.sub(this.camera3d.position).normalize();
+    // Convert to local ENU: dot with east, north, up
+    const e = this.tmpVec3.dot(this.camera.skyEast);
+    const n = this.tmpVec3.dot(this.camera.skyNorth);
+    const u = this.tmpVec3.dot(this.camera.skyUp);
+    const el = Math.atan2(u, Math.sqrt(e * e + n * n)) * RAD2DEG;
+    if (el < 0) return; // below horizon
+    let az = Math.atan2(e, n) * RAD2DEG;
+    if (az < 0) az += 360;
+    beamStore.setAim(az, el);
+  }
+
+  /** Left-drag in sky view: aim beam at current pointer position. */
+  private handleSkyDrag(ndcX: number, ndcY: number) {
+    this.handleSkyClick(ndcX, ndcY);
+  }
+
+  /** Project beam aim direction to screen and update reticle HUD data. */
+  private updateSkyReticle() {
+    const up = this.camera.skyUp;
+    const north = this.camera.skyNorth;
+    const east = this.camera.skyEast;
+    const azRad = beamStore.aimAz * DEG2RAD;
+    const elRad = beamStore.aimEl * DEG2RAD;
+    const cosEl = Math.cos(elRad);
+    // Beam direction in world space
+    this.tmpVec3.set(0, 0, 0)
+      .addScaledVector(north, cosEl * Math.cos(azRad))
+      .addScaledVector(east, cosEl * Math.sin(azRad))
+      .addScaledVector(up, Math.sin(elRad));
+    // Project a point along beam direction
+    const camPos = this.camera3d.position;
+    this.tmpVec3.multiplyScalar(100).add(camPos);
+    this.tmpVec3.project(this.camera3d);
+    if (this.tmpVec3.z > 1) {
+      uiStore.skyReticle = { x: 0, y: 0, radius: 0, visible: false };
+      return;
+    }
+    const sx = (this.tmpVec3.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-this.tmpVec3.y * 0.5 + 0.5) * window.innerHeight;
+    // Beam circle radius in pixels: (beamWidth / FOV) * viewportHeight / 2
+    const radius = (beamStore.beamWidth / this.camera.skyFov) * window.innerHeight / 2;
+    uiStore.skyReticle = { x: sx, y: sy, radius, visible: true };
+  }
+
   /** Wire Svelte stores <-> App communication */
   private wireStores() {
     const earthDrawR = EARTH_RADIUS_KM / DRAW_SCALE;
@@ -630,6 +800,9 @@ export class App {
           break;
         case 'showGrid':
           this.geoOverlay.setGridVisible(value);
+          break;
+        case 'showSkyGrid':
+          if (this.viewMode === ViewMode.VIEW_SKY) this.skyGridRenderer.setVisible(value);
           break;
       }
     };
@@ -712,10 +885,14 @@ export class App {
 
     // Command palette: toggle 2D/3D
     uiStore.onToggleViewMode = () => {
+      if (this.viewMode === ViewMode.VIEW_SKY) return;
       if (this.orreryCtrl.isOrreryMode) return;
       this.viewMode = this.viewMode === ViewMode.VIEW_3D ? ViewMode.VIEW_2D : ViewMode.VIEW_3D;
       uiStore.viewMode = this.viewMode;
     };
+
+    // Sky view toggle
+    uiStore.onToggleSkyView = () => this.toggleSkyView();
 
     // Command palette: get satellite list for search
     uiStore.getSatelliteList = () => {
@@ -742,6 +919,11 @@ export class App {
       const sat = this.satByNorad.get(noradId);
       if (!sat) return;
       if (!this.selectedSats.has(sat)) this.selectSat(sat);
+      // In sky view, beam-lock instead of camera-lock
+      if (this.viewMode === ViewMode.VIEW_SKY) {
+        beamStore.lockToSatellite(noradId, sat.name);
+        return;
+      }
       const earthRotRad = (epochToGmst(timeStore.epoch) + this.cfg.earthRotationOffset) * DEG2RAD;
       if (this.activeLock !== TargetLock.SAT) {
         this.camera.setAngleX(this.camera.angleX + earthRotRad);
@@ -1120,7 +1302,9 @@ export class App {
     // On touch, mouseNDC updates in touchstart but detectHover3D() may not
     // have run yet — do a fresh raycast if hoveredSat is still null
     if (!this.hoveredSat) {
-      if (this.viewMode === ViewMode.VIEW_3D) {
+      if (this.viewMode === ViewMode.VIEW_SKY) {
+        this.detectHoverSky();
+      } else if (this.viewMode === ViewMode.VIEW_3D) {
         this.detectHover3D();
       } else {
         this.hoveredSat = this.mapRenderer.detectHover(this.input.mousePos, this.camera2d, this.satellites, this.timeSystem.getGmstDeg(), this.cfg, this.hideUnselected, this.selectedSats, this.camera.zoom2d, this.input.touchCount);
@@ -1224,6 +1408,7 @@ export class App {
 
     // Earth rotation (needed for target lock + camera update)
     const earthRotRad = (gmstDeg + this.cfg.earthRotationOffset) * DEG2RAD;
+    const isSkyView = this.viewMode === ViewMode.VIEW_SKY;
 
     // Target lock
     if (this.activeLock === TargetLock.EARTH) {
@@ -1266,10 +1451,30 @@ export class App {
       this.camera.setViewOffsetY(sheetOffset);
     }
 
+    // Update sky-view camera origin + ground disc + grid
+    if (this.camera.isSkyView && observerStore.isSet) {
+      observerFrameInto(observerStore.location.lat, observerStore.location.lon, gmstDeg, this.cfg.earthRotationOffset, this._skyFrame);
+      const f = this._skyFrame;
+      this.camera.updateSkyOrigin(f.origin, f.up, f.north, f.east);
+      // Position ground disc at observer, facing up
+      this.skyGround.position.copy(f.origin);
+      this.skyGround.quaternion.setFromUnitVectors(App.Z_AXIS, f.up);
+      (this.skyGround.material as THREE.ShaderMaterial).uniforms.gmstRad.value = earthRotRad;
+      this.skyGridRenderer.update(f.origin, f.up, f.north, f.east);
+    }
+
     // Smooth camera lerp + update camera transforms
     const isOrreryOrPlanet = this.activeLock === TargetLock.PLANET || this.activeLock === TargetLock.SAT || this.orreryCtrl.isOrreryMode;
     this.camera.updateFrame(dt, earthRotRad, isOrreryOrPlanet);
     this.camera3d.updateMatrixWorld();
+
+    // Project sky grid labels + beam reticle after camera update
+    if (isSkyView) {
+      this.skyGridRenderer.projectLabels(this.camera3d);
+      this.updateSkyReticle();
+    } else if (uiStore.skyReticle.visible) {
+      uiStore.skyReticle = { x: 0, y: 0, radius: 0, visible: false };
+    }
 
     // Hover detection — only recompute when pointer moved
     // Camera movement alone doesn't trigger hover recompute (user is orbiting, not hovering).
@@ -1282,7 +1487,13 @@ export class App {
       this._lastHoverCamY = cp.y;
       this._lastHoverCamZ = cp.z;
     }
-    if (this.input.isDraggingOrbit) {
+    if (this.viewMode === ViewMode.VIEW_SKY) {
+      // Sky view: recompute hover on mouse move OR camera move (sky rotates under cursor)
+      if (hoverDirty || cameraMoved) {
+        this.detectHoverSky();
+        this.renderer.domElement.style.cursor = this.hoveredSat ? 'pointer' : 'crosshair';
+      }
+    } else if (this.input.isDraggingOrbit) {
       this.hoveredSat = null;
     } else if (this.input.isOverUI) {
       this.hoveredSat = null;
@@ -1330,8 +1541,8 @@ export class App {
 
     const earthMode = this.activeLock !== TargetLock.PLANET && this.activeLock !== TargetLock.MOON && !this.orreryCtrl.isOrreryMode;
 
-    // Cursor lat/lon (skip when pointer is over UI)
-    if (earthMode && !this.input.isOverUI) {
+    // Cursor lat/lon (skip when pointer is over UI or in sky view)
+    if (earthMode && !isSkyView && !this.input.isOverUI) {
       if (this.viewMode === ViewMode.VIEW_3D) {
         this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
         const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
@@ -1370,29 +1581,34 @@ export class App {
     );
 
     // Tracking: lock aim (every frame), radar blips + sky path (throttled)
-    if (observerStore.isSet && (uiStore.radarOpen || beamStore.locked)) {
+    if (observerStore.isSet && (uiStore.radarOpen || beamStore.locked || isSkyView)) {
       const obs = observerStore.location;
       this.tracker.update(this.satellites, this.selectedSats, epoch, gmstDeg, obs.lat, obs.lon, obs.alt, this.timeSystem.timeMultiplier);
     }
 
-    if (this.viewMode === ViewMode.VIEW_3D) {
-      // Update 3D scene
-      if (!this.orreryCtrl.isOrreryMode) {
+    if (this.viewMode === ViewMode.VIEW_3D || isSkyView) {
+      // Update 3D scene (sky view shares the 3D scene but hides ground objects)
+      if (!this.orreryCtrl.isOrreryMode && !isSkyView) {
         this.earth.update(epoch, gmstDeg, this.cfg.earthRotationOffset, this.cfg.showNightLights);
         if (earthMode) this.cloudLayer.update(epoch, gmstDeg, this.cfg.earthRotationOffset, this.cfg.showClouds, this.cfg.showNightLights);
+      }
+      // Moon + sun update in both orbital and sky view
+      if (!this.orreryCtrl.isOrreryMode) {
         this.moonScene.update(epoch);
         this.sunScene.update(epoch);
       }
 
-      // Geographic overlays rotate with Earth
-      this.geoOverlay.setRotation(earthRotRad);
-      this.geoOverlay.set3dVisible(earthMode);
+      // Geographic overlays rotate with Earth (hidden in sky view via setSkyViewVisible)
+      if (!isSkyView) {
+        this.geoOverlay.setRotation(earthRotRad);
+        this.geoOverlay.set3dVisible(earthMode);
+      }
 
       // Sun direction in ECI/world space
       const sunEciDir = calculateSunPosition(epoch).normalize();
       this.atmosphere.update(sunEciDir);
       this.moonScene.updateSunDir(sunEciDir);
-      this.atmosphere.setVisible(this.atmosphereGlowEnabled && this.activeLock !== TargetLock.PLANET && !this.orreryCtrl.isOrreryMode);
+      this.atmosphere.setVisible(this.atmosphereGlowEnabled && !isSkyView && this.activeLock !== TargetLock.PLANET && !this.orreryCtrl.isOrreryMode);
 
       // Orrery mode (includes promoted planet if any)
       this.orreryCtrl.updateFrame({
@@ -1403,13 +1619,14 @@ export class App {
         timeMultiplier: this.timeSystem.timeMultiplier,
       });
 
-      this.satManager.setVisible(earthMode);
-      uiStore.earthTogglesVisible = earthMode;
+      this.satManager.setVisible(earthMode || isSkyView);
+      uiStore.earthTogglesVisible = earthMode && !isSkyView;
+      uiStore.satTogglesVisible = earthMode || isSkyView;
       // Hide 2D marker labels in 3D mode
       this.mapRenderer.hideMarkerLabels();
       const showNight = earthMode || this.activeLock === TargetLock.MOON || this.activeLock === TargetLock.PLANET;
-      uiStore.nightToggleVisible = showNight;
-      if (earthMode) {
+      uiStore.nightToggleVisible = showNight && !isSkyView;
+      if (earthMode || isSkyView) {
         // Observer position in render coords for magnitude-based icon brightness
         let obsRenderPos: { x: number; y: number; z: number } | null = null;
         if (observerStore.isSet) {
@@ -1424,50 +1641,55 @@ export class App {
           this.bloomEnabled, this.fadingInSats, sunEciDir, obsRenderPos, dt,
         );
 
+        // Orbits — visible in both 3D and sky view
         this.orbitRenderer.update(
           this.satellites, epoch, this.hoveredSat, this.selectedSats,
           this.selectedSatsVersion, this.unselectedFade, this.sim.orbitsToDraw,
           { orbitNormal: this.cfg.orbitNormal, orbitHighlighted: this.cfg.orbitHighlighted },
           this.camera3d.position, gmstDeg, this.cfg.earthRotationOffset,
         );
+        // In sky view, hide ground-reference lines (nadir from Earth center, observer-to-sat)
+        if (isSkyView) this.orbitRenderer.hideGroundLines();
 
-        // Footprints for all selected sats + hovered (per-sat orbit color)
-        const fpEntries: FootprintEntry[] = [];
-        {
-          const hiddenIds = uiStore.hiddenSelectedSats;
-          let fpIdx = 0;
-          for (const sat of this.selectedSats) {
-            if (!hiddenIds.has(sat.noradId)) {
+        if (!isSkyView) {
+          // Footprints for all selected sats + hovered (per-sat orbit color)
+          const fpEntries: FootprintEntry[] = [];
+          {
+            const hiddenIds = uiStore.hiddenSelectedSats;
+            let fpIdx = 0;
+            for (const sat of this.selectedSats) {
+              if (!hiddenIds.has(sat.noradId)) {
+                fpEntries.push({
+                  position: sat.currentPos,
+                  color: ORBIT_COLORS[fpIdx % ORBIT_COLORS.length] as [number, number, number],
+                });
+              }
+              fpIdx++;
+            }
+            if (this.hoveredSat && !this.selectedSats.has(this.hoveredSat) && this._hoverSettleFrames >= 6) {
+              const rc = ORBIT_COLORS[this.selectedSats.size % ORBIT_COLORS.length];
               fpEntries.push({
-                position: sat.currentPos,
-                color: ORBIT_COLORS[fpIdx % ORBIT_COLORS.length] as [number, number, number],
+                position: (this.hoveredSat as Satellite).currentPos,
+                color: rc as [number, number, number],
               });
             }
-            fpIdx++;
           }
-          if (this.hoveredSat && !this.selectedSats.has(this.hoveredSat) && this._hoverSettleFrames >= 6) {
-            const rc = ORBIT_COLORS[this.selectedSats.size % ORBIT_COLORS.length];
-            fpEntries.push({
-              position: (this.hoveredSat as Satellite).currentPos,
-              color: rc as [number, number, number],
-            });
+          this.footprintRenderer.update(fpEntries);
+
+          // Beam cone visualization
+          if (observerStore.isSet && beamStore.coneVisible) {
+            const obs = observerStore.location;
+            this.beamConeRenderer.update(
+              obs.lat, obs.lon, gmstDeg, this.cfg.earthRotationOffset,
+              beamStore.aimAz, beamStore.aimEl, beamStore.beamWidth, true,
+              beamStore.locked ? beamStore.trackRange : null,
+            );
+          } else {
+            this.beamConeRenderer.hide();
           }
-        }
-        this.footprintRenderer.update(fpEntries);
 
-        // Beam cone visualization
-        if (observerStore.isSet && beamStore.coneVisible) {
-          const obs = observerStore.location;
-          this.beamConeRenderer.update(
-            obs.lat, obs.lon, gmstDeg, this.cfg.earthRotationOffset,
-            beamStore.aimAz, beamStore.aimEl, beamStore.beamWidth, true,
-            beamStore.locked ? beamStore.trackRange : null,
-          );
-        } else {
-          this.beamConeRenderer.hide();
+          this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camera.distance);
         }
-
-        this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camera.distance);
       }
 
       const activePlanet = this.orreryCtrl.currentActivePlanet;
@@ -1620,6 +1842,12 @@ export class App {
       return;
     }
 
+    // Double-click on observer marker → enter sky view
+    if (this.hitTestObserver()) {
+      this.enterSkyView();
+      return;
+    }
+
     this.raycaster.setFromCamera(this.input.mouseNDC, this.camera3d);
     const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
     const moonR = MOON_RADIUS_KM / DRAW_SCALE;
@@ -1633,6 +1861,65 @@ export class App {
     else if (moonHit && !earthHit) this.activeLock = TargetLock.MOON;
     else if (earthHit) { this.activeLock = TargetLock.EARTH; this.lockedSat = null; }
     else if (this.selectedSats.size > 0) { this.clearSelection(); }
+  }
+
+  /** Sky-view hover: screen-space approach — project each satellite to screen
+   *  and check pixel distance to mouse. Guarantees hover matches visual dot position. */
+  private detectHoverSky() {
+    const touchScale = this.input.isTouchActive ? 2.0 : 1.0;
+    const hitPx = 16 * touchScale; // pixel radius for hit detection
+    const retainPx = 24 * touchScale; // larger radius for hysteresis
+    const camPos = this.camera3d.position;
+    const up = this.camera.skyUp;
+    const mousePos = this.input.mousePos; // screen pixels
+    const halfW = window.innerWidth * 0.5;
+    const halfH = window.innerHeight * 0.5;
+
+    // Hysteresis: keep current hover if still within retention zone
+    if (this.hoveredSat && !this.hoveredSat.decayed) {
+      this.tmpVec3.copy(this.hoveredSat.currentPos).divideScalar(DRAW_SCALE);
+      // Check above horizon
+      this.tmpVec3.sub(camPos);
+      const aboveHorizon = this.tmpVec3.dot(up) >= 0;
+      this.tmpVec3.add(camPos);
+      if (aboveHorizon) {
+        this.tmpVec3.project(this.camera3d);
+        if (this.tmpVec3.z < 1) {
+          const sx = (this.tmpVec3.x + 1) * halfW;
+          const sy = (-this.tmpVec3.y + 1) * halfH;
+          const dx = sx - mousePos.x;
+          const dy = sy - mousePos.y;
+          if (dx * dx + dy * dy < retainPx * retainPx) return;
+        }
+      }
+    }
+
+    this.hoveredSat = null;
+    let closestDist2 = hitPx * hitPx;
+    for (const sat of this.satellites) {
+      if (sat.decayed) continue;
+      if (this.hideUnselected && this.selectedSats.size > 0 && !this.selectedSats.has(sat)) continue;
+
+      this.tmpVec3.copy(sat.currentPos).divideScalar(DRAW_SCALE);
+      // Skip satellites below horizon
+      this.tmpVec3.sub(camPos);
+      if (this.tmpVec3.dot(up) < 0) continue;
+      this.tmpVec3.add(camPos);
+
+      // Project to screen
+      this.tmpVec3.project(this.camera3d);
+      if (this.tmpVec3.z > 1) continue; // behind camera or beyond far plane
+
+      const sx = (this.tmpVec3.x + 1) * halfW;
+      const sy = (-this.tmpVec3.y + 1) * halfH;
+      const dx = sx - mousePos.x;
+      const dy = sy - mousePos.y;
+      const dist2 = dx * dx + dy * dy;
+      if (dist2 < closestDist2) {
+        closestDist2 = dist2;
+        this.hoveredSat = sat;
+      }
+    }
   }
 
   private detectHover3D() {

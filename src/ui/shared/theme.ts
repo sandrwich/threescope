@@ -28,7 +28,23 @@ export function initTheme() {
     heatmapLow: r('--heatmap-low'), heatmapMid: r('--heatmap-mid'), heatmapHigh: r('--heatmap-high'),
     beamReticle: r('--beam-reticle'), beamReticleLocked: r('--beam-reticle-locked'),
     beamCone: r('--beam-cone'), beamHighlight: r('--beam-highlight'), beamArc: r('--beam-arc'),
+    skyGrid: r('--sky-grid'), skyGridLabel: r('--sky-grid-label'),
   };
 }
 
 export function refreshTheme() { initTheme(); }
+
+/** Parse a CSS color string (hex, rgb, rgba) into [r, g, b] 0-1 and alpha. */
+let _parseCtx: CanvasRenderingContext2D | null = null;
+export function parseRgba(css: string): { r: number; g: number; b: number; a: number } {
+  const ctx = _parseCtx ??= (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    return c.getContext('2d')!;
+  })();
+  ctx.clearRect(0, 0, 1, 1);
+  ctx.fillStyle = css;
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+  return { r: r / 255, g: g / 255, b: b / 255, a: a / 255 };
+}

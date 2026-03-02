@@ -16,10 +16,11 @@ export class CameraController {
   private _target3d = new THREE.Vector3();
   private _targetTarget3d = new THREE.Vector3();
 
-  // ---- Reusable temp vectors for pan3d (avoid per-call allocations) ----
+  // ---- Reusable temp vectors (avoid per-call allocations) ----
   private _panFwd = new THREE.Vector3();
   private _panRight = new THREE.Vector3();
   private _panUp = new THREE.Vector3();
+  private _tmpVec = new THREE.Vector3();
 
   // ---- Touch inertia velocity state ----
   private _orbitVelX = 0;
@@ -32,6 +33,30 @@ export class CameraController {
   // ---- View offset (center earth above mobile sheet) ----
   private _viewOffsetY = 0;
   private _targetViewOffsetY = 0;
+
+  // ---- Sky view (first-person ground camera) ----
+  private _skyView = false;
+  private _skyOrigin = new THREE.Vector3();
+  private _skyUp = new THREE.Vector3();
+  private _skyNorth = new THREE.Vector3();
+  private _skyEast = new THREE.Vector3();
+  private _skyFov = 90;
+  private _targetSkyFov = 90;
+  private _skyHeight = 0.001; // camera height above ground plane
+  private _skyAngleX = 0;           // saved sky azimuth
+  private _skyAngleY = Math.PI / 4; // saved sky elevation
+  private _skyHasState = false;     // true after first sky view entry
+
+  // ---- Saved orbital state (preserved while in sky view) ----
+  private _savedOrbAngleX = 0.785;
+  private _savedOrbAngleY = 0.5;
+  private _savedOrbTargetAngleX = 0.785;
+  private _savedOrbTargetAngleY = 0.5;
+  private _savedOrbDistance = 35.0;
+  private _savedOrbTargetDistance = 35.0;
+  private _savedOrbTarget3d = new THREE.Vector3();
+  private _savedOrbTargetTarget3d = new THREE.Vector3();
+  private _savedFov = 0;
 
   // ---- 2D orthographic camera state ----
   private _cam2dZoom = 1.0;
@@ -58,6 +83,11 @@ export class CameraController {
   get targetZoom2d(): number { return this._targetCam2dZoom; }
   get target2d(): THREE.Vector2 { return this._cam2dTarget; }
   get targetTarget2d(): THREE.Vector2 { return this._targetCam2dTarget; }
+  get isSkyView(): boolean { return this._skyView; }
+  get skyFov(): number { return this._skyFov; }
+  get skyUp(): THREE.Vector3 { return this._skyUp; }
+  get skyNorth(): THREE.Vector3 { return this._skyNorth; }
+  get skyEast(): THREE.Vector3 { return this._skyEast; }
 
   // ====================== Setters ======================
 
@@ -113,9 +143,13 @@ export class CameraController {
 
   /** Apply orbit delta (mouse/touch drag) to target angles, with clamping. */
   orbit(dx: number, dy: number): void {
-    this._targetCamAngleX -= dx * 0.005;
-    this._targetCamAngleY += dy * 0.005;
-    this._targetCamAngleY = Math.max(-1.5, Math.min(1.5, this._targetCamAngleY));
+    this._targetCamAngleX += (this._skyView ? dx : -dx) * 0.005;
+    this._targetCamAngleY += (this._skyView ? -dy : dy) * 0.005;
+    if (this._skyView) {
+      this._targetCamAngleY = Math.max(-0.05, Math.min(Math.PI / 2, this._targetCamAngleY));
+    } else {
+      this._targetCamAngleY = Math.max(-1.5, Math.min(1.5, this._targetCamAngleY));
+    }
   }
 
   /** Apply orbit delta with velocity tracking (for touch inertia). */
@@ -182,6 +216,80 @@ export class CameraController {
     this._targetCam2dZoom = Math.max(0.1, this._targetCam2dZoom);
   }
 
+  // ====================== Sky view ======================
+
+  enterSkyView(origin: THREE.Vector3, up: THREE.Vector3, north: THREE.Vector3, east: THREE.Vector3): void {
+    // Save orbital camera state
+    this._savedOrbAngleX = this._camAngleX;
+    this._savedOrbAngleY = this._camAngleY;
+    this._savedOrbTargetAngleX = this._targetCamAngleX;
+    this._savedOrbTargetAngleY = this._targetCamAngleY;
+    this._savedOrbDistance = this._camDistance;
+    this._savedOrbTargetDistance = this._targetCamDistance;
+    this._savedOrbTarget3d.copy(this._target3d);
+    this._savedOrbTargetTarget3d.copy(this._targetTarget3d);
+    this._savedFov = this.camera3d.fov;
+
+    this._skyView = true;
+    this._skyOrigin.copy(origin);
+    this._skyUp.copy(up);
+    this._skyNorth.copy(north);
+    this._skyEast.copy(east);
+
+    // Restore previous sky view state, or default to north at 45° up
+    this._camAngleX = this._skyAngleX;
+    this._targetCamAngleX = this._skyAngleX;
+    this._camAngleY = this._skyAngleY;
+    this._targetCamAngleY = this._skyAngleY;
+    if (!this._skyHasState) {
+      this._skyFov = 90;
+      this._targetSkyFov = 90;
+      this._skyHasState = true;
+    }
+    this.stopInertia();
+  }
+
+  exitSkyView(): void {
+    // Save sky view state for next entry
+    this._skyAngleX = this._camAngleX;
+    this._skyAngleY = this._camAngleY;
+
+    this._skyView = false;
+    this.camera3d.up.set(0, 1, 0);
+    this.camera3d.fov = this._savedFov;
+    this.camera3d.near = 0.01;
+    this.camera3d.updateProjectionMatrix();
+
+    // Restore orbital camera state
+    this._camAngleX = this._savedOrbAngleX;
+    this._camAngleY = this._savedOrbAngleY;
+    this._targetCamAngleX = this._savedOrbTargetAngleX;
+    this._targetCamAngleY = this._savedOrbTargetAngleY;
+    this._camDistance = this._savedOrbDistance;
+    this._targetCamDistance = this._savedOrbTargetDistance;
+    this._target3d.copy(this._savedOrbTarget3d);
+    this._targetTarget3d.copy(this._savedOrbTargetTarget3d);
+    this.stopInertia();
+  }
+
+  updateSkyOrigin(origin: THREE.Vector3, up: THREE.Vector3, north: THREE.Vector3, east: THREE.Vector3): void {
+    this._skyOrigin.copy(origin);
+    this._skyUp.copy(up);
+    this._skyNorth.copy(north);
+    this._skyEast.copy(east);
+  }
+
+  applySkyZoom(delta: number): void {
+    this._targetSkyFov -= delta * this._targetSkyFov * 0.1;
+    this._targetSkyFov = Math.max(5, Math.min(120, this._targetSkyFov));
+  }
+
+  pinchSkyZoom(scale: number): void {
+    if (Math.abs(scale - 1.0) < 0.01) return;
+    this._targetSkyFov /= scale;
+    this._targetSkyFov = Math.max(5, Math.min(120, this._targetSkyFov));
+  }
+
   /** Begin inertia decay (called on touchend — velocities already set from last touchmove). */
   startInertia(): void { /* decay runs in updateFrame() */ }
 
@@ -232,9 +340,13 @@ export class CameraController {
     const velThreshold = 0.01;
 
     if (Math.abs(this._orbitVelX) > velThreshold || Math.abs(this._orbitVelY) > velThreshold) {
-      this._targetCamAngleX -= this._orbitVelX * 0.005;
-      this._targetCamAngleY += this._orbitVelY * 0.005;
-      this._targetCamAngleY = Math.max(-1.5, Math.min(1.5, this._targetCamAngleY));
+      this._targetCamAngleX += (this._skyView ? this._orbitVelX : -this._orbitVelX) * 0.005;
+      this._targetCamAngleY += (this._skyView ? -this._orbitVelY : this._orbitVelY) * 0.005;
+      if (this._skyView) {
+        this._targetCamAngleY = Math.max(-0.05, Math.min(Math.PI / 2, this._targetCamAngleY));
+      } else {
+        this._targetCamAngleY = Math.max(-1.5, Math.min(1.5, this._targetCamAngleY));
+      }
       this._orbitVelX *= friction;
       this._orbitVelY *= friction;
     } else {
@@ -260,21 +372,50 @@ export class CameraController {
       this._pan2dVelY = 0;
     }
 
-    // Update 3D camera position (co-rotate with Earth so it appears stationary)
-    const camAX = this._camAngleX + (isOrreryOrPlanet ? 0 : earthRotRad);
-    this.camera3d.position.set(
-      this._target3d.x + this._camDistance * Math.cos(this._camAngleY) * Math.sin(camAX),
-      this._target3d.y + this._camDistance * Math.sin(this._camAngleY),
-      this._target3d.z + this._camDistance * Math.cos(this._camAngleY) * Math.cos(camAX),
-    );
-    this.camera3d.lookAt(this._target3d);
-
-    // Apply 3D view offset: shift projection to center earth above sheet
-    if (Math.abs(this._viewOffsetY) > 0.5) {
+    // ---- Sky-view: first-person ground camera ----
+    if (this._skyView) {
+      // Lerp sky FOV + tighter near plane for ground-level perspective
+      this._skyFov += (this._targetSkyFov - this._skyFov) * smooth;
+      this.camera3d.fov = this._skyFov;
+      this.camera3d.near = 0.0005;
       this.camera3d.updateProjectionMatrix();
-      const ndcOffset = this._viewOffsetY * 2 / window.innerHeight;
-      this.camera3d.projectionMatrix.elements[9] -= ndcOffset;
-      this.camera3d.projectionMatrixInverse.copy(this.camera3d.projectionMatrix).invert();
+
+      // Position camera above surface (above terrain displacement + margin)
+      this.camera3d.position.copy(this._skyOrigin).addScaledVector(this._skyUp, this._skyHeight);
+
+      // Look direction from azimuth (_camAngleX) and elevation (_camAngleY)
+      // Azimuth: 0 = north, positive = clockwise (east)
+      const cosEl = Math.cos(this._camAngleY);
+      const sinEl = Math.sin(this._camAngleY);
+      const cosAz = Math.cos(this._camAngleX);
+      const sinAz = Math.sin(this._camAngleX);
+
+      // dir = north * cosEl * cosAz + east * cosEl * sinAz + up * sinEl
+      this._tmpVec.set(0, 0, 0)
+        .addScaledVector(this._skyNorth, cosEl * cosAz)
+        .addScaledVector(this._skyEast, cosEl * sinAz)
+        .addScaledVector(this._skyUp, sinEl);
+
+      this._tmpVec.add(this.camera3d.position);
+      this.camera3d.up.copy(this._skyUp);
+      this.camera3d.lookAt(this._tmpVec);
+    } else {
+      // Update 3D camera position (co-rotate with Earth so it appears stationary)
+      const camAX = this._camAngleX + (isOrreryOrPlanet ? 0 : earthRotRad);
+      this.camera3d.position.set(
+        this._target3d.x + this._camDistance * Math.cos(this._camAngleY) * Math.sin(camAX),
+        this._target3d.y + this._camDistance * Math.sin(this._camAngleY),
+        this._target3d.z + this._camDistance * Math.cos(this._camAngleY) * Math.cos(camAX),
+      );
+      this.camera3d.lookAt(this._target3d);
+
+      // Apply 3D view offset: shift projection to center earth above sheet
+      if (Math.abs(this._viewOffsetY) > 0.5) {
+        this.camera3d.updateProjectionMatrix();
+        const ndcOffset = this._viewOffsetY * 2 / window.innerHeight;
+        this.camera3d.projectionMatrix.elements[9] -= ndcOffset;
+        this.camera3d.projectionMatrixInverse.copy(this.camera3d.projectionMatrix).invert();
+      }
     }
 
     // Clamp 2D target Y to map bounds

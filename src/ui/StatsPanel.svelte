@@ -1,7 +1,7 @@
 <script lang="ts">
   import { uiStore } from '../stores/ui.svelte';
   import { ViewMode } from '../types';
-  import { ICON_2D, ICON_3D, ICON_RTX } from './shared/icons';
+  import { ICON_2D, ICON_3D, ICON_SKY, ICON_RTX } from './shared/icons';
   import { getElevation, isElevationLoaded } from '../astro/elevation';
   import { settingsStore } from '../stores/settings.svelte';
   import { findMatchingPreset, getPresetSettings } from '../graphics';
@@ -36,8 +36,8 @@
     {/if}
   </span>
   {#if uiStore.isMobile}
-    <button class="mode-toggle" onclick={() => uiStore.onToggleViewMode?.()}>
-      {@html uiStore.viewMode === ViewMode.VIEW_3D ? ICON_2D : ICON_3D}
+    <button class="mode-toggle" disabled={uiStore.viewMode === ViewMode.VIEW_SKY} onclick={() => uiStore.onToggleViewMode?.()}>
+      {@html uiStore.viewMode === ViewMode.VIEW_SKY ? ICON_SKY : uiStore.viewMode === ViewMode.VIEW_3D ? ICON_2D : ICON_3D}
     </button>
   {/if}
   <div class="coords" class:visible={uiStore.cursorLatLon !== null}>

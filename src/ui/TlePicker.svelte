@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { sourcesStore } from '../stores/sources.svelte';
-  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_OBSERVER, ICON_HELP, ICON_2D, ICON_3D, ICON_PASSES, ICON_DATA_SOURCES, ICON_DATABASE, ICON_RADAR } from './shared/icons';
+  import { ICON_SEARCH, ICON_COMMAND, ICON_SELECTION, ICON_VIEW, ICON_TIME, ICON_SETTINGS, ICON_OBSERVER, ICON_HELP, ICON_2D, ICON_3D, ICON_SKY, ICON_PASSES, ICON_DATA_SOURCES, ICON_DATABASE, ICON_RADAR } from './shared/icons';
+  import { observerStore } from '../stores/observer.svelte';
   import { ViewMode } from '../types';
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -47,8 +48,11 @@
 
     <!-- View toggle -->
     <div class="btn-group">
-      <button class="icon-btn" title="Toggle 2D / 3D (M)" disabled={uiStore.orreryMode} onclick={() => uiStore.onToggleViewMode?.()}>
+      <button class="icon-btn" title="Toggle 2D / 3D (M)" disabled={uiStore.orreryMode || uiStore.viewMode === ViewMode.VIEW_SKY} onclick={() => uiStore.onToggleViewMode?.()}>
         {@html uiStore.viewMode === ViewMode.VIEW_3D ? ICON_2D : ICON_3D}
+      </button>
+      <button class="icon-btn" title="Sky View (S)" class:active={uiStore.viewMode === ViewMode.VIEW_SKY} disabled={!observerStore.isSet || uiStore.orreryMode} onclick={() => uiStore.onToggleSkyView?.()}>
+        {@html ICON_SKY}
       </button>
     </div>
 

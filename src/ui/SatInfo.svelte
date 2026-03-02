@@ -7,7 +7,7 @@
   onMount(() => { uiStore.satInfoEl = el; });
 </script>
 
-<div class="sat-tooltip" bind:this={el} class:visible={uiStore.satInfoVisible}>
+<div class="sat-tooltip" bind:this={el} class:visible={uiStore.satInfoVisible} style:pointer-events="none">
   <div class="sat-name" style="color:{uiStore.satInfoNameColor}">{@html uiStore.satInfoName}</div>
   <div class="sat-detail">{@html uiStore.satInfoDetail}</div>
   {#if uiStore.satInfoHint}

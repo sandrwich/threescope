@@ -16,6 +16,7 @@
     class:visible={label.visible}
     style:color={label.color}
     style:font-size="{label.fontSize}px"
+    style:pointer-events="none"
   >
     {label.text}
   </div>

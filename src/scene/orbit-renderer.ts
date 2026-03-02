@@ -713,7 +713,9 @@ export class OrbitRenderer {
             this.passTcaMarker.visible = false;
           }
         }
-        if (this.lastPassArcKey === arcKey && this.passArcLine.geometry.attributes.position) {
+        // Verify the pass's satellite is still highlighted before showing the cached arc
+        const arcSatStillHighlighted = highlightSats.some(s => s.noradId === pass.satNoradId);
+        if (arcSatStillHighlighted && this.lastPassArcKey === arcKey && this.passArcLine.geometry.attributes.position) {
           this.passArcMat.resolution.set(window.innerWidth, window.innerHeight);
           this.passArcMat.opacity = cHL.a;
           this.passArcLine.visible = true;
@@ -737,6 +739,11 @@ export class OrbitRenderer {
             this.passLosMarker.visible = true;
             this.passTcaMarker.visible = true;
           }
+        } else {
+          this.passArcLine.visible = false;
+          this.passAosMarker.visible = false;
+          this.passLosMarker.visible = false;
+          this.passTcaMarker.visible = false;
         }
       } else {
         this.passArcLine.visible = false;
@@ -1013,6 +1020,12 @@ export class OrbitRenderer {
       if (Math.sqrt(cx * cx + cy * cy + cz * cz) < earthR * 0.99) return true;
     }
     return false;
+  }
+
+  /** Hide nadir and observer lines (used in sky view — camera IS the observer). */
+  hideGroundLines() {
+    this.nadirLine.visible = false;
+    this.observerLine.visible = false;
   }
 
   clear() {

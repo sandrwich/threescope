@@ -12,6 +12,7 @@ import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } f
 import { epochToGmst } from '../astro/epoch';
 import { getAzEl } from '../astro/az-el';
 import { observerStore } from '../stores/observer.svelte';
+import { beamStore } from '../stores/beam.svelte';
 
 /** Check if a draw-space point is occluded by the Earth sphere. */
 function isOccludedByEarth(pt: { x: number; y: number; z: number }, camPos: THREE.Vector3, earthR: number): boolean {
@@ -150,7 +151,7 @@ export class UIUpdater {
 
       if (infoEl) {
         let screenPos: THREE.Vector2;
-        if (viewMode === ViewMode.VIEW_3D) {
+        if (viewMode === ViewMode.VIEW_3D || viewMode === ViewMode.VIEW_SKY) {
           const drawPos = hSat.currentPos.clone().divideScalar(DRAW_SCALE);
           const projected = drawPos.project(camera3d);
           screenPos = new THREE.Vector2(
@@ -184,13 +185,16 @@ export class UIUpdater {
       uiStore.satInfoVisible = false;
     }
 
+    // Sky view uses the 3D camera — share the 3D projection path
+    const use3dCamera = viewMode === ViewMode.VIEW_3D || viewMode === ViewMode.VIEW_SKY;
+
     // Apsis labels — tied to cardSat (hovered ?? firstSelected)
     if (cardSat) {
       const apsis = computeApsis(cardSat, currentEpoch);
       const periR = apsis.periPos.length();
       const apoR = apsis.apoPos.length();
 
-      if (viewMode === ViewMode.VIEW_3D) {
+      if (use3dCamera) {
         const pDraw = apsis.periPos.clone().divideScalar(DRAW_SCALE);
         const aDraw = apsis.apoPos.clone().divideScalar(DRAW_SCALE);
         const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
@@ -199,10 +203,11 @@ export class UIUpdater {
         const periOccluded = isOccludedByEarth(pDraw, camPos, earthR);
         const apoOccluded = isOccludedByEarth(aDraw, camPos, earthR);
 
+        const isSky = viewMode === ViewMode.VIEW_SKY;
         periSprite3d.position.copy(pDraw);
-        periSprite3d.visible = !periOccluded;
+        periSprite3d.visible = !periOccluded && !isSky;
         apoSprite3d.position.copy(aDraw);
-        apoSprite3d.visible = !apoOccluded;
+        apoSprite3d.visible = !apoOccluded && !isSky;
 
         const pp = pDraw.project(camera3d);
         const ap = aDraw.project(camera3d);
@@ -267,7 +272,7 @@ export class UIUpdater {
     }
 
     // Pass markers (AOS / LOS / TCA)
-    if (viewMode === ViewMode.VIEW_3D && L.aos.drawPos && L.los.drawPos && L.tca.drawPos) {
+    if (use3dCamera && L.aos.drawPos && L.los.drawPos && L.tca.drawPos) {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
@@ -294,8 +299,9 @@ export class UIUpdater {
       L.tca.hide();
     }
 
-    // Range label — km readout at midpoint of observer→sat line
-    if (cardSat && observerStore.isSet && viewMode === ViewMode.VIEW_3D) {
+    // Range label — km readout along observer→sat line (3D) or below sat (sky)
+    // In sky view, skip when beam is locked — the reticle already shows range
+    if (cardSat && observerStore.isSet && use3dCamera && !(viewMode === ViewMode.VIEW_SKY && beamStore.locked)) {
       const obsLoc = observerStore.location;
       const obsDrawPos = latLonToSurface(obsLoc.lat, obsLoc.lon, gmstDeg, cfg.earthRotationOffset);
       const satDraw = cardSat.currentPos.clone().divideScalar(DRAW_SCALE);
@@ -309,40 +315,47 @@ export class UIUpdater {
         const obsPos = observerEci(obsLoc.lat, obsLoc.lon, obsLoc.alt, gmstRad);
         const rangeKm = slantRange(satEci, obsPos);
 
-        // Project both endpoints to screen to get line angle
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        const obsScreen = obsDrawPos.clone().project(camera3d);
-        const osx = (obsScreen.x * 0.5 + 0.5) * vw;
-        const osy = (-obsScreen.y * 0.5 + 0.5) * vh;
         const satScreen = satDraw.clone().project(camera3d);
         const ssx = (satScreen.x * 0.5 + 0.5) * vw;
         const ssy = (-satScreen.y * 0.5 + 0.5) * vh;
 
-        // Place label at 60% along the screen-space line (biased toward sat)
-        const sx = osx + (ssx - osx) * 0.6;
-        const sy = osy + (ssy - osy) * 0.6;
-
-        // Screen-space angle of the line — flip if text would be upside down
-        let angleDeg = Math.atan2(ssy - osy, ssx - osx) * RAD2DEG;
-        if (angleDeg > 90) angleDeg -= 180;
-        else if (angleDeg < -90) angleDeg += 180;
-
-        // Offset perpendicular to line so text sits above it
-        const perpX = -Math.sin(angleDeg * DEG2RAD) * 8;
-        const perpY = Math.cos(angleDeg * DEG2RAD) * 8;
-
-        const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
-        const mid = new THREE.Vector3(
-          obsDrawPos.x + (satDraw.x - obsDrawPos.x) * 0.6,
-          obsDrawPos.y + (satDraw.y - obsDrawPos.y) * 0.6,
-          obsDrawPos.z + (satDraw.z - obsDrawPos.z) * 0.6,
-        );
-        if (!isOccludedByEarth(mid, camera3d.position, earthR) &&
-            satScreen.z < 1 && sx > -50 && sx < vw + 50 && sy > -20 && sy < vh + 20) {
-          L.range.show(formatKm(rangeKm), sx + perpX, sy + perpY, angleDeg);
+        if (viewMode === ViewMode.VIEW_SKY) {
+          // Sky view: place range label below the satellite dot
+          if (satScreen.z < 1 && ssx > -50 && ssx < vw + 50 && ssy > -20 && ssy < vh + 20) {
+            L.range.show(formatKm(rangeKm), ssx, ssy + 18);
+          } else {
+            L.range.hide();
+          }
         } else {
-          L.range.hide();
+          // 3D orbital view: place at 60% along observer→sat line, angled
+          const obsScreen = obsDrawPos.clone().project(camera3d);
+          const osx = (obsScreen.x * 0.5 + 0.5) * vw;
+          const osy = (-obsScreen.y * 0.5 + 0.5) * vh;
+
+          const sx = osx + (ssx - osx) * 0.6;
+          const sy = osy + (ssy - osy) * 0.6;
+
+          let angleDeg = Math.atan2(ssy - osy, ssx - osx) * RAD2DEG;
+          if (angleDeg > 90) angleDeg -= 180;
+          else if (angleDeg < -90) angleDeg += 180;
+
+          const perpX = -Math.sin(angleDeg * DEG2RAD) * 8;
+          const perpY = Math.cos(angleDeg * DEG2RAD) * 8;
+
+          const earthR = EARTH_RADIUS_KM / DRAW_SCALE;
+          const mid = new THREE.Vector3(
+            obsDrawPos.x + (satDraw.x - obsDrawPos.x) * 0.6,
+            obsDrawPos.y + (satDraw.y - obsDrawPos.y) * 0.6,
+            obsDrawPos.z + (satDraw.z - obsDrawPos.z) * 0.6,
+          );
+          if (!isOccludedByEarth(mid, camera3d.position, earthR) &&
+              satScreen.z < 1 && sx > -50 && sx < vw + 50 && sy > -20 && sy < vh + 20) {
+            L.range.show(formatKm(rangeKm), sx + perpX, sy + perpY, angleDeg);
+          } else {
+            L.range.hide();
+          }
         }
       } else {
         L.range.hide();

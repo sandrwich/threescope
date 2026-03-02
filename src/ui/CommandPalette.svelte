@@ -63,6 +63,7 @@
     actions.push({ id: 'view-grid', category: 'View', label: 'Toggle Grid', keywords: 'latitude longitude lines', execute: () => { uiStore.setToggle('showGrid', !uiStore.showGrid); close(); } });
     if (!uiStore.orreryMode) {
       actions.push({ id: 'view-2d3d', category: 'View', label: 'Toggle 2D / 3D', shortcut: 'M', keywords: 'map globe', execute: () => { uiStore.onToggleViewMode?.(); close(); } });
+      actions.push({ id: 'view-sky', category: 'View', label: 'Toggle Sky View', shortcut: 'S', keywords: 'observer ground horizon azimuth elevation pov', execute: () => { uiStore.onToggleSkyView?.(); close(); } });
     }
 
     // Marker groups

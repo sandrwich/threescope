@@ -71,4 +71,4 @@ export interface SelectedSatInfo {
 }
 
 export enum TargetLock { NONE, EARTH, MOON, SUN, PLANET, SAT }
-export enum ViewMode { VIEW_3D, VIEW_2D }
+export enum ViewMode { VIEW_3D, VIEW_2D, VIEW_SKY }

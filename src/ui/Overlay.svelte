@@ -23,6 +23,7 @@
   import ThemeEditorWindow from './ThemeEditorWindow.svelte';
   import SatDatabaseWindow from './SatDatabaseWindow.svelte';
   import RadarWindow from './RadarWindow.svelte';
+  import SkyReticle from './SkyReticle.svelte';
 
   onMount(() => {
     uiStore.updateMobileState();
@@ -58,6 +59,7 @@
   <ThemeEditorWindow />
   <SatDatabaseWindow />
   <RadarWindow />
+  <SkyReticle />
 </div>
 
 <style>

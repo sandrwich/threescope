@@ -3,8 +3,9 @@
   import MobileSheet from './shared/MobileSheet.svelte';
   import {
     ICON_DATA_SOURCES, ICON_SELECTION, ICON_PASSES, ICON_TIME, ICON_MORE,
-    ICON_OBSERVER, ICON_VIEW, ICON_SETTINGS, ICON_DATABASE, ICON_HELP, ICON_RADAR,
+    ICON_OBSERVER, ICON_VIEW, ICON_SETTINGS, ICON_DATABASE, ICON_HELP, ICON_RADAR, ICON_SKY,
   } from './shared/icons';
+  import { observerStore } from '../stores/observer.svelte';
 
   const tabs: { id: string; label: string; icon: string }[] = [
     { id: 'sources', label: 'Sources', icon: ICON_DATA_SOURCES },
@@ -64,6 +65,12 @@
         <span class="more-label">{item.label}</span>
       </button>
     {/each}
+    {#if observerStore.isSet}
+      <button class="more-item" onclick={() => { uiStore.closeMobileSheet(); uiStore.onToggleSkyView?.(); }}>
+        <span class="more-icon">{@html ICON_SKY}</span>
+        <span class="more-label">Sky View</span>
+      </button>
+    {/if}
     <button class="more-item" onclick={() => { uiStore.closeMobileSheet(); uiStore.onPlanetButtonClick?.(); }}>
       <span class="more-icon">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><ellipse cx="8" cy="8" rx="5.5" ry="2" transform="rotate(-20 8 8)"/></svg>

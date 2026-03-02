@@ -14,8 +14,12 @@ export interface InputCallbacks {
   onSelect(): void;
   onDoubleClick3D(): void;
   onDoubleClick2D(): void;
+  onDoubleClickSky(): void;
   onOrreryClick(): void;
   onToggleViewMode(): void;
+  onToggleSkyView(): void;
+  onSkyClick(ndcX: number, ndcY: number): void;
+  onSkyDrag(ndcX: number, ndcY: number): void;
   onResize(w: number, h: number): void;
   tryStartObserverDrag(): boolean;
   onObserverDrag(): void;
@@ -125,17 +129,22 @@ export class InputHandler {
       this._hoverDirty = true;
       this._pointerOverUI = e.target !== this._canvas;
 
-      // Observer marker drag / orbit scrub / left-drag orbit
+      // Observer marker drag / orbit scrub / left-drag orbit (skip in sky view)
       if (this._leftDown && !this._pointerOverUI && !this._isDraggingObserver && !this._isDraggingOrbit && !this._isLeftDragging) {
         const dist = this._leftDownPos.distanceTo(this._mousePos);
         if (dist > 8) {
-          // Moved enough to start drag — check observer first, then orbit scrub, then orbit
-          this._isDraggingObserver = this.cb.tryStartObserverDrag();
-          if (!this._isDraggingObserver) {
-            this._isDraggingOrbit = this.cb.tryStartOrbitScrub();
-          }
-          if (!this._isDraggingObserver && !this._isDraggingOrbit) {
+          if (this.cb.getViewMode() === ViewMode.VIEW_SKY) {
+            // Sky view: always orbit
             this._isLeftDragging = true;
+          } else {
+            // Moved enough to start drag — check observer first, then orbit scrub, then orbit
+            this._isDraggingObserver = this.cb.tryStartObserverDrag();
+            if (!this._isDraggingObserver) {
+              this._isDraggingOrbit = this.cb.tryStartOrbitScrub();
+            }
+            if (!this._isDraggingObserver && !this._isDraggingOrbit) {
+              this._isLeftDragging = true;
+            }
           }
           this._leftDown = false; // don't re-check
         }
@@ -150,7 +159,16 @@ export class InputHandler {
       }
 
       if (this._isRightDragging || this._isMiddleDragging || this._isLeftDragging) {
-        if (this.cb.getViewMode() === ViewMode.VIEW_2D) {
+        const vm = this.cb.getViewMode();
+        if (vm === ViewMode.VIEW_SKY) {
+          if (this._isLeftDragging) {
+            // Sky view: left-drag aims beam to current pointer position
+            this.cb.onSkyDrag(this._mouseNDC.x, this._mouseNDC.y);
+          } else {
+            // Sky view: right/middle-drag orbits (look around)
+            this.camera.orbit(dx, dy);
+          }
+        } else if (vm === ViewMode.VIEW_2D) {
           // Pan 2D
           this.camera.pan2d(dx, dy);
           this.cb.clearTargetLock();
@@ -193,11 +211,21 @@ export class InputHandler {
     // Prevent context menu
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
+    // Native double-click for sky view beam lock (more reliable than manual timing)
+    canvas.addEventListener('dblclick', (e) => {
+      if (this.cb.getViewMode() === ViewMode.VIEW_SKY) {
+        this.cb.onDoubleClickSky();
+      }
+    });
+
     // Scroll zoom
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const delta = -Math.sign(e.deltaY);
-      if (this.cb.getViewMode() === ViewMode.VIEW_2D) {
+      const vm = this.cb.getViewMode();
+      if (vm === ViewMode.VIEW_SKY) {
+        this.camera.applySkyZoom(delta);
+      } else if (vm === ViewMode.VIEW_2D) {
         this.camera.applyZoom2d(delta);
         this.cb.clearTargetLock();
       } else {
@@ -209,8 +237,20 @@ export class InputHandler {
     canvas.addEventListener('click', (e) => {
       // Suppress click if we just finished dragging the observer or orbit scrub
       if (this._isDraggingObserver || this._isDraggingOrbit) return;
+
+      const wasDrag = this._leftDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY)) > 8;
+
+      // Sky view: single click selects sat + aims beam (double-click handled by dblclick event)
+      if (this.cb.getViewMode() === ViewMode.VIEW_SKY) {
+        if (!wasDrag) {
+          this.cb.onSelect();
+          this.cb.onSkyClick(this._mouseNDC.x, this._mouseNDC.y);
+        }
+        return;
+      }
+
       // Check if left button was released after a drag (distance > threshold)
-      if (this._leftDownPos.distanceTo(new THREE.Vector2(e.clientX, e.clientY)) > 8) return;
+      if (wasDrag) return;
 
       // Orrery mode: pick planet
       if (this.cb.getOrreryMode()) {
@@ -282,6 +322,10 @@ export class InputHandler {
         case 'r':
         case 'R':
           uiStore.radarOpen = !uiStore.radarOpen;
+          break;
+        case 's':
+        case 'S':
+          this.cb.onToggleSkyView();
           break;
       }
     });
@@ -413,8 +457,9 @@ export class InputHandler {
       );
       this._hoverDirty = true;
 
-      // Observer drag / orbit scrub detection
-      if (!this._touchDragChecked && !this._isDraggingObserver && !this._isDraggingOrbit) {
+      // Observer drag / orbit scrub detection (skip in sky view — always orbit)
+      if (!this._touchDragChecked && !this._isDraggingObserver && !this._isDraggingOrbit
+        && this.cb.getViewMode() !== ViewMode.VIEW_SKY) {
         const dist = this._touchStartPos.distanceTo(this._lastTouchPos);
         if (dist > 8) {
           this._isDraggingObserver = this.cb.tryStartObserverDrag();
@@ -428,7 +473,10 @@ export class InputHandler {
       if (this._isDraggingObserver) { this.cb.onObserverDrag(); return; }
       if (this._isDraggingOrbit) { this.cb.onOrbitScrub(); return; }
 
-      if (this.cb.getViewMode() === ViewMode.VIEW_2D) {
+      const vm = this.cb.getViewMode();
+      if (vm === ViewMode.VIEW_SKY) {
+        this.camera.orbitWithVelocity(dx, dy);
+      } else if (vm === ViewMode.VIEW_2D) {
         this.camera.pan2dWithVelocity(dx, dy);
         this.cb.clearTargetLock();
       } else {
@@ -457,7 +505,10 @@ export class InputHandler {
       // Pinch zoom (suppressed if gesture locked to pan)
       if (this._touchGesture !== 'pan' && this._lastPinchDist > 0) {
         const scale = pinchDist / this._lastPinchDist;
-        if (this.cb.getViewMode() === ViewMode.VIEW_2D) {
+        const vm = this.cb.getViewMode();
+        if (vm === ViewMode.VIEW_SKY) {
+          this.camera.pinchSkyZoom(scale);
+        } else if (vm === ViewMode.VIEW_2D) {
           this.camera.pinchZoom2d(scale);
         } else {
           this.camera.pinchZoom3d(scale, this.cb.getMinZoom());
@@ -468,12 +519,16 @@ export class InputHandler {
       if (this._touchGesture !== 'pinch') {
         const panDx = centerX - this._lastTwoTouchCenter.x;
         const panDy = centerY - this._lastTwoTouchCenter.y;
-        if (this.cb.getViewMode() === ViewMode.VIEW_3D) {
+        const vm = this.cb.getViewMode();
+        if (vm === ViewMode.VIEW_SKY) {
+          // Sky view: no pan, ignore two-finger pan
+        } else if (vm === ViewMode.VIEW_3D) {
           this.camera.pan3dWithVelocity(panDx, panDy);
+          this.cb.clearTargetLock();
         } else {
           this.camera.pan2dWithVelocity(panDx, panDy);
+          this.cb.clearTargetLock();
         }
-        this.cb.clearTargetLock();
       }
 
       this._lastPinchDist = pinchDist;
@@ -495,7 +550,16 @@ export class InputHandler {
         const isTap = this._touchCount === 1 && touchDist < 12 && touchDuration < 400;
 
         if (isTap) {
-          if (this.cb.getOrreryMode()) {
+          if (this.cb.getViewMode() === ViewMode.VIEW_SKY) {
+            this.cb.onSelect();
+            const now = performance.now() / 1000;
+            if (now - this._lastLeftClickTime < 0.3) {
+              this.cb.onDoubleClickSky();
+            } else {
+              this.cb.onSkyClick(this._mouseNDC.x, this._mouseNDC.y);
+            }
+            this._lastLeftClickTime = now;
+          } else if (this.cb.getOrreryMode()) {
             this.cb.onOrreryClick();
           } else {
             this.cb.onSelect();

@@ -59,10 +59,14 @@ class UIStore {
   showSkybox = $state(true);
   showCountries = $state(false);
   showGrid = $state(false);
+  showSkyGrid = $state(true);
   radarVfx = $state(false);
 
   // Marker group visibility (keyed by group id)
   markerVisibility = $state<Record<string, boolean>>({});
+
+  // Sky reticle (projected beam position for HUD overlay)
+  skyReticle = $state<{ x: number; y: number; radius: number; visible: boolean }>({ x: 0, y: 0, radius: 0, visible: false });
 
   // Camera lock
   lockTarget = $state<string>('Earth');
@@ -194,6 +198,8 @@ class UIStore {
 
   // Earth-specific toggles visibility (hidden in orrery/planet mode)
   earthTogglesVisible = $state(true);
+  // Satellite + observer toggles (visible in both 3D and sky view)
+  satTogglesVisible = $state(true);
   nightToggleVisible = $state(true);
 
   // Mobile
@@ -242,6 +248,7 @@ class UIStore {
   onDeselectAll: (() => void) | null = null;
   onDeselectSatellite: ((noradId: number) => void) | null = null;
   onToggleViewMode: (() => void) | null = null;
+  onToggleSkyView: (() => void) | null = null;
   getSatelliteList: (() => { noradId: number; name: string }[]) | null = null;
   getSatelliteByIndex: ((index: number) => { name: string; noradId: number } | null) | null = null;
   getSelectedSatelliteList: (() => { noradId: number; name: string }[]) | null = null;
@@ -267,6 +274,7 @@ class UIStore {
     this.showSkybox = load('threescope_skybox', true);
     this.showCountries = load('threescope_countries', false);
     this.showGrid = load('threescope_grid', false);
+    this.showSkyGrid = load('threescope_skygrid', true);
     this.radarVfx = load('threescope_radar_vfx', false);
     this.singleSelectMode = load('threescope_single_select', this.isMobile);
     const savedTab = localStorage.getItem('threescope_passes_tab');
@@ -409,6 +417,7 @@ class UIStore {
       case 'showSkybox': this.showSkybox = value; localStorage.setItem('threescope_skybox', String(value)); break;
       case 'showCountries': this.showCountries = value; localStorage.setItem('threescope_countries', String(value)); break;
       case 'showGrid': this.showGrid = value; localStorage.setItem('threescope_grid', String(value)); break;
+      case 'showSkyGrid': this.showSkyGrid = value; localStorage.setItem('threescope_skygrid', String(value)); break;
       case 'radarVfx': this.radarVfx = value; localStorage.setItem('threescope_radar_vfx', String(value)); break;
       case 'radarOpen': this.radarOpen = value; break; // persisted by DraggableWindow
     }

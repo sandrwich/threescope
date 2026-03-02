@@ -19,6 +19,8 @@ export const ICON_3D = '<svg viewBox="0 0 16 16" fill="currentColor" stroke="non
 
 export const ICON_2D = '<svg viewBox="0 0 16 16" fill="currentColor" stroke="none"><text x="8" y="12" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">2D</text></svg>';
 
+export const ICON_SKY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M2.5 8h11M8 2.5v11"/><path d="M4 4.5q4 3 8 0" stroke-width="1"/><path d="M4 11.5q4-3 8 0" stroke-width="1"/></svg>';
+
 export const ICON_RTX = '<svg viewBox="0 0 24 16" fill="currentColor" stroke="none"><text x="12" y="12" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">RTX</text></svg>';
 
 export const ICON_PASSES = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 14V8"/><path d="M4 12l4-4 4 4"/><path d="M3 4.5a7 7 0 0 1 10 0"/><path d="M5.5 6.5a4 4 0 0 1 5 0"/></svg>';

@@ -87,6 +87,10 @@
   --beam-highlight: #ffcc33;
   --beam-arc: rgba(100, 180, 255, 0.4);
 
+  /* ── Domain: sky grid ── */
+  --sky-grid: rgba(10, 58, 10, 0.9);
+  --sky-grid-label: #33cc33;
+
   /* ── Accent ── */
   --accent: #66aaff;
 
