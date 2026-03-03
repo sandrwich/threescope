@@ -4,8 +4,8 @@
  * Uses satellite.js analytical velocity output for range-rate
  * and direct Rz(-GMST) rotation for ECI→ECEF.
  */
-import { twoline2satrec, propagate } from 'satellite.js';
-import type { SatRec, EciVec3, Kilometer, KilometerPerSecond } from 'satellite.js';
+import { twoline2satrec, json2satrec, propagate } from 'satellite.js';
+import type { SatRec } from 'satellite.js';
 import { epochToUnix, epochToGmst } from './epoch';
 import { EARTH_RADIUS_KM, DEG2RAD } from '../constants';
 
@@ -65,13 +65,10 @@ export function calculateDopplerShift(
   const date = new Date(unix * 1000);
   const result = propagate(satrec, date);
 
-  if (!result.position || typeof result.position === 'boolean' ||
-      !result.velocity || typeof result.velocity === 'boolean') {
-    return null;
-  }
+  if (!result) return null;
 
-  const pos = result.position as EciVec3<Kilometer>;
-  const vel = result.velocity as EciVec3<KilometerPerSecond>;
+  const pos = result.position;
+  const vel = result.velocity;
 
   const gmstRad = epochToGmst(epoch) * DEG2RAD;
 
@@ -105,7 +102,9 @@ export function calculateDopplerShift(
   return { frequency, rangeKm, rangeRateKmS };
 }
 
-/** Create a satrec from TLE lines (re-export to avoid satellite.js import in UI). */
-export function createSatrec(line1: string, line2: string): SatRec {
+/** Create a satrec from TLE lines or OMM record. */
+export function createSatrec(line1?: string, line2?: string, omm?: Record<string, unknown>): SatRec {
+  if (omm) return json2satrec(omm as any);
+  if (!line1 || !line2) throw new Error('No orbital data (need OMM or TLE)');
   return twoline2satrec(line1, line2);
 }

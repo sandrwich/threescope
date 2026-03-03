@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { Satellite } from '../types';
 import { normalizeEpoch, epochToUnix } from './epoch';
 import { J2, EARTH_RADIUS_EQ_KM, MU } from '../constants';
-import stdmagData from '../data/stdmag.json';
+import { getStdmag } from '../data/catalog';
 
 /**
  * Compute J2 secular perturbation rates for RAAN and argument of perigee.
@@ -25,20 +25,15 @@ function computeJ2Rates(
   };
 }
 
-// Pre-index stdmag data for fast numeric lookup (avoid per-sat String conversion)
-const stdmagMap = new Map<number, number>();
-for (const [k, v] of Object.entries(stdmagData as Record<string, number>)) {
-  stdmagMap.set(Number(k), v);
-}
-
 const TWO_PI = 2.0 * Math.PI;
 const NDOT_CONV = TWO_PI / (86400.0 * 86400.0); // rev/day² → rad/s²
 
-export function parseTLE(name: string, line1: string, line2: string): Satellite | null {
+/** Build a Satellite from an initialized satrec. */
+function satrecToSatellite(
+  satrec: satellite.SatRec, name: string,
+  extra?: { tleLine1?: string; tleLine2?: string; omm?: Record<string, unknown> },
+): Satellite | null {
   try {
-    const satrec = satellite.twoline2satrec(line1, line2);
-
-    // Read orbital elements directly from satrec (already parsed by twoline2satrec)
     const sr = satrec as any;
     const noradId = Number(sr.satnum);
     const epochDays = sr.epochyr * 1000 + sr.epochdays;
@@ -53,7 +48,6 @@ export function parseTLE(name: string, line1: string, line2: string): Satellite 
     // ndot: satrec stores raw TLE value (rev/day²/2), convert to rad/s²
     const ndot = 2.0 * sr.ndot * NDOT_CONV;
 
-    // Compute J2 secular rates
     const { raanRate, argPerigeeRate } = computeJ2Rates(
       meanMotion, semiMajorAxis, eccentricity, inclination
     );
@@ -71,15 +65,36 @@ export function parseTLE(name: string, line1: string, line2: string): Satellite 
       semiMajorAxis,
       currentPos: new THREE.Vector3(),
       satrec,
-      tleLine1: line1,
-      tleLine2: line2,
+      tleLine1: extra?.tleLine1,
+      tleLine2: extra?.tleLine2,
+      omm: extra?.omm,
       raanRate,
       argPerigeeRate,
       ndot,
-      stdMag: stdmagMap.get(noradId) ?? null,
+      stdMag: getStdmag(noradId),
       visualMag: null,
       decayed: false,
     };
+  } catch {
+    return null;
+  }
+}
+
+export function parseTLE(name: string, line1: string, line2: string): Satellite | null {
+  try {
+    const satrec = satellite.twoline2satrec(line1, line2);
+    return satrecToSatellite(satrec, name, { tleLine1: line1, tleLine2: line2 });
+  } catch {
+    return null;
+  }
+}
+
+/** Parse an OMM JSON record directly via satellite.js json2satrec. */
+export function parseOMM(omm: Record<string, unknown>): Satellite | null {
+  try {
+    const satrec = satellite.json2satrec(omm as any);
+    const name = (omm.OBJECT_NAME as string) || String(omm.NORAD_CAT_ID);
+    return satrecToSatellite(satrec, name, { omm });
   } catch {
     return null;
   }
@@ -111,11 +126,11 @@ export function calculatePosition(sat: Satellite, currentEpoch: number, target?:
 
   const result = satellite.propagate(sat.satrec, date);
 
-  if (!result.position || typeof result.position === 'boolean') {
+  if (!result) {
     return out.set(0, 0, 0);
   }
 
-  const eci = result.position as satellite.EciVec3<number>;
+  const eci = result.position;
 
   // ECI to render coords: x=eci.x, y=eci.z, z=-eci.y
   return out.set(eci.x, eci.z, -eci.y);

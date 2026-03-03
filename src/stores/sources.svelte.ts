@@ -191,8 +191,8 @@ class SourcesStore {
     } catch { return ''; }
   }
 
-  /** Get raw TLE text for any source type from its cache/storage */
-  getRawTleText(src: TLESourceConfig): string | null {
+  /** Get raw data text (OMM JSON or TLE) for any source type from its cache/storage */
+  getRawText(src: TLESourceConfig): string | null {
     try {
       if (src.type === 'text') {
         return localStorage.getItem(TEXT_KEY_PREFIX + src.id) || null;

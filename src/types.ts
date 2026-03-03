@@ -14,8 +14,9 @@ export interface Satellite {
   semiMajorAxis: number;  // km
   currentPos: THREE.Vector3;  // ECI km (render coords: x=eci.x, y=eci.z, z=-eci.y)
   satrec: SatRec;
-  tleLine1: string;
-  tleLine2: string;
+  tleLine1?: string;
+  tleLine2?: string;
+  omm?: Record<string, unknown>; // OMM JSON record (for passing to workers)
   // J2 secular perturbation rates (computed once at parse time)
   raanRate: number;       // dΩ/dt in rad/s
   argPerigeeRate: number; // dω/dt in rad/s

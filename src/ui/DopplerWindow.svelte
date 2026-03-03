@@ -78,7 +78,7 @@
     const tle = uiStore.getSatTLE?.(pass.satNoradId);
     if (!tle) { cachedData = []; cacheKey = ''; return; }
 
-    const satrec = createSatrec(tle.line1, tle.line2);
+    const satrec = createSatrec(tle.line1, tle.line2, tle.omm);
     const obs = observerStore.location;
     const durSec = (pass.losEpoch - pass.aosEpoch) * 86400;
     const graphW = CANVAS_W - G_LEFT - G_RIGHT;
@@ -460,7 +460,7 @@
     const tle = uiStore.getSatTLE?.(pass.satNoradId);
     if (!tle) return;
 
-    const satrec = createSatrec(tle.line1, tle.line2);
+    const satrec = createSatrec(tle.line1, tle.line2, tle.omm);
     const obs = observerStore.location;
     const durSec = (pass.losEpoch - pass.aosEpoch) * 86400;
     const aosUnixMs = epochToDate(pass.aosEpoch).getTime();

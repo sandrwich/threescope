@@ -19,8 +19,8 @@ const DEG2RAD = Math.PI / 180;
 function propagateToEpoch(satrec: SatRec, epoch: number): { x: number; y: number; z: number } | null {
   const date = new Date(epochToUnix(epoch) * 1000);
   const result = propagate(satrec, date);
-  if (!result.position || typeof result.position === 'boolean') return null;
-  return result.position as { x: number; y: number; z: number };
+  if (!result) return null;
+  return result.position;
 }
 
 const SKY_PATH_STEP = 10;       // seconds between sky path samples

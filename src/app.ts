@@ -25,8 +25,9 @@ import { InputHandler } from './interaction/input-handler';
 import { OrreryController } from './scene/orrery-controller';
 import { getMapCoordinates, latLonToSurface, observerFrame, observerFrameInto } from './astro/coordinates';
 import { calculateSunPosition } from './astro/sun';
-import { fetchTLEData, parseTLETextParallel, warmupTLEWorkers } from './data/tle-loader';
+import { fetchTLEData, parseSatelliteDataParallel, warmupTLEWorkers } from './data/tle-loader';
 import { getSatellitesByFreqRange } from './data/satnogs';
+import { loadStdmag, loadSatnogs, applyStdmag, onStdmagRefresh } from './data/catalog';
 import { sourcesStore, type TLESourceConfig } from './stores/sources.svelte';
 import { timeStore } from './stores/time.svelte';
 import { uiStore } from './stores/ui.svelte';
@@ -240,6 +241,11 @@ export class App {
     // On slow networks: ready in time for TLE parsing. On fast/localhost: readiness check falls back to sync.
     warmupTLEWorkers();
 
+    // Kick off catalog data loads (stdmag + satnogs) — cached in localStorage, fetched from mirror
+    const stdmagDone = loadStdmag();
+    loadSatnogs(); // fire-and-forget — satnogs data used on-demand
+    onStdmagRefresh(() => applyStdmag(this.satellites));
+
     // Start texture downloads first (network I/O, non-blocking)
     this.setLoading(0.1, 'Loading textures (0/4)...');
     const texturesDone = this.loadTextures();
@@ -276,6 +282,10 @@ export class App {
     await tleFetchDone;
     this.setLoading(0.8, 'Computing orbits...');
     await this.loadSources();
+
+    // Backfill stdmag on satellites parsed before catalog data arrived
+    await stdmagDone;
+    applyStdmag(this.satellites);
 
     this.setLoading(0.9, 'Wiring controls...');
     this.wireStores();
@@ -538,14 +548,14 @@ export class App {
         clearTimeout(timeout);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const text = await resp.text();
-        satellites = await parseTLETextParallel(text);
+        satellites = await parseSatelliteDataParallel(text);
         try {
           localStorage.setItem('tlescope_tle_custom_' + src.id, JSON.stringify({ ts: Date.now(), data: text, count: satellites.length }));
         } catch { /* localStorage full */ }
         sourcesStore.setLoadState(src.id, { satCount: satellites.length, status: 'loaded' });
       } else {
         const text = sourcesStore.getCustomText(src.id);
-        satellites = await parseTLETextParallel(text);
+        satellites = await parseSatelliteDataParallel(text);
         sourcesStore.setLoadState(src.id, { satCount: satellites.length, status: 'loaded' });
       }
       this.sourceData.set(src.id, satellites);
@@ -936,7 +946,8 @@ export class App {
     // Doppler: get TLE lines by NORAD ID
     uiStore.getSatTLE = (noradId: number) => {
       const sat = this.satByNorad.get(noradId);
-      return sat ? { line1: sat.tleLine1, line2: sat.tleLine2 } : null;
+      if (!sat || (!sat.tleLine1 && !sat.omm)) return null;
+      return { line1: sat.tleLine1, line2: sat.tleLine2, omm: sat.omm };
     };
 
     // TLE refresh/retry
@@ -1077,10 +1088,10 @@ export class App {
       return;
     }
     this.passStartTime = performance.now();
-    let sats: { noradId: number; name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[] = [];
+    let sats: { noradId: number; name: string; line1?: string; line2?: string; omm?: Record<string, unknown>; colorIndex: number; stdMag: number | null }[] = [];
     let idx = 0;
     for (const sat of this.selectedSats) {
-      sats.push({ noradId: sat.noradId, name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag });
+      sats.push({ noradId: sat.noradId, name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, omm: sat.omm, colorIndex: idx, stdMag: sat.stdMag });
       idx++;
     }
     if (uiStore.passFreqMinMHz > 0 || uiStore.passFreqMaxMHz > 0) {
@@ -1137,7 +1148,7 @@ export class App {
     }
 
     let sats = filtered.map((sat, idx) => ({
-      noradId: sat.noradId, name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, colorIndex: idx, stdMag: sat.stdMag,
+      noradId: sat.noradId, name: sat.name, line1: sat.tleLine1, line2: sat.tleLine2, omm: sat.omm, colorIndex: idx, stdMag: sat.stdMag,
     }));
 
     if (uiStore.passFreqMinMHz > 0 || uiStore.passFreqMaxMHz > 0) {
@@ -1767,8 +1778,8 @@ export class App {
               const pt = pass.aosEpoch + k * pathStep;
               const date = new Date(epochToUnix(pt) * 1000);
               const result = propagate(sat.satrec, date);
-              if (result.position && typeof result.position !== 'boolean') {
-                const eci = result.position as { x: number; y: number; z: number };
+              if (result) {
+                const eci = result.position;
                 const g = epochToGmst(pt) * (Math.PI / 180);
                 const ae = getAzEl(eci.x, eci.y, eci.z, g, obs.lat, obs.lon, obs.alt);
                 // Shadow factor (Earth + Moon shadow)
@@ -1797,8 +1808,8 @@ export class App {
         if (sat) {
           const date = new Date(epochToUnix(epoch) * 1000);
           const result = propagate(sat.satrec, date);
-          if (result.position && typeof result.position !== 'boolean') {
-            const eci = result.position as { x: number; y: number; z: number };
+          if (result) {
+            const eci = result.position;
             const gmstRad = gmstDeg * DEG2RAD;
             const obs = observerStore.location;
             uiStore.livePassAzEl = getAzEl(eci.x, eci.y, eci.z, gmstRad, obs.lat, obs.lon, obs.alt);

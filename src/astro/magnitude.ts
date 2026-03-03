@@ -9,8 +9,8 @@
  *   - McCants standard magnitude convention (1000 km range, 90° phase)
  *   - Kasten & Young (1989) airmass formula
  *
- * Standard magnitude data is loaded from src/data/stdmag.json (generated
- * by scripts/generate-stdmag.ts). See .docs/magnitude.md for details.
+ * Standard magnitude data is fetched at runtime from the satvisor-data mirror
+ * and cached in localStorage. See .docs/magnitude.md for details.
  */
 
 const DEG2RAD = Math.PI / 180.0;

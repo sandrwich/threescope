@@ -258,7 +258,7 @@ class UIStore {
   onRequestPasses: (() => void) | null = null;
   onRequestNearbyPasses: (() => void) | null = null;
   onSelectSatFromNearbyPass: ((noradId: number) => void) | null = null;
-  getSatTLE: ((noradId: number) => { line1: string; line2: string } | null) | null = null;
+  getSatTLE: ((noradId: number) => { line1?: string; line2?: string; omm?: Record<string, unknown> } | null) | null = null;
   onFiltersChanged: (() => void) | null = null;
   onFilterInteractionEnd: (() => void) | null = null;
 

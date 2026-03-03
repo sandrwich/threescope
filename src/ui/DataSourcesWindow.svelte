@@ -54,7 +54,7 @@
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const name = file.name.replace(/\.(tle|txt|3le)$/i, '');
+      const name = file.name.replace(/\.(tle|txt|3le|json)$/i, '');
       sourcesStore.addCustomFile(name, reader.result as string);
     };
     reader.readAsText(file);
@@ -101,7 +101,7 @@
   }
 
   function openEditModal(src: TLESourceConfig) {
-    const text = sourcesStore.getRawTleText(src);
+    const text = sourcesStore.getRawText(src);
     if (!text) return;
     editSourceId = src.id;
     editOriginalType = src.type;
@@ -110,14 +110,15 @@
     editOpen = true;
   }
 
-  function downloadTle(src: TLESourceConfig) {
-    const text = sourcesStore.getRawTleText(src);
+  function downloadSource(src: TLESourceConfig) {
+    const text = sourcesStore.getRawText(src);
     if (!text) return;
-    const blob = new Blob([text], { type: 'text/plain' });
+    const isJson = text.trimStart()[0] === '[';
+    const blob = new Blob([text], { type: isJson ? 'application/json' : 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = src.name.replace(/[^a-zA-Z0-9_-]/g, '_') + '.tle';
+    a.download = src.name.replace(/[^a-zA-Z0-9_-]/g, '_') + (isJson ? '.json' : '.tle');
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -150,7 +151,11 @@
   }
 
   function hasCachedData(src: TLESourceConfig): boolean {
-    return sourcesStore.getRawTleText(src) != null;
+    // Check reactive load state first (triggers re-render after fetch completes)
+    const state = sourcesStore.loadStates.get(src.id);
+    if (state?.status === 'loaded') return true;
+    // Fall back to localStorage for data cached in a previous session
+    return sourcesStore.getRawText(src) != null;
   }
 </script>
 
@@ -192,7 +197,7 @@
               <span class="cache-age" title="Cached {cached} ago">{cached}</span>
             {/if}
             {#if hasCachedData(src)}
-              <button class="action-btn" title="Download TLE" onclick={(e) => { e.preventDefault(); downloadTle(src); }}>{@html ICON_DOWNLOAD}</button>
+              <button class="action-btn" title="Download" onclick={(e) => { e.preventDefault(); downloadSource(src); }}>{@html ICON_DOWNLOAD}</button>
               <button class="action-btn" title="Edit as copy" onclick={(e) => { e.preventDefault(); openEditModal(src); }}>{@html ICON_EDIT}</button>
             {/if}
           </label>
@@ -214,8 +219,8 @@
                 <span class="source-count">{getStatus(src.id)}</span>
               {/if}
               {#if hasCachedData(src)}
-                <button class="action-btn" title="Download TLE" onclick={(e) => { e.preventDefault(); downloadTle(src); }}>{@html ICON_DOWNLOAD}</button>
-                <button class="action-btn" title="Edit TLE" onclick={(e) => { e.preventDefault(); openEditModal(src); }}>{@html ICON_EDIT}</button>
+                <button class="action-btn" title="Download" onclick={(e) => { e.preventDefault(); downloadSource(src); }}>{@html ICON_DOWNLOAD}</button>
+                <button class="action-btn" title="Edit" onclick={(e) => { e.preventDefault(); openEditModal(src); }}>{@html ICON_EDIT}</button>
               {/if}
               <button class="delete-btn" title="Remove source" onclick={(e) => { e.preventDefault(); sourcesStore.removeCustom(src.id); }}>{@html ICON_CLOSE}</button>
             </label>
@@ -239,7 +244,7 @@
           <Button onclick={() => addingUrl = true}>+ URL</Button>
           <Button onclick={() => fileInput?.click()}>+ File</Button>
           <Button onclick={openPasteModal}>+ Paste</Button>
-          <input type="file" bind:this={fileInput} accept=".tle,.txt,.3le" style="display:none" onchange={onFileChange}>
+          <input type="file" bind:this={fileInput} accept=".tle,.txt,.3le,.json" style="display:none" onchange={onFileChange}>
         </div>
       {/if}
     </div>
@@ -256,7 +261,7 @@
   </DraggableWindow>
 {/if}
 
-<DraggableWindow title={editSourceId ? 'Edit TLE Source' : 'Paste TLE Data'} modal bind:open={editOpen}>
+<DraggableWindow title={editSourceId ? 'Edit Source' : 'Paste OMM / TLE Data'} modal bind:open={editOpen}>
   <div class="tle-editor">
     <Input
       class="tle-name-input"
@@ -268,7 +273,7 @@
     />
     <textarea
       class="tle-textarea"
-      placeholder="Paste TLE data here...&#10;&#10;ISS (ZARYA)&#10;1 25544U 98067A   24001.00000000  .00000000  00000+0  00000+0 0    09&#10;2 25544  51.6400 100.0000 0001000   0.0000   0.0000 15.50000000    05"
+      placeholder={'Paste OMM JSON or TLE data...\n\nOMM JSON:\n[{"OBJECT_NAME":"ISS","NORAD_CAT_ID":25544,...}]\n\nTLE:\nISS (ZARYA)\n1 25544U 98067A   24001.00000000 ...\n2 25544  51.6400 100.0000 ...'}
       bind:value={editText}
       spellcheck="false"
     ></textarea>

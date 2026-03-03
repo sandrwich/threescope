@@ -2,7 +2,7 @@
  * Web Worker for satellite pass prediction.
  * Runs SGP4 propagation and az/el computation off the main thread.
  */
-import { twoline2satrec, propagate } from 'satellite.js';
+import { twoline2satrec, json2satrec, propagate } from 'satellite.js';
 import { normalizeEpoch, epochToUnix, epochToGmst } from '../astro/epoch';
 import { getAzEl } from '../astro/az-el';
 import { sunDirectionECI, isEclipsed, earthShadowFactor, isSolarEclipsed, solarEclipsePossible, sunAltitude, solarElongation } from '../astro/eclipse';
@@ -20,8 +20,8 @@ function propagateAtEpoch(satrec: ReturnType<typeof twoline2satrec>, epoch: numb
   const unix = epochToUnix(epoch);
   const date = new Date(unix * 1000);
   const result = propagate(satrec, date);
-  if (!result.position || typeof result.position === 'boolean') return null;
-  const p = result.position as { x: number; y: number; z: number };
+  if (!result) return null;
+  const p = result.position;
   // satellite.js returns standard ECI (x, y, z) in km — no coord swap needed
   return p;
 }
@@ -81,14 +81,17 @@ function interpolateHorizonMask(az: number, mask: { az: number; minEl: number }[
 }
 
 function computePassesForSat(
-  noradId: number, name: string, line1: string, line2: string, colorIndex: number,
+  noradId: number, name: string, colorIndex: number,
   stdMag: number | null,
   obsLat: number, obsLon: number, obsAlt: number,
   startEpoch: number, durationDays: number, minEl: number,
   stepMinutes: number = 1,
   filters?: PassFilters,
+  line1?: string, line2?: string,
+  omm?: Record<string, unknown>,
 ): SatellitePass[] {
-  const satrec = twoline2satrec(line1, line2);
+  if (!omm && (!line1 || !line2)) return [];
+  const satrec = omm ? json2satrec(omm as any) : twoline2satrec(line1!, line2!);
   const passes: SatellitePass[] = [];
   const minuteStep = stepMinutes / 1440.0;
   const totalSteps = Math.round(durationDays * 1440 / stepMinutes);
@@ -332,12 +335,13 @@ self.onmessage = (e: MessageEvent<PassRequest>) => {
   for (let i = 0; i < req.satellites.length; i++) {
     const sat = req.satellites[i];
     const passes = computePassesForSat(
-      sat.noradId, sat.name, sat.line1, sat.line2, sat.colorIndex,
+      sat.noradId, sat.name, sat.colorIndex,
       sat.stdMag,
       req.observerLat, req.observerLon, req.observerAlt,
       req.startEpoch, req.durationDays, req.minElevation,
       step,
       hasFilters ? filters : undefined,
+      sat.line1, sat.line2, sat.omm,
     );
     allPasses.push(...passes);
 

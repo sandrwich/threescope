@@ -1,7 +1,8 @@
 import { Vector3 } from 'three';
 import type { Satellite } from '../types';
-import { parseTLE } from '../astro/propagator';
-import { getCelestrakUrl } from './tle-sources';
+import { parseTLE, parseOMM } from '../astro/propagator';
+import { getMirrorUrl, getCelestrakUrl, getSourceByGroup } from './tle-sources';
+import { applyStdmag } from './catalog';
 
 const CACHE_KEY_PREFIX = 'tlescope_tle_';
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -10,10 +11,12 @@ const RATELIMIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
 export interface FetchResult {
   satellites: Satellite[];
-  source: 'cache' | 'network' | 'stale-cache';
+  source: 'cache' | 'mirror' | 'network' | 'stale-cache';
   cacheAge?: number; // ms since cache was saved
   rateLimited?: boolean;
 }
+
+// ── Rate limiting ──
 
 export function isRateLimited(): boolean {
   try {
@@ -33,139 +36,32 @@ function setRateLimited() {
   try { localStorage.setItem(RATELIMIT_KEY, String(Date.now())); } catch {}
 }
 
-export async function fetchTLEData(
-  group: string,
-  onStatus?: (msg: string) => void,
-  forceRetry = false,
-): Promise<FetchResult> {
-  // Try localStorage cache first (skip if forcing refresh) — single parse
-  const cached = !forceRetry ? loadFromCache(group) : null;
-  if (cached) {
-    onStatus?.('Loading cached data...');
-    return { satellites: await parseTLETextParallel(cached.data), source: 'cache', cacheAge: cached.age };
-  }
+// ── Format auto-detection ──
 
-  // Skip network if rate limited (unless manual retry)
-  if (!forceRetry && isRateLimited()) {
-    const stale = loadFromCache(group, true);
-    if (stale) {
-      onStatus?.('Rate limited, using cached data');
-      return { satellites: await parseTLETextParallel(stale.data), source: 'stale-cache', cacheAge: stale.age, rateLimited: true };
-    }
-    throw Object.assign(new Error('Rate limited by CelesTrak'), { rateLimited: true });
-  }
-
-  onStatus?.('Fetching from CelesTrak...');
-  const url = getCelestrakUrl(group);
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
-    const resp = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (resp.status === 403) {
-      setRateLimited();
-      throw Object.assign(new Error('HTTP 403 — rate limited'), { rateLimited: true });
-    }
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const text = await resp.text();
-    clearRateLimit();
-    const satellites = await parseTLETextParallel(text);
-    saveToCache(group, text, satellites.length);
-    return { satellites, source: 'network' };
-  } catch (e) {
-    // On failure, try stale cache (ignore age)
-    const stale = loadFromCache(group, true);
-    if (stale) {
-      onStatus?.('CelesTrak unavailable, using cached data');
-      console.warn(`CelesTrak fetch failed, using stale cache for "${group}"`);
-      return {
-        satellites: await parseTLETextParallel(stale.data), source: 'stale-cache', cacheAge: stale.age,
-        rateLimited: (e as any)?.rateLimited === true,
-      };
-    }
-    onStatus?.('CelesTrak unavailable, no cached data');
-    throw e;
-  }
+/** Detect if text is OMM JSON (starts with '[') or TLE text. */
+function isOMMJson(text: string): boolean {
+  return text.trimStart()[0] === '[';
 }
 
-function loadFromCache(group: string, ignoreAge = false): { data: string; age: number } | null {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY_PREFIX + group);
-    if (!raw) return null;
-    const { ts, data } = JSON.parse(raw);
-    const age = Date.now() - ts;
-    if (!ignoreAge && age > CACHE_MAX_AGE_MS) return null;
-    return { data, age };
-  } catch {
-    return null;
+// ── Unified parsing (auto-detects JSON vs TLE) ──
+
+/** Parse OMM JSON array directly via satellite.js json2satrec. */
+function parseOMMJson(text: string): Satellite[] {
+  const records: Record<string, unknown>[] = JSON.parse(text);
+  const satellites: Satellite[] = [];
+  for (const omm of records) {
+    const sat = parseOMM(omm);
+    if (sat) satellites.push(sat);
   }
+  return satellites;
 }
 
-export function getCacheAge(group: string): number | null {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY_PREFIX + group);
-    if (!raw) return null;
-    const { ts } = JSON.parse(raw);
-    return Date.now() - ts;
-  } catch {
-    return null;
-  }
+/** Parse satellite data from either OMM JSON or TLE text. */
+export function parseSatelliteData(text: string): Satellite[] {
+  return isOMMJson(text) ? parseOMMJson(text) : parseTLEText(text);
 }
 
-function saveToCache(group: string, data: string, count?: number) {
-  try {
-    localStorage.setItem(CACHE_KEY_PREFIX + group, JSON.stringify({ ts: Date.now(), data, count }));
-  } catch {
-    // localStorage full or unavailable — silently ignore
-  }
-}
-
-/** Read cached TLE text from localStorage. Returns null if not cached. */
-function readCachedText(cacheKey: string, isJsonWrapped: boolean): string | null {
-  try {
-    const raw = localStorage.getItem(cacheKey);
-    if (!raw) return null;
-    return isJsonWrapped ? (JSON.parse(raw) as { data: string }).data : raw;
-  } catch {
-    return null;
-  }
-}
-
-/** Check if a NORAD ID exists in a cached TLE text (string search, no parsing). */
-export function cachedTleHasNorad(cacheKey: string, noradId: number, isJsonWrapped = true): boolean {
-  const text = readCachedText(cacheKey, isJsonWrapped);
-  if (!text) return false;
-  const padded = String(noradId).padStart(5, '0');
-  const needle = '1 ' + padded;
-  return text.includes('\n' + needle) || text.startsWith(needle);
-}
-
-/** Get satellite count from a cached TLE source. Uses stored count if available, falls back to text scan. */
-export function cachedTleSatCount(cacheKey: string, isJsonWrapped = true): number {
-  try {
-    const raw = localStorage.getItem(cacheKey);
-    if (!raw) return 0;
-    if (isJsonWrapped) {
-      const parsed = JSON.parse(raw);
-      if (typeof parsed.count === 'number') return parsed.count;
-      // Fallback: scan text for old cache entries without count
-      return countTleLines(parsed.data);
-    }
-    return countTleLines(raw);
-  } catch {
-    return 0;
-  }
-}
-
-function countTleLines(text: string): number {
-  let count = text.startsWith('1 ') ? 1 : 0;
-  let pos = 0;
-  while ((pos = text.indexOf('\n1 ', pos)) !== -1) {
-    count++;
-    pos += 3;
-  }
-  return count;
-}
+// ── TLE text parsing ──
 
 export function parseTLEText(text: string): Satellite[] {
   const lines = text.split('\n').map(l => l.trimEnd()).filter(l => l.length > 0);
@@ -173,14 +69,11 @@ export function parseTLEText(text: string): Satellite[] {
 
   let i = 0;
   while (i + 2 < lines.length) {
-    // Try to detect 3-line format (name + line1 + line2) or 2-line format (line1 + line2)
     if (lines[i + 1].startsWith('1 ') && lines[i + 2].startsWith('2 ')) {
-      // 3-line: name, line1, line2
       const sat = parseTLE(lines[i], lines[i + 1], lines[i + 2]);
       if (sat) satellites.push(sat);
       i += 3;
     } else if (lines[i].startsWith('1 ') && lines[i + 1].startsWith('2 ')) {
-      // 2-line: line1, line2 (no name)
       const noradId = lines[i].substring(2, 7).trim();
       const sat = parseTLE(noradId, lines[i], lines[i + 1]);
       if (sat) satellites.push(sat);
@@ -193,7 +86,7 @@ export function parseTLEText(text: string): Satellite[] {
   return satellites;
 }
 
-// ── Parallel TLE parsing via Web Workers ──
+// ── Parallel parsing via Web Workers ──
 
 const PARALLEL_THRESHOLD = 3000;
 let workerPool: Worker[] | null = null;
@@ -250,39 +143,83 @@ function extractTLEEntries(text: string): [string, string, string][] {
   return entries;
 }
 
-/** Parse TLE text, dispatching to web workers for large datasets (>3000 sats). */
-export async function parseTLETextParallel(text: string): Promise<Satellite[]> {
-  // Quick line-1 count to decide sync vs parallel (avoids full entry extraction for small texts)
-  if (countTleLines(text) < PARALLEL_THRESHOLD) {
-    return parseTLEText(text);
+/** Count satellites in data text (auto-detects format). */
+function countSatellites(text: string): number {
+  if (isOMMJson(text)) {
+    // Quick count without full parse — count array elements
+    try {
+      return JSON.parse(text).length;
+    } catch {
+      return 0;
+    }
+  }
+  return countTleLines(text);
+}
+
+function countTleLines(text: string): number {
+  let count = text.startsWith('1 ') ? 1 : 0;
+  let pos = 0;
+  while ((pos = text.indexOf('\n1 ', pos)) !== -1) {
+    count++;
+    pos += 3;
+  }
+  return count;
+}
+
+/** Parse satellite data, dispatching to web workers for large datasets (>3000 sats). */
+export async function parseSatelliteDataParallel(text: string): Promise<Satellite[]> {
+  const json = isOMMJson(text);
+
+  // For JSON, parse once upfront to avoid double JSON.parse (count + extract)
+  // For TLE, use cheap line scan for count, extract only if above threshold
+  let items: unknown[] | null = null;
+  let satCount: number;
+  if (json) {
+    try { items = JSON.parse(text); } catch { return []; }
+    satCount = items!.length;
+  } else {
+    satCount = countTleLines(text);
   }
 
-  // Workers not ready yet (still compiling modules) — use sync to avoid blocking on compilation
-  if (workersReady < 2) {
-    return parseTLEText(text);
+  if (satCount < PARALLEL_THRESHOLD || workersReady < 2) {
+    // Sync path — reuse already-parsed JSON items if available
+    if (json && items) {
+      const satellites: Satellite[] = [];
+      for (const omm of items as Record<string, unknown>[]) {
+        const sat = parseOMM(omm);
+        if (sat) satellites.push(sat);
+      }
+      return satellites;
+    }
+    return parseSatelliteData(text);
   }
 
   try {
     const pool = getWorkerPool();
-    // Only use workers that are ready (workersReady tracks how many sent 'ready')
     const useCount = Math.min(workersReady, pool.length);
-    const entries = extractTLEEntries(text);
-    const chunkSize = Math.ceil(entries.length / useCount);
+
+    // For OMM JSON, items already parsed; for TLE, extract [name, line1, line2] triplets
+    if (!items) items = extractTLEEntries(text);
+    const chunkSize = Math.ceil(items.length / useCount);
 
     const promises: Promise<any[]>[] = [];
     for (let i = 0; i < useCount; i++) {
-      const chunk = entries.slice(i * chunkSize, (i + 1) * chunkSize);
+      const chunk = items.slice(i * chunkSize, (i + 1) * chunkSize);
       if (chunk.length === 0) break;
       promises.push(new Promise<any[]>((resolve) => {
         const id = nextMsgId++;
         pendingWorkerCalls.set(id, resolve);
-        pool[i].postMessage({ entries: chunk, id });
+        // Worker accepts either { entries, id } (TLE) or { ommRecords, id } (JSON)
+        if (json) {
+          pool[i].postMessage({ ommRecords: chunk, id });
+        } else {
+          pool[i].postMessage({ entries: chunk, id });
+        }
       }));
     }
 
     const results = await Promise.all(promises);
 
-    // Workers return everything except currentPos (can't create THREE.Vector3 in worker)
     const satellites: Satellite[] = [];
     for (const chunk of results) {
       for (const raw of chunk) {
@@ -290,9 +227,173 @@ export async function parseTLETextParallel(text: string): Promise<Satellite[]> {
         satellites.push(raw as Satellite);
       }
     }
+    applyStdmag(satellites);
     return satellites;
   } catch {
-    // Workers unavailable — fall back to sync parsing
-    return parseTLEText(text);
+    return parseSatelliteData(text);
+  }
+}
+
+// ── Cache ──
+
+function loadFromCache(group: string, ignoreAge = false): { data: string; age: number } | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_PREFIX + group);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    const age = Date.now() - ts;
+    if (!ignoreAge && age > CACHE_MAX_AGE_MS) return null;
+    return { data, age };
+  } catch {
+    return null;
+  }
+}
+
+export function getCacheAge(group: string): number | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_PREFIX + group);
+    if (!raw) return null;
+    const { ts } = JSON.parse(raw);
+    return Date.now() - ts;
+  } catch {
+    return null;
+  }
+}
+
+function saveToCache(group: string, data: string, count?: number) {
+  try {
+    localStorage.setItem(CACHE_KEY_PREFIX + group, JSON.stringify({ ts: Date.now(), data, count }));
+  } catch {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
+/** Read cached data text from localStorage. Returns null if not cached. */
+function readCachedText(cacheKey: string, isJsonWrapped: boolean): string | null {
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (!raw) return null;
+    return isJsonWrapped ? (JSON.parse(raw) as { data: string }).data : raw;
+  } catch {
+    return null;
+  }
+}
+
+/** Check if a NORAD ID exists in cached data (auto-detects format). */
+export function cachedTleHasNorad(cacheKey: string, noradId: number, isJsonWrapped = true): boolean {
+  const text = readCachedText(cacheKey, isJsonWrapped);
+  if (!text) return false;
+  if (isOMMJson(text)) {
+    // JSON: search for "NORAD_CAT_ID":NNNNN
+    return text.includes(`"NORAD_CAT_ID":${noradId}`) || text.includes(`"NORAD_CAT_ID": ${noradId}`);
+  }
+  // TLE: search for line-1 pattern
+  const padded = String(noradId).padStart(5, '0');
+  const needle = '1 ' + padded;
+  return text.includes('\n' + needle) || text.startsWith(needle);
+}
+
+/** Get satellite count from a cached source. Uses stored count if available, falls back to scan. */
+export function cachedTleSatCount(cacheKey: string, isJsonWrapped = true): number {
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (!raw) return 0;
+    if (isJsonWrapped) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.count === 'number') return parsed.count;
+      return countSatellites(parsed.data);
+    }
+    return countSatellites(raw);
+  } catch {
+    return 0;
+  }
+}
+
+// ── Fetching with mirror-first chain ──
+
+async function fetchWithTimeout(url: string, timeoutMs = 10000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    return resp;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
+export async function fetchTLEData(
+  group: string,
+  onStatus?: (msg: string) => void,
+  forceRetry = false,
+): Promise<FetchResult> {
+  // Try localStorage cache first (skip if forcing refresh)
+  const cached = !forceRetry ? loadFromCache(group) : null;
+  if (cached) {
+    onStatus?.('Loading cached data...');
+    return { satellites: await parseSatelliteDataParallel(cached.data), source: 'cache', cacheAge: cached.age };
+  }
+
+  // Skip network if rate limited (unless manual retry)
+  if (!forceRetry && isRateLimited()) {
+    const stale = loadFromCache(group, true);
+    if (stale) {
+      onStatus?.('Rate limited, using cached data');
+      return { satellites: await parseSatelliteDataParallel(stale.data), source: 'stale-cache', cacheAge: stale.age, rateLimited: true };
+    }
+    throw Object.assign(new Error('Rate limited by CelesTrak'), { rateLimited: true });
+  }
+
+  const src = getSourceByGroup(group);
+  const isSpecial = src?.special ?? false;
+
+  // 1. Try GitHub mirror (JSON format)
+  const mirrorUrl = getMirrorUrl(group, isSpecial);
+  try {
+    onStatus?.('Fetching from mirror...');
+    const resp = await fetchWithTimeout(mirrorUrl);
+    if (resp.ok) {
+      const text = await resp.text();
+      if (text.trim().length > 0) {
+        const satellites = await parseSatelliteDataParallel(text);
+        saveToCache(group, text, satellites.length);
+        clearRateLimit();
+        return { satellites, source: 'mirror' };
+      }
+    }
+  } catch {
+    // Mirror unavailable — fall through to CelesTrak
+  }
+
+  // 2. Try CelesTrak direct (JSON format)
+  const celestrakUrl = getCelestrakUrl(group, isSpecial);
+  try {
+    onStatus?.('Fetching from CelesTrak...');
+    const resp = await fetchWithTimeout(celestrakUrl);
+    if (resp.status === 403) {
+      setRateLimited();
+      throw Object.assign(new Error('HTTP 403 — rate limited'), { rateLimited: true });
+    }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    clearRateLimit();
+    const satellites = await parseSatelliteDataParallel(text);
+    saveToCache(group, text, satellites.length);
+    return { satellites, source: 'network' };
+  } catch (e) {
+    // On failure, try stale cache (ignore age)
+    const stale = loadFromCache(group, true);
+    if (stale) {
+      onStatus?.('Unavailable, using cached data');
+      console.warn(`Fetch failed, using stale cache for "${group}"`);
+      return {
+        satellites: await parseSatelliteDataParallel(stale.data), source: 'stale-cache', cacheAge: stale.age,
+        rateLimited: (e as any)?.rateLimited === true,
+      };
+    }
+    onStatus?.('Unavailable, no cached data');
+    throw e;
   }
 }

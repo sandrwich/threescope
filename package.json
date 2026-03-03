@@ -10,7 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "satellite.js": "^5.0.0",
+    "satellite.js": "^6.0.2",
     "svelte": "^5.53.2",
     "three": "^0.170.0"
   },

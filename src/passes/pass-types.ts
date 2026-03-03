@@ -28,7 +28,7 @@ export interface SatellitePass {
 
 export interface PassRequest {
   type: 'compute';
-  satellites: { noradId: number; name: string; line1: string; line2: string; colorIndex: number; stdMag: number | null }[];
+  satellites: { noradId: number; name: string; line1?: string; line2?: string; omm?: Record<string, unknown>; colorIndex: number; stdMag: number | null }[];
   observerLat: number;
   observerLon: number;
   observerAlt: number;    // meters

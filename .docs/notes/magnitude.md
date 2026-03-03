@@ -10,8 +10,8 @@ apparent_mag = stdMag + range_correction + phase_correction + extinction
 ```
 
 **Standard magnitude** (stdMag) is the satellite's intrinsic brightness at 1000 km
-range and 90° phase angle. This value comes from `src/data/stdmag.json`, a
-pre-generated lookup table keyed by NORAD catalog number.
+range and 90° phase angle. This value is fetched at runtime from the
+`satvisor-data` mirror and cached in localStorage, keyed by NORAD catalog number.
 
 **Range correction** accounts for distance — closer satellites appear brighter.
 `5 · log₁₀(range / 1000)`. A satellite at 500 km gets a -1.5 mag boost.
@@ -26,8 +26,8 @@ Kasten-Young (1989) airmass formula with 0.2 mag/airmass (clear sky).
 
 ## Where the Data Comes From
 
-TLE files contain no brightness information. We generate `src/data/stdmag.json`
-by merging three external sources, in priority order:
+TLE files contain no brightness information. The `satvisor-data` repo generates
+`catalog/stdmag.json` by merging three external sources, in priority order:
 
 ### 1. McCants QuickSat Database (qs.mag) — ~3,000 satellites
 
@@ -84,15 +84,14 @@ object type, using median RCS values per type:
 
 If none of these apply, `stdMag` is null and the UI shows `?`.
 
-## Generating the Data
+## Data Pipeline
 
-```bash
-npx tsx scripts/generate-stdmag.ts
-```
+The stdmag data is generated weekly by the `satvisor-data` repo
+(`scripts/generate-stdmag.mjs`), which fetches McCants and SATCAT, merges
+by priority, and writes `catalog/stdmag.json` (~390 KB, ~33,000 entries).
 
-This fetches McCants and SATCAT, merges them by priority, and writes
-`src/data/stdmag.json` (~390 KB, ~33,000 entries keyed by NORAD ID).
-The generated file is committed to the repo so the app works offline.
+The app fetches this at runtime from `raw.githubusercontent.com` and caches
+in localStorage (7-day max age, background refresh after 1 day).
 
 Output breakdown from a typical run:
 - McCants observed: ~3,000 satellites
@@ -121,9 +120,5 @@ uniform spheres. A Starlink edge-on vs face-on can differ by 3+ magnitudes.
 
 ## Regenerating
 
-```bash
-npx tsx scripts/generate-stdmag.ts
-```
-
-Fetches both sources, merges by priority, writes `src/data/stdmag.json`.
-Commit the updated JSON after regenerating.
+To update the stdmag data, trigger the `update-catalog` workflow in the
+`satvisor-data` repo. The app will pick up the new data on its next fetch.
