@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <g transform="translate(128,128) rotate(-45)">
+    <!-- Body -->
+    <rect x="-26" y="-28" width="52" height="56" rx="8" fill="#e3e3e3"/>
+    <!-- Left panel cells (2x2) -->
+    <rect x="-126" y="-24" width="42" height="22" rx="3" fill="#e3e3e3"/>
+    <rect x="-80" y="-24" width="42" height="22" rx="3" fill="#e3e3e3"/>
+    <rect x="-126" y="2" width="42" height="22" rx="3" fill="#e3e3e3"/>
+    <rect x="-80" y="2" width="42" height="22" rx="3" fill="#e3e3e3"/>
+    <!-- Right panel cells (2x2) -->
+    <rect x="38" y="-24" width="42" height="22" rx="3" fill="#e3e3e3"/>
+    <rect x="84" y="-24" width="42" height="22" rx="3" fill="#e3e3e3"/>
+    <rect x="38" y="2" width="42" height="22" rx="3" fill="#e3e3e3"/>
+    <rect x="84" y="2" width="42" height="22" rx="3" fill="#e3e3e3"/>
+    <!-- Wifi arcs radiating outward from body (antenna toward Earth) -->
+    <path d="M -16 56 A 32 32 0 0 0 16 56" fill="none" stroke="#e3e3e3" stroke-width="9" stroke-linecap="round"/>
+    <path d="M -30 80 A 60 60 0 0 0 30 80" fill="none" stroke="#e3e3e3" stroke-width="9" stroke-linecap="round"/>
+    <path d="M -44 104 A 88 88 0 0 0 44 104" fill="none" stroke="#e3e3e3" stroke-width="9" stroke-linecap="round"/>
+  </g>
+</svg>

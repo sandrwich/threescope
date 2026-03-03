@@ -7,6 +7,7 @@ import { ORBIT_COLORS } from './orbit-renderer';
 import { uiStore } from '../stores/ui.svelte';
 import { earthShadowFactor } from '../astro/eclipse';
 import { estimateVisualMagnitude, computePhaseAngle, slantRange } from '../astro/magnitude';
+import { getSpriteIndex, REST_ANGLE } from './sprite-config';
 
 export class SatelliteManager {
   points: THREE.Points;
@@ -14,6 +15,7 @@ export class SatelliteManager {
   private colorAttr: THREE.BufferAttribute;
   private alphaAttr: THREE.BufferAttribute;
   private sizeAttr: THREE.BufferAttribute;
+  private spriteAttr: THREE.BufferAttribute;
   private maxSats: number;
   private updateFrame = 0;
   private _tmpPos = new THREE.Vector3();
@@ -29,68 +31,130 @@ export class SatelliteManager {
   private _prevFade = NaN;
   private _magBloomTimer = 0;
 
-  constructor(satTexture: THREE.Texture, maxSats = 25000) {
+  constructor(satTexture: THREE.Texture, spriteCount: number, maxSats = 25000) {
     this.maxSats = maxSats;
     const positions = new Float32Array(maxSats * 3);
     const colors = new Float32Array(maxSats * 3);
     const alphas = new Float32Array(maxSats);
     const sizes = new Float32Array(maxSats).fill(1.0);
+    const sprites = new Float32Array(maxSats);
 
     const geometry = new THREE.BufferGeometry();
     this.posAttr = new THREE.BufferAttribute(positions, 3);
     this.colorAttr = new THREE.BufferAttribute(colors, 3);
     this.alphaAttr = new THREE.BufferAttribute(alphas, 1);
     this.sizeAttr = new THREE.BufferAttribute(sizes, 1);
+    this.spriteAttr = new THREE.BufferAttribute(sprites, 1);
     this.posAttr.setUsage(THREE.DynamicDrawUsage);
     this.colorAttr.setUsage(THREE.DynamicDrawUsage);
     this.alphaAttr.setUsage(THREE.DynamicDrawUsage);
     this.sizeAttr.setUsage(THREE.DynamicDrawUsage);
+    this.spriteAttr.setUsage(THREE.DynamicDrawUsage);
     geometry.setAttribute('position', this.posAttr);
     geometry.setAttribute('color', this.colorAttr);
     geometry.setAttribute('alpha', this.alphaAttr);
     geometry.setAttribute('sizeScale', this.sizeAttr);
+    geometry.setAttribute('spriteIndex', this.spriteAttr);
 
     const material = new THREE.ShaderMaterial({
       uniforms: {
         pointTexture: { value: satTexture },
         pointSize: { value: 16.0 * window.devicePixelRatio },
+        spriteCount: { value: spriteCount },
+        restAngle: { value: REST_ANGLE },
       },
-      vertexShader: `
+      vertexShader: /* glsl */ `
         attribute float alpha;
         attribute float sizeScale;
+        attribute float spriteIndex;
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vAngle;
+        varying float vSpriteIndex;
         uniform float pointSize;
+        uniform float restAngle;
+
         void main() {
           vColor = color;
           vAlpha = alpha;
+          vSpriteIndex = spriteIndex;
+
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+
+          // Earth-pointing rotation: compute screen-space angle from satellite to Earth center.
+          // Use the actual sat→Earth vector in view space (not -mvPos, which includes
+          // the full camera distance in z and breaks the confidence ratio from far away).
+          // Negate y to convert from view space (y-up) to gl_PointCoord space (y-down).
+          //
+          // When the sat→Earth direction is mostly along the view axis (z-dominant),
+          // the screen projection is degenerate (e.g. top-down polar view). Fade
+          // rotation toward 0 based on how much of the 3D direction is in-screen.
+          vec4 earthMV = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+          vec3 toEarth3 = earthMV.xyz - mvPos.xyz;
+          vec2 toEarth = toEarth3.xy;
+          float screenLen = length(toEarth);
+          float confidence = screenLen / (length(toEarth3) + 0.0001);
+          float fade = smoothstep(0.15, 0.4, confidence);
+          if (screenLen > 0.0001) {
+            float screenAngle = atan(-(toEarth.y), toEarth.x);
+            vAngle = (restAngle - screenAngle) * fade;
+          } else {
+            vAngle = 0.0;
+          }
+
           gl_PointSize = pointSize * sizeScale;
           gl_Position = projectionMatrix * mvPos;
         }
       `,
-      fragmentShader: `
+      fragmentShader: /* glsl */ `
         uniform sampler2D pointTexture;
+        uniform float spriteCount;
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vAngle;
+        varying float vSpriteIndex;
+
+        // Sample the sprite atlas at a local UV (0-1 within the sprite cell).
+        // Returns 0.0 alpha for out-of-bounds UVs (prevents atlas bleed between sprites).
+        float sampleAlpha(vec2 localUV) {
+          if (localUV.x < 0.0 || localUV.x > 1.0 || localUV.y < 0.0 || localUV.y > 1.0) return 0.0;
+          vec2 atlasUV = vec2((vSpriteIndex + localUV.x) / spriteCount, localUV.y);
+          return texture2D(pointTexture, atlasUV).a;
+        }
+
+        vec4 sampleColor(vec2 localUV) {
+          vec2 atlasUV = vec2((vSpriteIndex + localUV.x) / spriteCount, localUV.y);
+          return texture2D(pointTexture, atlasUV);
+        }
+
         void main() {
-          vec4 texel = texture2D(pointTexture, gl_PointCoord);
+          // Rotate gl_PointCoord around center to point antenna toward Earth
+          vec2 uv = gl_PointCoord - 0.5;
+          float ca = cos(vAngle);
+          float sa = sin(vAngle);
+          vec2 rotUV = vec2(uv.x * ca - uv.y * sa, uv.x * sa + uv.y * ca) + 0.5;
+
+          // Bounds check — rotated UV may fall outside the sprite cell
+          if (rotUV.x < 0.0 || rotUV.x > 1.0 || rotUV.y < 0.0 || rotUV.y > 1.0) discard;
+
+          vec4 texel = sampleColor(rotUV);
           if (texel.a > 0.3) {
             gl_FragColor = vec4(vColor * texel.rgb, vAlpha);
             return;
           }
+
           // Dark outline: 8-tap single-radius border (cardinal + diagonal)
           float s = 0.05;
           float d = s * 0.707;
           float na = max(
-            max(max(texture2D(pointTexture, gl_PointCoord + vec2(s, 0.0)).a,
-                    texture2D(pointTexture, gl_PointCoord - vec2(s, 0.0)).a),
-                max(texture2D(pointTexture, gl_PointCoord + vec2(0.0, s)).a,
-                    texture2D(pointTexture, gl_PointCoord - vec2(0.0, s)).a)),
-            max(max(texture2D(pointTexture, gl_PointCoord + vec2(d, d)).a,
-                    texture2D(pointTexture, gl_PointCoord - vec2(d, d)).a),
-                max(texture2D(pointTexture, gl_PointCoord + vec2(d, -d)).a,
-                    texture2D(pointTexture, gl_PointCoord - vec2(d, -d)).a))
+            max(max(sampleAlpha(rotUV + vec2(s, 0.0)),
+                    sampleAlpha(rotUV - vec2(s, 0.0))),
+                max(sampleAlpha(rotUV + vec2(0.0, s)),
+                    sampleAlpha(rotUV - vec2(0.0, s)))),
+            max(max(sampleAlpha(rotUV + vec2(d, d)),
+                    sampleAlpha(rotUV - vec2(d, d))),
+                max(sampleAlpha(rotUV + vec2(d, -d)),
+                    sampleAlpha(rotUV - vec2(d, -d))))
           );
           if (na > 0.3) {
             gl_FragColor = vec4(0.0, 0.0, 0.0, vAlpha);
@@ -212,15 +276,17 @@ export class SatelliteManager {
     this._prevCamZ = cameraPos.z;
     this._prevFade = unselectedFade;
 
-    // --- Position: always update (propagation changes positions every frame) ---
+    // --- Position + sprite index: always update (propagation changes positions every frame) ---
     for (let i = 0; i < count; i++) {
       const sat = satellites[i];
       if (sat.decayed) continue;
       this.posAttr.array[i * 3] = sat.currentPos.x / DRAW_SCALE;
       this.posAttr.array[i * 3 + 1] = sat.currentPos.y / DRAW_SCALE;
       this.posAttr.array[i * 3 + 2] = sat.currentPos.z / DRAW_SCALE;
+      this.spriteAttr.array[i] = getSpriteIndex(sat);
     }
     this.posAttr.needsUpdate = true;
+    this.spriteAttr.needsUpdate = true;
 
     // --- Color + Size: only when hover/selection state changes ---
     if (colorSizeDirty) {

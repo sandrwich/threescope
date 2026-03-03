@@ -15,11 +15,13 @@ import { calculateMoonPosition } from '../astro/moon';
 import { computeApsis2D } from '../astro/apsis';
 import { uiStore } from '../stores/ui.svelte';
 import { createPinTexture, createDiamondTexture } from './marker-manager';
+import { getSpriteIndex } from './sprite-config';
 
 export interface MapRendererInit {
   dayTex: THREE.Texture;
   nightTex: THREE.Texture;
   satTex: THREE.Texture;
+  spriteCount: number;
   markerGroups: MarkerGroup[];
   overlay: HTMLElement;
   cfg: AppConfig;
@@ -45,6 +47,7 @@ export class MapRenderer {
   private satPoints2d!: THREE.Points;
   private satPosBuffer2d!: THREE.BufferAttribute;
   private satColorBuffer2d!: THREE.BufferAttribute;
+  private satSpriteBuffer2d!: THREE.BufferAttribute;
   private maxSatVerts2d = 25000 * 3; // 3 offsets per sat
   private hlTrack2d!: THREE.LineSegments;
   private hlTrackBuffer2d!: THREE.BufferAttribute;
@@ -69,7 +72,7 @@ export class MapRenderer {
   private apsisColorBuffer2d!: THREE.BufferAttribute;
 
   constructor(scene2d: THREE.Scene, init: MapRendererInit) {
-    const { dayTex, nightTex, satTex, markerGroups, overlay, cfg } = init;
+    const { dayTex, nightTex, satTex, spriteCount, markerGroups, overlay, cfg } = init;
 
     // 2D map plane
     this.mapMaterial = new THREE.ShaderMaterial({
@@ -154,25 +157,46 @@ export class MapRenderer {
     this.satPosBuffer2d.setUsage(THREE.DynamicDrawUsage);
     this.satColorBuffer2d = new THREE.BufferAttribute(new Float32Array(this.maxSatVerts2d * 3), 3);
     this.satColorBuffer2d.setUsage(THREE.DynamicDrawUsage);
+    this.satSpriteBuffer2d = new THREE.BufferAttribute(new Float32Array(this.maxSatVerts2d), 1);
+    this.satSpriteBuffer2d.setUsage(THREE.DynamicDrawUsage);
     satGeo2d.setAttribute('position', this.satPosBuffer2d);
     satGeo2d.setAttribute('color', this.satColorBuffer2d);
+    satGeo2d.setAttribute('spriteIndex', this.satSpriteBuffer2d);
     satGeo2d.setDrawRange(0, 0);
     this.satPoints2d = new THREE.Points(satGeo2d, new THREE.ShaderMaterial({
-      uniforms: { pointTexture: { value: satTex }, dpr: { value: window.devicePixelRatio } },
-      vertexShader: `
+      uniforms: {
+        pointTexture: { value: satTex },
+        dpr: { value: window.devicePixelRatio },
+        spriteCount: { value: spriteCount },
+      },
+      vertexShader: /* glsl */ `
+        attribute float spriteIndex;
         uniform float dpr;
         varying vec3 vColor;
+        varying float vSpriteIndex;
         void main() {
           vColor = color;
+          vSpriteIndex = spriteIndex;
           gl_PointSize = 20.0 * dpr;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
-      fragmentShader: `
+      fragmentShader: /* glsl */ `
         uniform sampler2D pointTexture;
+        uniform float spriteCount;
         varying vec3 vColor;
+        varying float vSpriteIndex;
+
+        // Sample sprite atlas at local UV (0-1 within sprite cell), clamped to prevent bleed
+        float sampleAlpha(vec2 uv) {
+          if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
+          return texture2D(pointTexture, vec2((vSpriteIndex + uv.x) / spriteCount, uv.y)).a;
+        }
+
         void main() {
-          vec4 texel = texture2D(pointTexture, gl_PointCoord);
+          vec2 uv = gl_PointCoord;
+          vec2 atlasUV = vec2((vSpriteIndex + uv.x) / spriteCount, uv.y);
+          vec4 texel = texture2D(pointTexture, atlasUV);
           if (texel.a > 0.3) {
             gl_FragColor = vec4(vColor * texel.rgb, texel.a);
             return;
@@ -180,16 +204,16 @@ export class MapRenderer {
           float na = 0.0;
           for (float s = 0.035; s <= 0.07; s += 0.035) {
             na = max(na, max(
-              max(texture2D(pointTexture, gl_PointCoord + vec2(s, 0.0)).a,
-                  texture2D(pointTexture, gl_PointCoord - vec2(s, 0.0)).a),
-              max(texture2D(pointTexture, gl_PointCoord + vec2(0.0, s)).a,
-                  texture2D(pointTexture, gl_PointCoord - vec2(0.0, s)).a)
+              max(sampleAlpha(uv + vec2(s, 0.0)),
+                  sampleAlpha(uv - vec2(s, 0.0))),
+              max(sampleAlpha(uv + vec2(0.0, s)),
+                  sampleAlpha(uv - vec2(0.0, s)))
             ));
             na = max(na, max(
-              max(texture2D(pointTexture, gl_PointCoord + vec2(s, s) * 0.707).a,
-                  texture2D(pointTexture, gl_PointCoord - vec2(s, s) * 0.707).a),
-              max(texture2D(pointTexture, gl_PointCoord + vec2(s, -s) * 0.707).a,
-                  texture2D(pointTexture, gl_PointCoord - vec2(s, -s) * 0.707).a)
+              max(sampleAlpha(uv + vec2(s, s) * 0.707),
+                  sampleAlpha(uv - vec2(s, s) * 0.707)),
+              max(sampleAlpha(uv + vec2(s, -s) * 0.707),
+                  sampleAlpha(uv - vec2(s, -s) * 0.707))
             ));
           }
           if (na > 0.3) {
@@ -659,6 +683,7 @@ export class MapRenderer {
 
     const posArr = this.satPosBuffer2d.array as Float32Array;
     const colArr = this.satColorBuffer2d.array as Float32Array;
+    const sprArr = this.satSpriteBuffer2d.array as Float32Array;
     let si = 0;
     for (const sat of satellites) {
       if (si + 9 > this.maxSatVerts2d * 3) break;
@@ -676,15 +701,18 @@ export class MapRenderer {
         cr = cNorm.r; cg = cNorm.g; cb = cNorm.b;
       }
 
+      const sprIdx = getSpriteIndex(sat);
       for (let off = -1; off <= 1; off++) {
         posArr[si] = mc.x + off * MAP_W; posArr[si + 1] = -mc.y; posArr[si + 2] = 0.05;
         colArr[si] = cr; colArr[si + 1] = cg; colArr[si + 2] = cb;
+        sprArr[si / 3] = sprIdx;
         si += 3;
       }
     }
 
     this.satPosBuffer2d.needsUpdate = true;
     this.satColorBuffer2d.needsUpdate = true;
+    this.satSpriteBuffer2d.needsUpdate = true;
     this.satPoints2d.geometry.setDrawRange(0, si / 3);
   }
 }

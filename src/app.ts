@@ -336,7 +336,7 @@ export class App {
     const [dayTex, nightTex, satTex, starTex, cloudTex, moonTex, earthNormal, earthDisp, moonDisp] = await Promise.all([
       load('/textures/earth/color.webp'),
       load('/textures/earth/night.webp'),
-      load('/textures/ui/sat_sprite.png'),
+      load('/textures/ui/sat_sprites.png'),
       load('/textures/stars.webp'),
       load('/textures/earth/clouds.webp'),
       load('/textures/moon/color.webp'),
@@ -420,8 +420,9 @@ export class App {
     this.sunScene = new SunScene();
     this.scene3d.add(this.sunScene.disc);
 
-    // Satellites
-    this.satManager = new SatelliteManager(satTex);
+    // Satellites — sprite atlas: each sprite is 256px wide, atlas width = N * 256
+    const spriteCount = Math.max(1, Math.round(satTex.image.width / 256));
+    this.satManager = new SatelliteManager(satTex, spriteCount);
     this.scene3d.add(this.satManager.points);
 
     // Orbits + Footprint
@@ -439,7 +440,7 @@ export class App {
     this.geoOverlay.setCountriesUrl('/data/countries-110m.json');
 
     this.mapRenderer = new MapRenderer(this.scene2d, {
-      dayTex, nightTex, satTex,
+      dayTex, nightTex, satTex, spriteCount,
       markerGroups: this.cfg.markerGroups,
       overlay,
       cfg: this.cfg,
