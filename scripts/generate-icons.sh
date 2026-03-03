@@ -95,5 +95,10 @@ else
   echo "Skipping .icns (png2icns not found — install: sudo apt install icnsutils)"
 fi
 
+# ── Social / profile picture ──
+echo ""
+echo "Profile picture:"
+render_maskable 1024 public/textures/icons/profile.png
+
 echo ""
 echo "Done!"
