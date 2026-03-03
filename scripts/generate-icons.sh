@@ -37,10 +37,10 @@ render() {
   echo "  ${size}x${size}  → $out"
 }
 
-# --- Helper: render maskable icon (icon centered at 60% with background) ---
+# --- Helper: render maskable icon (icon centered at 90% with background) ---
 render_maskable() {
   local size=$1 out=$2 bg="${3:-#101010}"
-  local icon_size=$(( size * 60 / 100 ))
+  local icon_size=$(( size * 90 / 100 ))
   rsvg-convert -w "$icon_size" -h "$icon_size" "$SVG" -o "$TMP/mask_fg.png"
   convert -size "${size}x${size}" "xc:${bg}" \
     "$TMP/mask_fg.png" -gravity center -composite \
@@ -95,10 +95,10 @@ else
   echo "Skipping .icns (png2icns not found — install: sudo apt install icnsutils)"
 fi
 
-# ── Social / profile picture ──
+# ── Large maskable (social / profile picture) ──
 echo ""
-echo "Profile picture:"
-render_maskable 1024 public/textures/icons/profile.png
+echo "Maskable 1024:"
+render_maskable 1024 public/textures/icons/icon-maskable-1024.png
 
 echo ""
 echo "Done!"
