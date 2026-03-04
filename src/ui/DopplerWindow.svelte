@@ -15,6 +15,7 @@
   import { getTransmitters, type SatnogsTransmitter } from '../data/satnogs';
   import { formatFreqHz } from '../format';
   import { initHiDPICanvas } from './shared/canvas';
+  import { chart } from './shared/chart-metrics';
 
   const CANVAS_W = 380;
   const CANVAS_H = 200;
@@ -245,7 +246,7 @@
         ctx.fillStyle = palette.live;
         ctx.globalAlpha = 0.6 + pulse * 0.4;
         ctx.beginPath();
-        ctx.arc(liveX, liveY, 4, 0, 2 * Math.PI);
+        ctx.arc(liveX, liveY, chart.dot, 0, 2 * Math.PI);
         ctx.fill();
         ctx.globalAlpha = 1;
       }
@@ -273,7 +274,7 @@
         // Dot on curve
         ctx.fillStyle = palette.text;
         ctx.beginPath();
-        ctx.arc(hoverX, hy, 3, 0, 2 * Math.PI);
+        ctx.arc(hoverX, hy, chart.dotSmall, 0, 2 * Math.PI);
         ctx.fill();
 
         // Tooltip
@@ -317,7 +318,7 @@
     ctx.textAlign = 'left';
     ctx.fillStyle = satColor;
     ctx.beginPath();
-    ctx.arc(gx + 4, 8, 3.5, 0, 2 * Math.PI);
+    ctx.arc(gx + 4, 8, chart.dotSmall, 0, 2 * Math.PI);
     ctx.fill();
     ctx.fillStyle = palette.textMuted;
     ctx.fillText(pass.satName, gx + 12, 3);

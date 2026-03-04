@@ -7,6 +7,7 @@
   import { SAT_COLORS, DEG2RAD, MOON_RADIUS_KM, satColorCss } from '../constants';
   import { palette } from './shared/theme';
   import { initHiDPICanvas } from './shared/canvas';
+  import { chart, pointerHitRadius } from './shared/chart-metrics';
   import { moonPositionECI } from '../astro/moon-observer';
   import { sunDirectionECI } from '../astro/eclipse';
   import { getAzEl } from '../astro/az-el';
@@ -93,7 +94,7 @@
     if (e.button !== 0 || !selectedPass || selectedPass.skyPath.length === 0) return;
     const { lx, ly } = canvasToLogical(e.clientX, e.clientY);
     const hit = findNearestSkyPoint(lx, ly);
-    if (!hit || hit.dist > 40) return;
+    if (!hit || hit.dist > pointerHitRadius(e)) return;
     scrubbing = true;
     window.addEventListener('pointermove', onWindowPointerMove);
     window.addEventListener('pointerup', onWindowPointerUp);
@@ -106,7 +107,7 @@
     if (selectedPass && selectedPass.skyPath.length > 0) {
       const { lx, ly } = canvasToLogical(e.clientX, e.clientY);
       const hit = findNearestSkyPoint(lx, ly);
-      canvasEl.style.cursor = hit && hit.dist < 40 ? 'grab' : '';
+      canvasEl.style.cursor = hit && hit.dist < chart.hitRadius ? 'grab' : '';
     }
   }
 
@@ -196,22 +197,24 @@
 
         // AOS marker (cyan square)
         const aos = azElToXY(pass.skyPath[0].az, pass.skyPath[0].el);
+        const mk = chart.marker;
         ctx.fillStyle = palette.markerAos;
-        ctx.fillRect(aos.x - 3, aos.y - 3, 6, 6);
+        ctx.fillRect(aos.x - mk, aos.y - mk, mk * 2, mk * 2);
 
         // LOS marker (gray square)
         const los = azElToXY(pass.skyPath[pass.skyPath.length - 1].az, pass.skyPath[pass.skyPath.length - 1].el);
         ctx.fillStyle = palette.markerLos;
-        ctx.fillRect(los.x - 3, los.y - 3, 6, 6);
+        ctx.fillRect(los.x - mk, los.y - mk, mk * 2, mk * 2);
 
         // TCA marker (diamond at max elevation)
         const tca = azElToXY(pass.maxElAz, pass.maxEl);
+        const dm = mk + 1;
         ctx.fillStyle = palette.markerTca;
         ctx.beginPath();
-        ctx.moveTo(tca.x, tca.y - 4);
-        ctx.lineTo(tca.x + 4, tca.y);
-        ctx.lineTo(tca.x, tca.y + 4);
-        ctx.lineTo(tca.x - 4, tca.y);
+        ctx.moveTo(tca.x, tca.y - dm);
+        ctx.lineTo(tca.x + dm, tca.y);
+        ctx.lineTo(tca.x, tca.y + dm);
+        ctx.lineTo(tca.x - dm, tca.y);
         ctx.closePath();
         ctx.fill();
       }
@@ -225,7 +228,7 @@
         ctx.fillStyle = palette.live;
         ctx.globalAlpha = 0.6 + pulse * 0.4;
         ctx.beginPath();
-        ctx.arc(x, y, 5, 0, 2 * Math.PI);
+        ctx.arc(x, y, chart.dotLarge, 0, 2 * Math.PI);
         ctx.fill();
         ctx.globalAlpha = 1;
       }
@@ -322,7 +325,7 @@
         ly += 10;
         ctx.fillStyle = palette.live;
         ctx.beginPath();
-        ctx.arc(8, ly + 3, 3, 0, 2 * Math.PI);
+        ctx.arc(8, ly + 3, chart.dotSmall, 0, 2 * Math.PI);
         ctx.fill();
         ctx.fillStyle = palette.textGhost;
         ctx.fillText('Live', 14, ly + 3);
@@ -336,7 +339,7 @@
       // Row 1: sat name (left) + max el (right)
       ctx.fillStyle = cssColor;
       ctx.beginPath();
-      ctx.arc(12, infoY + 4, 3.5, 0, 2 * Math.PI);
+      ctx.arc(12, infoY + 4, chart.dotSmall, 0, 2 * Math.PI);
       ctx.fill();
       ctx.fillStyle = palette.textMuted;
       ctx.textAlign = 'left';

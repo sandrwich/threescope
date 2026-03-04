@@ -8,13 +8,14 @@
   import { ICON_FILTER } from './shared/icons';
   import { palette } from './shared/theme';
   import { initHiDPICanvas } from './shared/canvas';
+  import { chart } from './shared/chart-metrics';
   import { FREQ_PRESETS } from '../data/freq-presets';
 
   const SIZE = 300;
   const CX = SIZE / 2;
   const CY = SIZE / 2;
   const R_MAX = (SIZE - 90) / 2;
-  const HANDLE_R = 10;
+  const HANDLE_R = chart.handle;
 
   const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
   const DIR_AZ = [0, 45, 90, 135, 180, 225, 270, 315];
@@ -87,7 +88,7 @@
   }
 
   // Azimuth handle position: just outside the ring
-  const AZ_HANDLE_R = R_MAX + HANDLE_R + 4;
+  const AZ_HANDLE_R = R_MAX + HANDLE_R + (chart.isTouch ? 6 : 4);
   function azHandleXY(az: number): { x: number; y: number } {
     const rad = az * Math.PI / 180;
     return { x: CX + AZ_HANDLE_R * Math.sin(rad), y: CY - AZ_HANDLE_R * Math.cos(rad) };
@@ -106,17 +107,18 @@
 
   function hitTest(mx: number, my: number): DragTarget | null {
     const azFromPt = azHandleXY(azFrom);
-    if (Math.hypot(mx - azFromPt.x, my - azFromPt.y) < HANDLE_R + 4) return 'azFrom';
+    const hh = chart.handleHit;
+    if (Math.hypot(mx - azFromPt.x, my - azFromPt.y) < hh) return 'azFrom';
     const azToPt = azHandleXY(azTo === 360 ? 0 : azTo);
-    if (Math.hypot(mx - azToPt.x, my - azToPt.y) < HANDLE_R + 4) return 'azTo';
+    if (Math.hypot(mx - azToPt.x, my - azToPt.y) < hh) return 'azTo';
     for (let i = 0; i < 8; i++) {
       const p = azElToXY(DIR_AZ[i], horizonMask[i]);
-      if (Math.hypot(mx - p.x, my - p.y) < HANDLE_R + 3) return `horizon${i}`;
+      if (Math.hypot(mx - p.x, my - p.y) < hh) return `horizon${i}`;
     }
     const minElPt = elHandleXY(minEl);
-    if (Math.hypot(mx - minElPt.x, my - minElPt.y) < HANDLE_R + 3) return 'minEl';
+    if (Math.hypot(mx - minElPt.x, my - minElPt.y) < hh) return 'minEl';
     const maxElPt = elHandleXY(maxEl);
-    if (Math.hypot(mx - maxElPt.x, my - maxElPt.y) < HANDLE_R + 3) return 'maxEl';
+    if (Math.hypot(mx - maxElPt.x, my - maxElPt.y) < hh) return 'maxEl';
     return null;
   }
 

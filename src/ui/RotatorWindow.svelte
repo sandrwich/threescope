@@ -10,6 +10,7 @@
   import { rotatorStore, PARK_PRESETS, type ParkPreset, type PassEndAction } from '../stores/rotator.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { satColorRgba } from '../constants';
+  import { chart, pointerHitRadius } from './shared/chart-metrics';
 
   function fmtCountdown(sec: number): string {
     if (sec <= 0) return '0:00';
@@ -247,7 +248,7 @@
     // Find nearest blip for hover
     const blips = uiStore.radarBlips;
     const count = uiStore.radarBlipCount;
-    let bestDist = e.pointerType === 'touch' ? 24 : 10;
+    let bestDist = pointerHitRadius(e);
     let bestIdx = -1;
     for (let i = 0; i < count; i++) {
       const off = i * 4;
@@ -465,7 +466,7 @@
         ctx.strokeStyle = palette.radarBlip;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(hx, hy, 5, 0, TWO_PI);
+        ctx.arc(hx, hy, chart.dotLarge, 0, TWO_PI);
         ctx.stroke();
       }
 
@@ -501,26 +502,26 @@
 
         if (isSelected) {
           ctx.beginPath();
-          ctx.arc(x, y, 7, 0, TWO_PI);
+          ctx.arc(x, y, chart.dotLarge + 2, 0, TWO_PI);
           ctx.fillStyle = crt.glowRing;
           ctx.fill();
           ctx.beginPath();
-          ctx.arc(x, y, 3.5, 0, TWO_PI);
+          ctx.arc(x, y, chart.dotSmall + 0.5, 0, TWO_PI);
           ctx.fillStyle = palette.radarBlip;
           ctx.fill();
         } else if (isHover) {
           ctx.beginPath();
-          ctx.arc(x, y, 3, 0, TWO_PI);
+          ctx.arc(x, y, chart.dotSmall, 0, TWO_PI);
           ctx.fillStyle = palette.radarBlip;
           ctx.fill();
         } else if (inBeam) {
           ctx.beginPath();
-          ctx.arc(x, y, 2.5, 0, TWO_PI);
+          ctx.arc(x, y, chart.dotSmall - 0.5, 0, TWO_PI);
           ctx.fillStyle = palette.beamHighlight;
           ctx.fill();
         } else {
           ctx.beginPath();
-          ctx.arc(x, y, 1.5, 0, TWO_PI);
+          ctx.arc(x, y, chart.dotSmall - 1.5, 0, TWO_PI);
           ctx.fillStyle = palette.radarBlipDim;
           ctx.fill();
         }
