@@ -16,6 +16,8 @@ export class RotctldDriver implements RotatorDriver {
   private _connected = false;
   private responseQueue: ((data: string) => void)[] = [];
   private messageBuffer = '';
+  private encoder = new TextEncoder();
+  private decoder = new TextDecoder();
   onDisconnect: (() => void) | null = null;
 
   get connected() { return this._connected; }
@@ -27,7 +29,8 @@ export class RotctldDriver implements RotatorDriver {
   async connect(options: RotatorConnectOptions): Promise<void> {
     const url = options.wsUrl ?? 'ws://localhost:4533';
     return new Promise<void>((resolve, reject) => {
-      const ws = new WebSocket(url);
+      const ws = new WebSocket(url, ['binary']);
+      ws.binaryType = 'arraybuffer';
       const timeout = setTimeout(() => {
         ws.close();
         reject(new Error('Connection timed out'));
@@ -57,7 +60,9 @@ export class RotctldDriver implements RotatorDriver {
       };
 
       ws.onmessage = (e) => {
-        this.messageBuffer += e.data;
+        this.messageBuffer += e.data instanceof ArrayBuffer
+          ? this.decoder.decode(e.data)
+          : e.data;
         this.drainResponses();
       };
     });
@@ -123,7 +128,7 @@ export class RotctldDriver implements RotatorDriver {
       };
 
       this.responseQueue.push(handler);
-      this.ws.send(cmd);
+      this.ws.send(this.encoder.encode(cmd));
     });
   }
 
