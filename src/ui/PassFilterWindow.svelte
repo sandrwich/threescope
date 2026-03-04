@@ -8,7 +8,7 @@
   import { ICON_FILTER } from './shared/icons';
   import { palette } from './shared/theme';
   import { initHiDPICanvas } from './shared/canvas';
-  import { chart } from './shared/chart-metrics';
+  import { chart } from './shared/touch-metrics';
   import { FREQ_PRESETS } from '../data/freq-presets';
 
   const SIZE = 300;

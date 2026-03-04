@@ -53,6 +53,9 @@ export class InputHandler {
   private _leftDownPos = new THREE.Vector2();
   private _leftDown = false;
 
+  // Touch pick-up mode: tap to pick up observer, tap to drop
+  private _observerPickedUp = false;
+
   // Orbit scrub drag
   private _isDraggingOrbit = false;
 
@@ -88,7 +91,7 @@ export class InputHandler {
   get mouseNDC(): THREE.Vector2 { return this._mouseNDC; }
   get isTouchActive(): boolean { return this._touchCount > 0 || ('ontouchstart' in window); }
   get touchCount(): number { return this._touchCount; }
-  get isDraggingObserver(): boolean { return this._isDraggingObserver; }
+  get isDraggingObserver(): boolean { return this._isDraggingObserver || this._observerPickedUp; }
   get isDraggingOrbit(): boolean { return this._isDraggingOrbit; }
   get isOverUI(): boolean { return this._pointerOverUI; }
 
@@ -426,7 +429,7 @@ export class InputHandler {
       this._lastTouchPos.set(touches[0].x, touches[0].y);
       this._touchStartPos.set(touches[0].x, touches[0].y);
       this._touchStartTime = performance.now();
-      this._touchDragChecked = false;
+      this._touchDragChecked = this._observerPickedUp; // skip drag detection while picked up
       this._mousePos.set(touches[0].x, touches[0].y);
       this._mouseNDC.set(
         (touches[0].x / window.innerWidth) * 2 - 1,
@@ -496,6 +499,7 @@ export class InputHandler {
       }
 
       if (this._isDraggingObserver) { this.cb.onObserverDrag(); return; }
+      if (this._observerPickedUp) { this.cb.onObserverDrag(); return; }
       if (this._isDraggingOrbit) { this.cb.onOrbitScrub(); return; }
 
       const vm = this.cb.getViewMode();
@@ -584,8 +588,15 @@ export class InputHandler {
               this.cb.onSkyClick(this._mouseNDC.x, this._mouseNDC.y);
             }
             this._lastLeftClickTime = now;
+          } else if (this._observerPickedUp) {
+            // Drop the observer at current position
+            this._observerPickedUp = false;
+            this.cb.onObserverDrag();
           } else if (this.cb.getOrreryMode()) {
             this.cb.onOrreryClick();
+          } else if (this.cb.tryStartObserverDrag()) {
+            // Tap on observer marker: pick it up
+            this._observerPickedUp = true;
           } else {
             this.cb.onSelect();
             // Double tap detection
@@ -619,6 +630,7 @@ export class InputHandler {
     this._lastPinchDist = 0;
     this._isDraggingObserver = false;
     this._isDraggingOrbit = false;
+    this._observerPickedUp = false;
     this._touchGesture = null;
   }
 }

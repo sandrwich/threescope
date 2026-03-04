@@ -15,7 +15,7 @@
   import { getTransmitters, type SatnogsTransmitter } from '../data/satnogs';
   import { formatFreqHz } from '../format';
   import { initHiDPICanvas } from './shared/canvas';
-  import { chart } from './shared/chart-metrics';
+  import { chart } from './shared/touch-metrics';
 
   const CANVAS_W = 380;
   const CANVAS_H = 200;

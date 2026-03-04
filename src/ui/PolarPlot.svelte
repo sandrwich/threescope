@@ -7,7 +7,7 @@
   import { SAT_COLORS, DEG2RAD, MOON_RADIUS_KM, satColorCss } from '../constants';
   import { palette } from './shared/theme';
   import { initHiDPICanvas } from './shared/canvas';
-  import { chart, pointerHitRadius } from './shared/chart-metrics';
+  import { chart, pointerHitRadius } from './shared/touch-metrics';
   import { moonPositionECI } from '../astro/moon-observer';
   import { sunDirectionECI } from '../astro/eclipse';
   import { getAzEl } from '../astro/az-el';

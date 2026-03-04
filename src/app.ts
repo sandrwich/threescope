@@ -48,6 +48,7 @@ import { moonPositionECI } from './astro/moon-observer';
 import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } from './astro/magnitude';
 import { loadElevation, getElevation, isElevationLoaded } from './astro/elevation';
 import { palette } from './ui/shared/theme';
+import { chart } from './ui/shared/touch-metrics';
 import { feedbackStore } from './stores/feedback.svelte';
 import { rotatorStore } from './stores/rotator.svelte';
 import { FeedbackEvent } from './feedback/types';
@@ -1058,10 +1059,14 @@ export class App {
     };
     uiStore.onSelectSatFromNearbyPass = uiStore.onSelectSatellite;
 
+    let observerPassDebounce: ReturnType<typeof setTimeout> | null = null;
     observerStore.onLocationChange = () => {
-      if (uiStore.passesVisible && uiStore.passesTab === 'selected') this.requestPasses();
-      if (uiStore.passesVisible && uiStore.passesTab === 'nearby') this.requestNearbyPasses();
       this.updateObserverMarker();
+      if (observerPassDebounce) clearTimeout(observerPassDebounce);
+      observerPassDebounce = setTimeout(() => {
+        if (uiStore.passesVisible && uiStore.passesTab === 'selected') this.requestPasses();
+        if (uiStore.passesVisible && uiStore.passesTab === 'nearby') this.requestNearbyPasses();
+      }, 500);
     };
     // Load elevation grid in background (skip in lite mode — getElevation() returns 0m)
     if (!this.liteMode) loadElevation();
@@ -1259,7 +1264,8 @@ export class App {
     if (!sp) return false;
     const dx = Math.abs(this.input.mousePos.x - sp.x);
     const dy = sp.y - this.input.mousePos.y; // positive = mouse above tip
-    return dx < 16 && dy > -8 && dy < 28;
+    const hr = chart.hitRadius;
+    return dx < hr && dy > -(hr * 0.5) && dy < (hr * 1.75);
   }
 
   private tryStartObserverDrag(): boolean {

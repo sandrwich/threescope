@@ -10,7 +10,7 @@
   import { rotatorStore, PARK_PRESETS, type ParkPreset, type PassEndAction } from '../stores/rotator.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { satColorRgba } from '../constants';
-  import { chart, pointerHitRadius } from './shared/chart-metrics';
+  import { chart, pointerHitRadius } from './shared/touch-metrics';
 
   function fmtCountdown(sec: number): string {
     if (sec <= 0) return '0:00';
