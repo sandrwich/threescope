@@ -1774,7 +1774,11 @@ export class App {
           }
 
           this.markerManager.update(gmstDeg, this.cfg.earthRotationOffset, this.camera3d, this.camera.distance);
+        } else {
+          this.markerManager.hide();
         }
+      } else {
+        this.markerManager.hide();
       }
 
       const activePlanet = this.orreryCtrl.currentActivePlanet;
