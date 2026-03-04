@@ -69,6 +69,8 @@ class UIStore {
 
   // Sky reticle (projected beam position for HUD overlay)
   skyReticle = $state<{ x: number; y: number; radius: number; visible: boolean }>({ x: 0, y: 0, radius: 0, visible: false });
+  // Sky rotator marker (projected rotator actual position for HUD overlay)
+  skyRotator = $state<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
 
   // Camera lock
   lockTarget = $state<string>('Earth');

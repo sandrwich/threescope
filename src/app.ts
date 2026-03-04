@@ -14,6 +14,7 @@ import { satColorGl } from './constants';
 import { FootprintRenderer, type FootprintEntry } from './scene/footprint-renderer';
 import { BeamConeRenderer } from './scene/beam-cone-renderer';
 import { SkyGridRenderer } from './scene/sky-grid-renderer';
+import { SkyHud } from './scene/sky-hud';
 import { MarkerManager, createDiamondTexture } from './scene/marker-manager';
 import { PostProcessing } from './scene/post-processing';
 import { getMinZoom, BODIES, PLANETS, type PlanetDef } from './bodies';
@@ -70,6 +71,7 @@ export class App {
   private footprintRenderer!: FootprintRenderer;
   private beamConeRenderer!: BeamConeRenderer;
   private skyGridRenderer!: SkyGridRenderer;
+  private skyHud!: SkyHud;
   private markerManager!: MarkerManager;
   private postProcessing!: PostProcessing;
   private atmosphere!: Atmosphere;
@@ -310,7 +312,7 @@ export class App {
       onSelect: () => this.handleClick(),
       onDoubleClick3D: () => this.handleDoubleClickLock(),
       onDoubleClick2D: () => { if (this.hitTestObserver()) { this.enterSkyView(); return; } if (!this.hoveredSat && this.selectedSats.size > 0) this.clearSelection(); this.activeLock = TargetLock.EARTH; },
-      onDoubleClickSky: () => this.handleDoubleClickSky(),
+      onDoubleClickSky: () => this.skyHud.handleDoubleClick(this.hoveredSat),
       onOrreryClick: () => this.orreryCtrl.handleClick(this.raycaster, this.input.mouseNDC),
       onToggleViewMode: () => {
         if (this.viewMode === ViewMode.VIEW_SKY) return;
@@ -320,8 +322,8 @@ export class App {
         }
       },
       onToggleSkyView: () => this.toggleSkyView(),
-      onSkyClick: (ndcX, ndcY) => this.handleSkyClick(ndcX, ndcY),
-      onSkyDrag: (dx, dy) => this.handleSkyDrag(dx, dy),
+      onSkyClick: (ndcX, ndcY) => this.skyHud.handleClick(ndcX, ndcY),
+      onSkyDrag: (dx, dy) => this.skyHud.handleDrag(dx, dy),
       onResize: () => {},
       tryStartObserverDrag: () => this.tryStartObserverDrag(),
       onObserverDrag: () => this.handleObserverDrag(),
@@ -467,6 +469,7 @@ export class App {
     this.footprintRenderer = new FootprintRenderer(this.scene3d);
     this.beamConeRenderer = new BeamConeRenderer(this.scene3d);
     this.skyGridRenderer = new SkyGridRenderer(this.scene3d, document.getElementById('svelte-ui')!);
+    this.skyHud = new SkyHud(this.camera3d, this.camera);
 
     // Markers
     const overlay = this.overlayEl = document.getElementById('svelte-ui')!;
@@ -716,71 +719,6 @@ export class App {
     if (this.viewMode === ViewMode.VIEW_SKY) this.exitSkyView();
     else this.enterSkyView();
     feedbackStore.fire(FeedbackEvent.ViewModeSwitch);
-  }
-
-  /** Double-click/tap in sky view — beam-lock to hovered satellite. */
-  private handleDoubleClickSky() {
-    if (this.hoveredSat) {
-      if (beamStore.locked && beamStore.lockedNoradId === this.hoveredSat.noradId) {
-        beamStore.unlock();
-        feedbackStore.fire(FeedbackEvent.BeamUnlock);
-      } else {
-        beamStore.lockToSatellite(this.hoveredSat.noradId, this.hoveredSat.name);
-        feedbackStore.fire(FeedbackEvent.BeamLock);
-      }
-    }
-  }
-
-  /** Convert NDC click coords to az/el in the observer's ENU frame, then aim beam. */
-  private handleSkyClick(ndcX: number, ndcY: number) {
-    if (!this.camera.isSkyView) return;
-    if (beamStore.locked) return; // locked beam is controlled by tracker only
-    // Unproject click to world-space ray direction
-    this.tmpVec3.set(ndcX, ndcY, 0.5).unproject(this.camera3d);
-    this.tmpVec3.sub(this.camera3d.position).normalize();
-    // Convert to local ENU: dot with east, north, up
-    const e = this.tmpVec3.dot(this.camera.skyEast);
-    const n = this.tmpVec3.dot(this.camera.skyNorth);
-    const u = this.tmpVec3.dot(this.camera.skyUp);
-    const el = Math.atan2(u, Math.sqrt(e * e + n * n)) * RAD2DEG;
-    if (el < 0) return; // below horizon
-    let az = Math.atan2(e, n) * RAD2DEG;
-    if (az < 0) az += 360;
-    beamStore.setAim(az, el);
-  }
-
-  /** Left-drag in sky view: aim beam at current pointer position. */
-  private handleSkyDrag(ndcX: number, ndcY: number) {
-    this.handleSkyClick(ndcX, ndcY);
-    feedbackStore.fire(FeedbackEvent.BeamAimDrag);
-  }
-
-  /** Project beam aim direction to screen and update reticle HUD data. */
-  private updateSkyReticle() {
-    const up = this.camera.skyUp;
-    const north = this.camera.skyNorth;
-    const east = this.camera.skyEast;
-    const azRad = beamStore.aimAz * DEG2RAD;
-    const elRad = beamStore.aimEl * DEG2RAD;
-    const cosEl = Math.cos(elRad);
-    // Beam direction in world space
-    this.tmpVec3.set(0, 0, 0)
-      .addScaledVector(north, cosEl * Math.cos(azRad))
-      .addScaledVector(east, cosEl * Math.sin(azRad))
-      .addScaledVector(up, Math.sin(elRad));
-    // Project a point along beam direction
-    const camPos = this.camera3d.position;
-    this.tmpVec3.multiplyScalar(100).add(camPos);
-    this.tmpVec3.project(this.camera3d);
-    if (this.tmpVec3.z > 1) {
-      uiStore.skyReticle = { x: 0, y: 0, radius: 0, visible: false };
-      return;
-    }
-    const sx = (this.tmpVec3.x * 0.5 + 0.5) * window.innerWidth;
-    const sy = (-this.tmpVec3.y * 0.5 + 0.5) * window.innerHeight;
-    // Beam circle radius in pixels: (beamWidth / FOV) * viewportHeight / 2
-    const radius = (beamStore.beamWidth / this.camera.skyFov) * window.innerHeight / 2;
-    uiStore.skyReticle = { x: sx, y: sy, radius, visible: true };
   }
 
   /** Wire Svelte stores <-> App communication */
@@ -1529,15 +1467,12 @@ export class App {
     this.camera.updateFrame(dt, earthRotRad, isOrreryOrPlanet);
     this.camera3d.updateMatrixWorld();
 
-    // Push camera heading to UI store for radar alignment
-    if (isSkyView) uiStore.skyHeading = this.camera.angleX;
-
-    // Project sky grid labels + beam reticle after camera update
+    // Project sky grid labels + HUD markers after camera update
     if (isSkyView) {
       this.skyGridRenderer.projectLabels(this.camera3d);
-      this.updateSkyReticle();
-    } else if (uiStore.skyReticle.visible) {
-      uiStore.skyReticle = { x: 0, y: 0, radius: 0, visible: false };
+      this.skyHud.updateFrame();
+    } else {
+      this.skyHud.clearHud();
     }
 
     // Hover detection — only recompute when pointer moved

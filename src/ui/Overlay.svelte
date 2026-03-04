@@ -25,6 +25,7 @@
   import RotatorWindow from './RotatorWindow.svelte';
   import FeedbackWindow from './FeedbackWindow.svelte';
   import SkyReticle from './SkyReticle.svelte';
+  import SkyRotator from './SkyRotator.svelte';
 
   onMount(() => {
     uiStore.updateMobileState();
@@ -64,6 +65,7 @@
   <RotatorWindow />
   <FeedbackWindow />
   <SkyReticle />
+  <SkyRotator />
 </div>
 
 <style>
