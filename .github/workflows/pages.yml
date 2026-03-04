@@ -27,8 +27,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: '@satvisorcom'
 
       - run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm run build
 
       - uses: actions/upload-pages-artifact@v3

@@ -54,7 +54,10 @@ A browser-based satellite tracker built with Three.js and Svelte. Runs as a stat
 
 ## Development
 
+Some dependencies are published to GitHub Packages under the `@satvisorcom` scope. The `.npmrc` in the repo configures the registry, but you need a GitHub personal access token with `read:packages` scope:
+
 ```bash
+echo "//npm.pkg.github.com/:_authToken=YOUR_TOKEN" >> ~/.npmrc
 npm install
 npm run dev
 ```
