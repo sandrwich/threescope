@@ -42,6 +42,7 @@
       cursor: pointer; opacity: 0; transition: opacity 0.5s;
     }
     #loading-screen .mode-hint.visible { opacity: 1; }
+    #loading-screen .mode-hint .hint-link { text-decoration: underline; text-underline-offset: 3px; }
     #loading-screen .mode-hint:hover { text-decoration: underline; text-underline-offset: 3px; }
     @media (max-width: 600px) {
       #loading-screen .bar-outer { width: 80%; max-width: 280px; height: 22px; }
@@ -108,20 +109,20 @@
         if (conn && conn.effectiveType && conn.effectiveType !== '4g') slow = true;
         if (conn && typeof conn.downlink === 'number' && conn.downlink < 2) slow = true;
 
-        var showHint = function(msg) {
-          hint.textContent = msg;
+        var showHint = function(prefix, suffix) {
+          hint.innerHTML = prefix + '<span class="hint-link">lite version</span>' + suffix;
           hint.classList.add('visible');
           hint.onclick = switchToLite;
         };
 
         if (slow) {
-          showHint('Slow connection detected — switch to lite version? (~15x smaller)');
+          showHint('Slow connection detected \u2014 switch to ', '? (~15x smaller)');
         } else {
           setTimeout(function() {
             var bar = document.getElementById('loading-bar');
             var pct = bar ? parseFloat(bar.style.width) : 0;
             if (!(pct > 40)) {
-              showHint('Loading slowly? Switch to lite version (~15x smaller)');
+              showHint('Loading slowly? Switch to ', ' (~15x smaller)');
             }
           }, 8000);
         }
