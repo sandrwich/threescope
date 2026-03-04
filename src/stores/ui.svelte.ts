@@ -202,6 +202,9 @@ class UIStore {
   satTogglesVisible = $state(true);
   nightToggleVisible = $state(true);
 
+  // Chrome visibility (backtick toggle — hides all fixed HUD elements)
+  chromeVisible = $state(true);
+
   // Mobile
   isMobile = $state(false);
   activeMobileSheet = $state<string | null>(null);

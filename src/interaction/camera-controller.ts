@@ -89,6 +89,19 @@ export class CameraController {
   get skyNorth(): THREE.Vector3 { return this._skyNorth; }
   get skyEast(): THREE.Vector3 { return this._skyEast; }
 
+  // ====================== Reset ======================
+
+  /** Reset camera to default 3D orbital view (animated lerp). */
+  resetView(): void {
+    this._targetCamDistance = 35.0;
+    this._targetCamAngleX = 0.785;
+    this._targetCamAngleY = 0.5;
+    this._targetTarget3d.set(0, 0, 0);
+    this._targetCam2dZoom = 1.0;
+    this._targetCam2dTarget.set(0, 0);
+    this.stopInertia();
+  }
+
   // ====================== Setters ======================
 
   /** Set desired camera distance (lerps toward it). */

@@ -62,6 +62,7 @@ export class InputHandler {
   // Hover dirty flag: set when mouseNDC changes, consumed by app to skip redundant raycasts
   private _hoverDirty = false;
 
+
   // UI overlay tracking
   private _pointerOverUI = false;
   private _canvas!: HTMLCanvasElement;
@@ -300,12 +301,31 @@ export class InputHandler {
         case '/':
           timeStore.resetSpeed();
           break;
+        case 'Home':
+          this.camera.resetView();
+          this.cb.clearTargetLock();
+          break;
         case 'm':
         case 'M':
           this.cb.onToggleViewMode();
           break;
+        case 'c':
+        case 'C':
+          uiStore.setToggle('showClouds', !uiStore.showClouds);
+          break;
+        case 'n':
+        case 'N':
+          uiStore.setToggle('showNightLights', !uiStore.showNightLights);
+          break;
+        case 'l':
+        case 'L':
+          uiStore.setToggle('showOrbits', !uiStore.showOrbits);
+          break;
         case '?':
           uiStore.infoModalOpen = true;
+          break;
+        case '`':
+          uiStore.chromeVisible = !uiStore.chromeVisible;
           break;
         case 'p':
         case 'P':
@@ -329,6 +349,7 @@ export class InputHandler {
           break;
       }
     });
+
 
     // Prevent middle-click auto-scroll
     canvas.addEventListener('mousedown', (e) => {

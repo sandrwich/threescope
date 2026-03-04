@@ -1,7 +1,7 @@
 <script lang="ts">
   import DraggableWindow from './shared/DraggableWindow.svelte';
   import MobileSheet from './shared/MobileSheet.svelte';
-  import { timeStore } from '../stores/time.svelte';
+  import { timeStore, scrubMultiplierFromOffset } from '../stores/time.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { epochToUnix, unixToEpoch } from '../astro/epoch';
   import { ICON_TIME } from './shared/icons';
@@ -107,22 +107,7 @@
   const pad = (n: number, w = 2) => String(n).padStart(w, '0');
 
   // ─── Time scrub strip ───────────────────────────────────────
-  let scrubbing = $state(false);
-  let scrubOffset = $state(0); // -1 to 1
   let scrubStripEl: HTMLDivElement | undefined = $state();
-  let preScrubMultiplier = 1;
-  let preScrubPaused = false;
-
-  function scrubMultiplierFromOffset(offset: number): number {
-    // Dead zone near center (< 5% of half-width)
-    const abs = Math.abs(offset);
-    if (abs < 0.05) return 0;
-    // Exponential: 1x at edge of dead zone → ~131000x at edge
-    // Map 0.05..1.0 → 0..1, then 2^(t*17)
-    const t = (abs - 0.05) / 0.95;
-    const mult = Math.pow(2, t * 17);
-    return offset < 0 ? -mult : mult;
-  }
 
   function scrubSpeedLabel(offset: number): string {
     const mult = scrubMultiplierFromOffset(offset);
@@ -134,42 +119,28 @@
   function onScrubStart(e: PointerEvent) {
     if (!scrubStripEl) return;
     e.preventDefault();
-    scrubbing = true;
-    preScrubMultiplier = timeStore.multiplier;
-    preScrubPaused = timeStore.paused;
-
-    updateScrubOffset(e.clientX);
+    timeStore.startMouseScrub();
+    updateScrubFromPointer(e.clientX);
     window.addEventListener('pointermove', onScrubMove);
     window.addEventListener('pointerup', onScrubEnd);
   }
 
   function onScrubMove(e: PointerEvent) {
     e.preventDefault();
-    updateScrubOffset(e.clientX);
+    updateScrubFromPointer(e.clientX);
   }
 
-  function updateScrubOffset(clientX: number) {
+  function updateScrubFromPointer(clientX: number) {
     if (!scrubStripEl) return;
     const rect = scrubStripEl.getBoundingClientRect();
     const center = rect.left + rect.width / 2;
     const halfWidth = rect.width / 2;
-    scrubOffset = Math.max(-1, Math.min(1, (clientX - center) / halfWidth));
-
-    const mult = scrubMultiplierFromOffset(scrubOffset);
-    if (mult === 0) {
-      timeStore.multiplier = preScrubMultiplier;
-      timeStore.paused = true;
-    } else {
-      timeStore.multiplier = mult;
-      timeStore.paused = false;
-    }
+    const offset = Math.max(-1, Math.min(1, (clientX - center) / halfWidth));
+    timeStore.updateMouseScrub(offset);
   }
 
   function onScrubEnd() {
-    scrubbing = false;
-    scrubOffset = 0;
-    timeStore.multiplier = preScrubMultiplier;
-    timeStore.paused = preScrubPaused;
+    timeStore.stopMouseScrub();
     window.removeEventListener('pointermove', onScrubMove);
     window.removeEventListener('pointerup', onScrubEnd);
   }
@@ -260,18 +231,18 @@
   <div class="scrub-strip" bind:this={scrubStripEl} onpointerdown={onScrubStart} style="touch-action:none">
     <div class="scrub-track">
       <div class="scrub-center-line"></div>
-      {#if scrubbing}
+      {#if timeStore.scrubActive}
         <div
           class="scrub-fill"
-          class:reverse={scrubOffset < 0}
-          style="left:{scrubOffset < 0 ? (50 + scrubOffset * 50) : 50}%; width:{Math.abs(scrubOffset) * 50}%"
+          class:reverse={timeStore.scrubOffset < 0}
+          style="left:{timeStore.scrubOffset < 0 ? (50 + timeStore.scrubOffset * 50) : 50}%; width:{Math.abs(timeStore.scrubOffset) * 50}%"
         ></div>
       {/if}
     </div>
     <div class="scrub-labels">
       <span class="scrub-hint">&#9664; REW</span>
-      {#if scrubbing}
-        <span class="scrub-speed">{scrubSpeedLabel(scrubOffset)}</span>
+      {#if timeStore.scrubActive}
+        <span class="scrub-speed">{scrubSpeedLabel(timeStore.scrubOffset)}</span>
       {:else}
         <span class="scrub-speed-idle">drag to scrub</span>
       {/if}

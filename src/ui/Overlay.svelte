@@ -34,15 +34,17 @@
 </script>
 
 <div id="ui-overlay">
-  <TopPanel />
-  <StatsPanel />
-  {#if uiStore.isMobile}
-    <MobileNav />
-  {:else}
-    <TlePicker />
-    <BottomPanel />
+  {#if uiStore.chromeVisible}
+    <TopPanel />
+    <StatsPanel />
+    {#if uiStore.isMobile}
+      <MobileNav />
+    {:else}
+      <TlePicker />
+      <BottomPanel />
+    {/if}
+    <SatInfo />
   {/if}
-  <SatInfo />
   <SceneLabels />
   <InfoModal />
   <SettingsWindow />

@@ -3,18 +3,30 @@ import { getCurrentRealTimeEpoch, epochToDatetimeStr, epochToUnix, unixToEpoch }
 /**
  * Step through time multiplier values.
  * Progression: ... -4, -2, -1, -0.5, -0.25, 0, 0.25, 0.5, 1, 2, 4, ...
+ * Capped at ±131072x (~1.5 days/sec).
  */
+export const MAX_MULTIPLIER = 131072;
+
+/** Convert scrub offset (-1..+1) to time multiplier. Shared by mouse drag and keyboard hold. */
+export function scrubMultiplierFromOffset(offset: number): number {
+  const abs = Math.abs(offset);
+  if (abs < 0.05) return 0; // dead zone near center
+  const t = (abs - 0.05) / 0.95; // normalize 0.05..1.0 → 0..1
+  const mult = Math.pow(2, t * 17); // 2^17 = 131072
+  return offset < 0 ? -mult : mult;
+}
+
 export function stepTimeMultiplier(current: number, increase: boolean): number {
   if (increase) {
     if (current === 0) return 0.25;
-    if (current >= 0.25) return current * 2;
+    if (current >= 0.25) return current >= MAX_MULTIPLIER ? current : current * 2;
     if (current <= -0.25) {
       if (current === -0.25) return 0;
       return current / 2;
     }
   } else {
     if (current === 0) return -0.25;
-    if (current <= -0.25) return current * 2;
+    if (current <= -0.25) return current <= -MAX_MULTIPLIER ? current : current * 2;
     if (current >= 0.25) {
       if (current === 0.25) return 0;
       return current / 2;
@@ -27,7 +39,8 @@ function formatSpeed(m: number): string {
   if (m === 0) return '0x';
   const abs = Math.abs(m);
   const sign = m < 0 ? '-' : '';
-  if (abs >= 1) return `${sign}${Math.round(abs)}x`;
+  if (abs >= 10) return `${sign}${Math.round(abs)}x`;
+  if (abs >= 1) return `${sign}${abs.toFixed(1).replace(/\.0$/, '')}x`;
   return `${sign}${abs}x`;
 }
 
@@ -69,8 +82,11 @@ class TimeStore {
   /** Called by App every frame in normal (non-warp) mode */
   syncFromEngine(epoch: number, multiplier: number, paused: boolean) {
     this.epoch = epoch;
-    this.multiplier = multiplier;
-    this.paused = paused;
+    // During scrub, the store drives multiplier/paused — don't overwrite
+    if (!this.scrubActive) {
+      this.multiplier = multiplier;
+      this.paused = paused;
+    }
 
     const now = performance.now();
     if (now - this.lastDisplayUpdate > 250) {
@@ -155,6 +171,55 @@ class TimeStore {
 
     // Duration scales with magnitude: ~1.2s for small jumps, ~3s for large ones
     this.warpDuration = Math.min(3.0, Math.max(1.2, 0.5 + 0.6 * Math.log10(absDays + 1)));
+  }
+
+  // ── Scrub (shared by mouse drag and keyboard hold) ──
+
+  scrubActive = $state(false);
+  scrubOffset = $state(0); // -1 to +1
+  private _scrubPrevMultiplier = 1;
+  private _scrubPrevPaused = false;
+
+  private _applyScrubOffset(offset: number) {
+    this.scrubOffset = offset;
+    const mult = scrubMultiplierFromOffset(offset);
+    if (mult === 0) {
+      this.multiplier = this._scrubPrevMultiplier;
+      this.paused = true;
+    } else {
+      this.multiplier = mult;
+      this.paused = false;
+    }
+    this.displaySpeed = formatSpeed(this.multiplier);
+  }
+
+  private _beginScrub() {
+    if (this.warping) this.cancelWarp();
+    this._scrubPrevMultiplier = this.multiplier;
+    this._scrubPrevPaused = this.paused;
+    this.scrubActive = true;
+  }
+
+  private _endScrub() {
+    this.multiplier = this._scrubPrevMultiplier;
+    this.paused = this._scrubPrevPaused;
+    this.scrubOffset = 0;
+    this.scrubActive = false;
+  }
+
+  /** Mouse scrub: called by TimeWindow on pointerdown. */
+  startMouseScrub() {
+    this._beginScrub();
+  }
+
+  /** Mouse scrub: called by TimeWindow on pointermove with computed offset. */
+  updateMouseScrub(offset: number) {
+    this._applyScrubOffset(offset);
+  }
+
+  /** Mouse scrub: called by TimeWindow on pointerup. */
+  stopMouseScrub() {
+    this._endScrub();
   }
 
   togglePause() {
