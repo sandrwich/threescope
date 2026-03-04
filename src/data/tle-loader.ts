@@ -321,6 +321,7 @@ function evictStaleTLECaches(keepGroup: string) {
  */
 export function evictExpiredTLECaches() {
   if (!CACHE_EVICT_AGE_MS) return;
+  if (!navigator.onLine) return; // don't evict if we can't refetch
   const now = Date.now();
   const toRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {

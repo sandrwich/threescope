@@ -83,7 +83,7 @@ Satvisor can run fully self-contained with no external internet access. All exte
 | `VITE_CELESTRAK_BASE` | `https://celestrak.org` | Base URL for CelesTrak direct TLE fallback |
 | `VITE_SATNOGS_BASE` | `https://db.satnogs.org` | Base URL for SatNOGS satellite images and pages |
 | `VITE_TLE_CACHE_MAX_AGE_H` | `1` | Hours before cached TLE data is considered stale and refetched |
-| `VITE_TLE_CACHE_EVICT_AGE_H` | `24` | Hours after which TLE caches are deleted on startup. Set `0` to disable (keeps TLE data indefinitely — useful for offline deployments) |
+| `VITE_TLE_CACHE_EVICT_AGE_H` | `24` | Hours after which TLE caches are deleted on startup. Skipped when offline. Set `0` to disable (keeps TLE data indefinitely — useful for offline deployments) |
 | `VITE_FEEDBACK_TOYS` | `true` | Enable Bluetooth toy feedback integration. Set `false` to remove the feature entirely (hides UI, prevents WASM load) |
 
 ### Air-Gapped / Offline Deployment
