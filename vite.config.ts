@@ -67,7 +67,7 @@ export default defineConfig({
       manifest: {
         name: 'Satvisor',
         short_name: 'Satvisor',
-        description: 'Real-time 3D/2D satellite tracker with pass predictions, orbit visualization, and Doppler analysis. Works on desktop and mobile.',
+        description: '3D satellite tracker with pass predictions, antenna rotator control, sky view, and Doppler analysis. Free, open source, runs in your browser.',
         theme_color: '#101010',
         background_color: '#101010',
         display: 'standalone',

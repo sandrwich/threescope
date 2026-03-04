@@ -10,47 +10,67 @@ A browser-based satellite tracker built with Three.js and Svelte. Runs as a stat
 
 ## Features
 
+### Views and Rendering
+
+- **3D globe** — atmosphere glow, cloud layer, night lights, bump mapping, curvature ambient occlusion, vertex displacement relief
+- **2D map** — equirectangular projection with country borders and lat/lon grid overlay
+- **Sky view** — first-person observer POV with az/el grid, cardinal labels, beam reticle, click-to-aim
+- **Solar system orrery** — Sun, Moon, and all 8 planets with textures, bump maps, and displacement mapping
+- **Graphics presets** — Standard and RTX, with per-setting control (bloom, sphere detail, orbit segments, surface relief)
+- **Texture quality** — switchable Full and Lite modes, slow-connection auto-detection on loading screen
+
+### Antenna Rotator
+
+- **Hardware control** — Web Serial (GS-232, EasyComm II) and WebSocket (rotctld/Hamlib) drivers
+- **Auto-tracking** — slews rotator to follow locked satellite with angular velocity monitoring and slew warning
+- **Radar scope** — CRT-style polar display with phosphor persistence, satellite blips, draggable beam reticle, sky path overlay
+- **Pass-end actions** — park, slew to next AOS with countdown, or idle
+- **Status bar** — live az/el, angular velocity, and state display in bottom panel when connected
+
 ### Satellite Tracking
 
 - **Real-time SGP4 propagation** — orbit trails, ground tracks, footprints, periapsis/apoapsis markers
-- **Multi-source TLE data** — CelesTrak categories, custom URLs, pasted TLE files, per-source toggle, caching with staleness warnings
+- **Multi-source TLE data** — 60+ CelesTrak categories, custom URLs, file upload, pasted TLE/OMM, per-source toggle, caching with staleness warnings
 - **SatNOGS database** — browse satellites with metadata, transmitter lists, frequency and status filters, satellite images
-- **Selection** — search by name or NORAD ID, multi/single select, per-satellite visibility toggle
+- **Selection** — search by name or NORAD ID, multi/single select, per-satellite visibility toggle, spotlight mode
+- **Sprite atlas** — custom SVG satellite icons with Earth-pointing rotation and magnitude-based brightness
 
 ### Pass Prediction
 
-- **Pass predictor** — Web Worker background computation, day-grouped sortable pass table with eclipse and magnitude indicators
-- **Polar plot** — sky track with eclipse coloring, AOS/LOS markers, live position dot, time scrubbing
-- **Pass filters** — interactive polar plot editor with draggable elevation/azimuth handles, horizon mask, frequency range, visibility mode, minimum duration
-- **Doppler shift** — real-time Doppler curve with SatNOGS transmitter prefill, hover readout, CSV export
-- **Visual magnitude** — phase-corrected brightness estimation with atmospheric extinction
+- **Pass predictor** — Web Worker background computation, day-grouped pass table with eclipse and magnitude indicators, live active-pass highlighting
+- **Polar plot** — sky track with eclipse coloring, AOS/TCA/LOS markers, live position dot, time scrubbing, moon/sun position
+- **Pass filters** — interactive polar plot editor with draggable elevation/azimuth handles, 8-directional horizon mask, frequency range, visibility mode, minimum duration
+- **Doppler shift** — Doppler curve with SatNOGS transmitter prefill, hover readout, range rate, CSV export
+- **Visual magnitude** — phase-corrected brightness estimation with atmospheric extinction and standard magnitude catalog
 
-### Views and Rendering
+### Observer
 
-- **3D globe** — atmosphere glow, cloud layer, night lights, bump mapping, ambient occlusion, surface relief
-- **2D map** — equirectangular projection with country borders and grid overlay
-- **Solar system orrery** — Sun, Moon, and all 8 planets with textures, bump maps, and displacement mapping
-- **Graphics presets** — Standard and RTX, with per-setting control (bloom, sphere detail, orbit segments, surface relief)
+- **Location** — coordinates with auto-altitude from elevation data, browser geolocation, draggable marker
+- **Sky data** — sun elevation with twilight classification, moon elevation and illumination, observation window timing
+- **Beam / antenna** — configurable beam width, azimuth/elevation aiming, satellite lock with auto-tracking, 3D cone visualization
 
 ### Simulation
 
 - **Orbit modes** — analytical (Keplerian with optional J2 precession and atmospheric drag) or full SGP4/SDP4
-- **Time control** — pause, speed up/slow down, warp to specific times, epoch input
-
-### Observer
-
-- **Location** — coordinates with auto-altitude from elevation data, browser geolocation
-- **Sky data** — sun elevation with twilight classification, moon elevation and illumination, observation window timing
+- **Time control** — pause, speed up/slow down (0.25x–131072x), warp to specific times, per-field editing, time scrub strip, epoch input
 
 ### Theming
 
-- **12 built-in themes** — including Everforest, Gruvbox, Solarized, Nord, Tokyo Night, Dracula, Catppuccin
-- **Theme editor** — live color editing, clone, import/export as JSON
+- **12 built-in themes** — Dark, High Contrast, Light, Lavender, TLEscope, Solarized, Gruvbox, Nord, Catppuccin, Everforest, Tokyo Night, Dracula
+- **Theme editor** — live color editing with 50+ variables, clone, import/export as JSON
+
+### Feedback
+
+- **Audio** — Web Audio API synthesis (clicks, tones, sweeps, blips) for UI interactions and tracking events
+- **Haptic** — vibration patterns on supported devices
+- **BLE toys** — embedded WASM integration for Bluetooth vibration devices, no external app needed
 
 ### General
 
-- **Command palette** — `Ctrl+K` for satellite search, epoch jump, view toggles, planet navigation
-- **PWA** — installable, offline-capable
+- **Command palette** — `Ctrl+K` for satellite search, epoch jump, view toggles, planet navigation, window toggles
+- **Map markers** — observer location, launch sites (Cape Canaveral, Vandenberg, Kourou, Baikonur, and more), per-group visibility
+- **Mobile** — responsive bottom navigation, slide-up sheets, touch-optimized controls, pinch zoom
+- **PWA** — installable, offline-capable, service worker with smart caching
 
 ## Development
 
