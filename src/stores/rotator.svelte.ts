@@ -63,6 +63,8 @@ class RotatorStore {
   private _prevTime: number | null = null;
   private _velocityBuf: number[] = [];
   private _wasTracking = false;
+  private _pollFailCount = 0;
+  private _cmdFailCount = 0;
 
   async connect(): Promise<void> {
     if (this.status === 'connected' || this.status === 'connecting') return;
@@ -143,6 +145,8 @@ class RotatorStore {
     this._prevTime = null;
     this._velocityBuf.length = 0;
     this._wasTracking = false;
+    this._pollFailCount = 0;
+    this._cmdFailCount = 0;
     this.nextAosEpoch = 0;
     this.nextAosSatName = '';
   }
@@ -154,7 +158,7 @@ class RotatorStore {
     try {
       await this.driver.setPosition(az, el);
     } catch (e: any) {
-      this.error = `Command failed: ${e?.message}`;
+      this.error = `Command failed: ${e?.message ?? 'unknown error'}`;
     }
   }
 
@@ -165,7 +169,9 @@ class RotatorStore {
     this.targetEl = null;
     try {
       await this.driver.stop();
-    } catch {}
+    } catch (e: any) {
+      this.error = `Stop failed: ${e?.message ?? 'unknown error'}`;
+    }
   }
 
   async park(): Promise<void> {
@@ -235,6 +241,20 @@ class RotatorStore {
       if (!this.driver?.connected) return;
       try {
         const pos = await this.driver.getPosition();
+        if (pos === null) {
+          // Keep last known position, count consecutive failures
+          this._pollFailCount++;
+          if (this._pollFailCount >= 5) {
+            this.error = 'Position readback lost';
+          }
+          return;
+        }
+        // Decrement toward 0; clear error once recovered (avoids flicker on noisy links)
+        if (this._pollFailCount > 0) {
+          this._pollFailCount = Math.max(0, this._pollFailCount - 2);
+          if (this._pollFailCount === 0 && this.error === 'Position readback lost') this.error = null;
+        }
+
         this.actualAz = pos.az;
         this.actualEl = pos.el;
 
@@ -300,7 +320,12 @@ class RotatorStore {
             this.targetEl = null;
           }
         }
-      } catch {}
+      } catch {
+        this._pollFailCount++;
+        if (this._pollFailCount >= 5) {
+          this.error = 'Position readback lost';
+        }
+      }
     }, this.updateIntervalMs);
 
     // Send tracking commands at the update interval
@@ -309,7 +334,16 @@ class RotatorStore {
       if (this.targetAz === null || this.targetEl === null) return;
       try {
         await this.driver.setPosition(this.targetAz, this.targetEl);
-      } catch {}
+        this._cmdFailCount = 0;
+        if (this.error?.startsWith('Command failed')) this.error = null;
+      } catch (e: any) {
+        this._cmdFailCount++;
+        this.error = `Command failed: ${e?.message ?? 'unknown error'}`;
+        if (this._cmdFailCount >= 3) {
+          this.autoTrack = false;
+          this.error = 'Tracking stopped: repeated command errors';
+        }
+      }
     }, this.updateIntervalMs);
   }
 
@@ -390,6 +424,12 @@ class RotatorStore {
 
   setAutoTrack(value: boolean): void {
     this.autoTrack = value;
+    if (value) {
+      this._cmdFailCount = 0;
+      if (this.error?.startsWith('Tracking stopped') || this.error?.startsWith('Command failed')) {
+        this.error = null;
+      }
+    }
   }
 
   setPassEndAction(action: PassEndAction): void {

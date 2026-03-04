@@ -40,7 +40,7 @@ export class GS232Driver implements RotatorDriver {
     await this.transport.sendOnly(`W${azStr} ${elStr}\r`);
   }
 
-  async getPosition(): Promise<RotatorPosition> {
+  async getPosition(): Promise<RotatorPosition | null> {
     const response = await this.transport.sendCommand('C2\r');
     return parseGS232Response(response);
   }
@@ -51,7 +51,7 @@ export class GS232Driver implements RotatorDriver {
 }
 
 /** Parse GS-232 position response — handles both +AAAA+EEEE and AZ=xxx EL=xxx formats. */
-function parseGS232Response(response: string): RotatorPosition {
+function parseGS232Response(response: string): RotatorPosition | null {
   // Format 1: +0135+045 or +0135.0+045.0
   const numMatch = response.match(/\+(\d+\.?\d*)\+(\d+\.?\d*)/);
   if (numMatch) {
@@ -64,5 +64,5 @@ function parseGS232Response(response: string): RotatorPosition {
     return { az: parseFloat(verboseMatch[1]), el: parseFloat(verboseMatch[2]) };
   }
 
-  return { az: 0, el: 0 };
+  return null;
 }

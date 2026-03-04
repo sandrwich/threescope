@@ -23,7 +23,7 @@ export interface RotatorDriver {
   connect(options: RotatorConnectOptions): Promise<void>;
   disconnect(): Promise<void>;
   setPosition(az: number, el: number): Promise<void>;
-  getPosition(): Promise<RotatorPosition>;
+  getPosition(): Promise<RotatorPosition | null>;
   stop(): Promise<void>;
   onDisconnect: (() => void) | null;
 }

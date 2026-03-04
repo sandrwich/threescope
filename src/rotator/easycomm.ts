@@ -36,7 +36,7 @@ export class EasyCommDriver implements RotatorDriver {
     await this.transport.sendOnly(`AZ${azVal} EL${elVal}\r`);
   }
 
-  async getPosition(): Promise<RotatorPosition> {
+  async getPosition(): Promise<RotatorPosition | null> {
     const response = await this.transport.sendCommand('AZ EL\r');
     return parseEasyCommResponse(response);
   }
@@ -47,10 +47,10 @@ export class EasyCommDriver implements RotatorDriver {
 }
 
 /** Parse EasyComm position response: AZ135.0 EL45.0 */
-function parseEasyCommResponse(response: string): RotatorPosition {
+function parseEasyCommResponse(response: string): RotatorPosition | null {
   const match = response.match(/AZ\s*(\d+\.?\d*)\s*EL\s*(\d+\.?\d*)/i);
   if (match) {
     return { az: parseFloat(match[1]), el: parseFloat(match[2]) };
   }
-  return { az: 0, el: 0 };
+  return null;
 }

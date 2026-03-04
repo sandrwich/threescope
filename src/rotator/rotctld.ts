@@ -74,25 +74,38 @@ export class RotctldDriver implements RotatorDriver {
   }
 
   async setPosition(az: number, el: number): Promise<void> {
-    await this.sendCommand(`P ${az.toFixed(1)} ${el.toFixed(1)}\n`);
+    const response = await this.sendCommand(`P ${az.toFixed(1)} ${el.toFixed(1)}\n`);
+    checkRprt(response);
   }
 
-  async getPosition(): Promise<RotatorPosition> {
-    const response = await this.sendCommand('p\n');
+  async getPosition(): Promise<RotatorPosition | null> {
+    let response: string;
+    try {
+      response = await this.sendCommand('p\n');
+    } catch {
+      return null; // timeout
+    }
+    if (!response) return null;
+    // Check for error response
+    if (response.includes('RPRT -')) return null;
     // rotctld returns two lines: azimuth\nelevation
     const lines = response.split('\n').map(l => l.trim()).filter(Boolean);
     if (lines.length >= 2) {
-      return { az: parseFloat(lines[0]) || 0, el: parseFloat(lines[1]) || 0 };
+      const az = parseFloat(lines[0]);
+      const el = parseFloat(lines[1]);
+      if (isNaN(az) || isNaN(el)) return null;
+      return { az, el };
     }
-    return { az: 0, el: 0 };
+    return null;
   }
 
   async stop(): Promise<void> {
-    await this.sendCommand('S\n');
+    const response = await this.sendCommand('S\n');
+    checkRprt(response);
   }
 
   private sendCommand(cmd: string): Promise<string> {
-    return new Promise<string>((resolve) => {
+    return new Promise<string>((resolve, reject) => {
       if (!this.ws || !this._connected) {
         resolve('');
         return;
@@ -101,7 +114,7 @@ export class RotctldDriver implements RotatorDriver {
       const timeout = setTimeout(() => {
         const idx = this.responseQueue.indexOf(handler);
         if (idx >= 0) this.responseQueue.splice(idx, 1);
-        resolve('');
+        reject(new Error('Response timeout'));
       }, 2000);
 
       const handler = (data: string) => {
@@ -116,6 +129,7 @@ export class RotctldDriver implements RotatorDriver {
 
   /**
    * Drain complete responses from the message buffer.
+   * @see checkRprt for error handling of RPRT responses.
    * rotctld responses end with RPRT N\n, or for `p` command, two float lines.
    * We treat each \n-terminated chunk as a potential response boundary.
    */
@@ -147,5 +161,13 @@ export class RotctldDriver implements RotatorDriver {
 
       break;
     }
+  }
+}
+
+/** Throw if rotctld returned an error code (RPRT -N). */
+function checkRprt(response: string): void {
+  const match = response.match(/RPRT\s+(-\d+)/);
+  if (match) {
+    throw new Error(`rotctld error: RPRT ${match[1]}`);
   }
 }
