@@ -1,11 +1,15 @@
 import type { RotatorDriver, RotatorMode, SerialProtocol } from '../rotator/protocol';
 import type { BeamTrackingState } from './beam.svelte';
+import { uiStore } from './ui.svelte';
+import { timeStore } from './time.svelte';
 
 const PREFIX = 'satvisor_rotator_';
 
 export type RotatorStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export type ParkPreset = 'north' | 'south' | 'zenith' | 'custom';
+
+export type PassEndAction = 'nothing' | 'park' | 'slew-next';
 
 export const PARK_PRESETS: Record<Exclude<ParkPreset, 'custom'>, { label: string; az: number; el: number }> = {
   north:  { label: 'North / Horizon', az: 0, el: 0 },
@@ -23,6 +27,7 @@ class RotatorStore {
   parkPreset = $state<ParkPreset>('north');
   parkAz = $state(0);
   parkEl = $state(0);
+  passEndAction = $state<PassEndAction>('nothing');
 
   // Runtime state
   status = $state<RotatorStatus>('disconnected');
@@ -42,6 +47,9 @@ class RotatorStore {
   slewWarning = $state(false);
   // Rotator angular velocity (°/s), smoothed over recent polls
   velocityDegS = $state(0);
+  // AOS epoch of the next pass we're waiting for (TLE epoch, 0 = not waiting)
+  nextAosEpoch = $state(0);
+  nextAosSatName = $state('');
 
   // Internals
   private driver: RotatorDriver | null = null;
@@ -54,6 +62,7 @@ class RotatorStore {
   private _prevEl: number | null = null;
   private _prevTime: number | null = null;
   private _velocityBuf: number[] = [];
+  private _wasTracking = false;
 
   async connect(): Promise<void> {
     if (this.status === 'connected' || this.status === 'connecting') return;
@@ -133,6 +142,9 @@ class RotatorStore {
     this._prevEl = null;
     this._prevTime = null;
     this._velocityBuf.length = 0;
+    this._wasTracking = false;
+    this.nextAosEpoch = 0;
+    this.nextAosSatName = '';
   }
 
   async goto(az: number, el: number): Promise<void> {
@@ -168,10 +180,53 @@ class RotatorStore {
   /** Called by beamStore.onTrackingUpdate when auto-track is active. */
   handleTrackingUpdate(state: BeamTrackingState): void {
     if (!this.autoTrack || !this.driver?.connected) return;
-    if (state.trackAz === null || state.trackEl === null) return;
+    if (state.trackAz === null || state.trackEl === null) {
+      // Only trigger pass-end if we were actively tracking (sat was above horizon)
+      if (this._wasTracking) {
+        this._wasTracking = false;
+        this.handlePassEnd(state.lockedNoradId);
+      }
+      return;
+    }
+    this._wasTracking = true;
+    this.nextAosEpoch = 0;
+    this.nextAosSatName = '';
     // Update target — actual commands are sent by the tracking timer
     this.targetAz = state.trackAz;
     this.targetEl = state.trackEl;
+  }
+
+  private handlePassEnd(noradId: number | null): void {
+    if (this.passEndAction === 'slew-next' && noradId !== null) {
+      // Find next pass for the same sat and pre-position to AOS
+      const nextPass = this.findNextPass(noradId);
+      if (nextPass) {
+        this.goto(nextPass.aosAz, 0);
+        this.nextAosEpoch = nextPass.aosEpoch;
+        this.nextAosSatName = nextPass.satName;
+        // Keep auto-track on so it picks up when sat rises
+        return;
+      }
+    }
+    this.autoTrack = false;
+    this.targetAz = null;
+    this.targetEl = null;
+    if (this.passEndAction === 'park') {
+      this.park();
+    }
+  }
+
+  private findNextPass(noradId: number) {
+    const epoch = timeStore.epoch;
+    // Search both pass lists for the next future pass of this satellite
+    for (const list of [uiStore.passes, uiStore.nearbyPasses]) {
+      for (const pass of list) {
+        if (pass.satNoradId === noradId && pass.aosEpoch > epoch) {
+          return pass;
+        }
+      }
+    }
+    return null;
   }
 
   private startTimers(): void {
@@ -283,6 +338,8 @@ class RotatorStore {
     if (pAz) this.parkAz = Number(pAz);
     const pEl = g('park_el');
     if (pEl) this.parkEl = Number(pEl);
+    const endAction = g('pass_end_action');
+    if (endAction === 'nothing' || endAction === 'park' || endAction === 'slew-next') this.passEndAction = endAction;
     // autoTrack and panelOpen are NOT restored — require explicit user action
   }
 
@@ -333,6 +390,11 @@ class RotatorStore {
 
   setAutoTrack(value: boolean): void {
     this.autoTrack = value;
+  }
+
+  setPassEndAction(action: PassEndAction): void {
+    this.passEndAction = action;
+    this.save('pass_end_action', action);
   }
 }
 

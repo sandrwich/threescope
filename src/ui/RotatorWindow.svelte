@@ -7,8 +7,17 @@
   import InfoTip from './shared/InfoTip.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { beamStore, isInsideBeam } from '../stores/beam.svelte';
-  import { rotatorStore, PARK_PRESETS, type ParkPreset } from '../stores/rotator.svelte';
+  import { rotatorStore, PARK_PRESETS, type ParkPreset, type PassEndAction } from '../stores/rotator.svelte';
+  import { timeStore } from '../stores/time.svelte';
   import { satColorRgba } from '../constants';
+
+  function fmtCountdown(sec: number): string {
+    if (sec <= 0) return '0:00';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.round(sec % 60);
+    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+  }
 
   let parkPos = $derived.by(() => {
     if (rotatorStore.parkPreset === 'custom') return { az: rotatorStore.parkAz, el: rotatorStore.parkEl };
@@ -743,9 +752,12 @@
           <span class="rot-pos-label">El</span>
           <span class="rot-pos-val">{aEl?.toFixed(1) ?? '—'}°</span>
           <span class="rot-pos-label">Rate</span>
-          <span class="rot-pos-val">{rotatorStore.velocityDegS.toFixed(1)}°/s</span>
+          <span class="rot-pos-val">{rotatorStore.velocityDegS.toFixed(2)}°/s</span>
           {#if rotatorStore.slewWarning}
             <span class="rot-pos-warn">CAN'T KEEP UP</span>
+          {:else if rotatorStore.nextAosEpoch > 0}
+            {@const secToAos = (rotatorStore.nextAosEpoch - timeStore.epoch) * 86400}
+            <span class="rot-pos-wait">AOS in {fmtCountdown(secToAos)}</span>
           {:else if rotatorStore.isSlewing}
             <span class="rot-pos-err">&Delta; {errAz?.toFixed(1)}° / {errEl?.toFixed(1)}°</span>
           {:else if hasActual && hasTarget}
@@ -844,6 +856,16 @@
           </div>
         </div>
       {/if}
+
+      <div class="rot-row">
+        <label>After pass<InfoTip>Action when a tracked satellite goes below the horizon. Disables auto-slew automatically.</InfoTip></label>
+        <select class="rot-select" value={rotatorStore.passEndAction}
+          onchange={(e) => rotatorStore.setPassEndAction((e.currentTarget as HTMLSelectElement).value as PassEndAction)}>
+          <option value="nothing">Do nothing</option>
+          <option value="park">Park</option>
+          <option value="slew-next">Slew to next AOS</option>
+        </select>
+      </div>
 
       <h4 class="section-header">Visual</h4>
       <div class="rot-row">
@@ -1088,6 +1110,12 @@
   }
   .rot-pos-idle {
     color: var(--text-ghost);
+    margin-left: auto;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+  }
+  .rot-pos-wait {
+    color: var(--text-faint);
     margin-left: auto;
     font-size: 9px;
     letter-spacing: 0.5px;

@@ -2,6 +2,15 @@
   import { uiStore } from '../stores/ui.svelte';
   import { rotatorStore } from '../stores/rotator.svelte';
   import { beamStore } from '../stores/beam.svelte';
+  import { timeStore } from '../stores/time.svelte';
+
+  function fmtCountdown(sec: number): string {
+    if (sec <= 0) return '0:00';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.round(sec % 60);
+    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+  }
 
   const hash = __COMMIT_HASH__;
   const version = __COMMIT_DATE__ ? 'v' + __COMMIT_DATE__.slice(2, 10).replace(/-/g, '') : '';
@@ -26,11 +35,12 @@
     <span class="rot-line" onclick={() => { uiStore.rotatorOpen = true; }}>
       <span class="rot-dot"></span>
       {#if rotatorState.hasActual}
-        <span>Az {rotatorState.aAz?.toFixed(1)}° El {rotatorState.aEl?.toFixed(1)}°</span>
-        <span>{rotatorStore.velocityDegS.toFixed(1)}°/s</span>
+        <span>Az {rotatorState.aAz?.toFixed(1)}°  El {rotatorState.aEl?.toFixed(1)}°  Rate {rotatorStore.velocityDegS.toFixed(2)}°/s</span>
       {/if}
       {#if rotatorStore.slewWarning}
         <span class="rot-state warning">CAN'T KEEP UP</span>
+      {:else if rotatorStore.nextAosEpoch > 0}
+        <span class="rot-state waiting">AOS in {fmtCountdown((rotatorStore.nextAosEpoch - timeStore.epoch) * 86400)} ({rotatorStore.nextAosSatName})</span>
       {:else if rotatorState.isSlewing}
         <span class="rot-state slewing">SLEWING</span>
       {:else if rotatorState.hasActual && rotatorState.hasTarget}
@@ -65,7 +75,7 @@
   .rot-line {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 8px;
     cursor: pointer;
     pointer-events: auto;
     font-size: 11px;
@@ -85,5 +95,6 @@
   .rot-state.warning { color: var(--danger-bright); }
   .rot-state.slewing { color: var(--warning); }
   .rot-state.on-target { color: var(--live); }
+  .rot-state.waiting { opacity: 0.7; }
   .rot-state.idle { opacity: 0.5; }
 </style>
