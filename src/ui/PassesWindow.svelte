@@ -8,7 +8,7 @@
   import { timeStore } from '../stores/time.svelte';
   import { ICON_PASSES, ICON_DOPPLER, ICON_ECLIPSE, ICON_SUN, ICON_FILTER } from './shared/icons';
   import { formatMHz, formatMHzRange } from '../format';
-  import { SAT_COLORS } from '../constants';
+  import { satColorCss } from '../constants';
   import { epochToDate } from '../astro/epoch';
   import { sunLabel } from '../astro/eclipse';
   import type { SatellitePass } from '../passes/pass-types';
@@ -126,8 +126,7 @@
   }
 
   function satColor(colorIndex: number): string {
-    const c = SAT_COLORS[colorIndex % SAT_COLORS.length];
-    return `rgb(${c[0]},${c[1]},${c[2]})`;
+    return satColorCss(colorIndex);
   }
 
   // When restored from localStorage on nearby tab, trigger computation

@@ -23,6 +23,29 @@ export const SAT_COLORS: readonly [number, number, number][] = [
   [245, 169, 184], // Pink       #F5A9B8
 ];
 
+// Satellite colors — derived formats + helpers
+export const SAT_COLORS_GL: readonly [number, number, number][] =
+  SAT_COLORS.map(([r, g, b]) => [r / 255, g / 255, b / 255]);
+
+const _satCount = SAT_COLORS.length;
+
+/** CSS `rgb()` string for a satellite color index. */
+export function satColorCss(index: number): string {
+  const c = SAT_COLORS[index % _satCount];
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+/** CSS `rgba()` string for a satellite color index with alpha. */
+export function satColorRgba(index: number, alpha: number): string {
+  const c = SAT_COLORS[index % _satCount];
+  return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+}
+
+/** GL-ready [r,g,b] 0–1 floats for a satellite color index. */
+export function satColorGl(index: number): readonly [number, number, number] {
+  return SAT_COLORS_GL[index % _satCount];
+}
+
 // J2 perturbation constants
 export const J2 = 1.08263e-3;                  // Earth's J2 zonal harmonic
 export const EARTH_RADIUS_EQ_KM = 6378.137;    // WGS-84 equatorial radius (km)

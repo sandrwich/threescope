@@ -3,7 +3,7 @@ import type { Satellite, SelectedSatInfo } from '../types';
 import { ViewMode } from '../types';
 import { DRAW_SCALE, EARTH_RADIUS_KM, MU, RAD2DEG, DEG2RAD, MAP_W, TWO_PI } from '../constants';
 import { getCorrectedElements } from '../astro/propagator';
-import { ORBIT_COLORS } from '../scene/orbit-renderer';
+import { satColorGl } from '../constants';
 import { computeApsis, computeApsis2D } from '../astro/apsis';
 import { getMapCoordinates, latLonToSurface } from '../astro/coordinates';
 import { uiStore } from '../stores/ui.svelte';
@@ -99,7 +99,8 @@ export class UIUpdater {
       satDataArr.push({
         noradId: sat.noradId,
         name: sat.name,
-        color: ORBIT_COLORS[selIdx % ORBIT_COLORS.length] as [number, number, number],
+        colorIndex: selIdx,
+        color: satColorGl(selIdx) as [number, number, number],
         altKm: rKm - EARTH_RADIUS_KM,
         speedKmS: Math.sqrt(MU * (2.0 / rKm - 1.0 / sat.semiMajorAxis)),
         latDeg: Math.asin(sat.currentPos.y / rKm) * RAD2DEG,

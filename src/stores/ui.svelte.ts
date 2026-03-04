@@ -60,7 +60,7 @@ class UIStore {
   showCountries = $state(false);
   showGrid = $state(false);
   showSkyGrid = $state(true);
-  radarVfx = $state(false);
+  radarVfx = $state(true);
 
   // Marker group visibility (keyed by group id)
   markerVisibility = $state<Record<string, boolean>>({});
@@ -117,7 +117,7 @@ class UIStore {
   }
 
   polarPlotOpen = $state(false);
-  radarOpen = $state(false);
+  rotatorOpen = $state(false);
   dopplerWindowOpen = $state(false);
   dopplerWindowFocus = $state(0);
   passes = $state<SatellitePass[]>([]);
@@ -282,7 +282,7 @@ class UIStore {
     this.showCountries = load('satvisor_countries', false);
     this.showGrid = load('satvisor_grid', false);
     this.showSkyGrid = load('satvisor_skygrid', true);
-    this.radarVfx = load('satvisor_radar_vfx', false);
+    this.radarVfx = load('satvisor_radar_vfx', true);
     this.singleSelectMode = load('satvisor_single_select', this.isMobile);
     const savedTab = localStorage.getItem('satvisor_passes_tab');
     if (savedTab === 'selected' || savedTab === 'nearby') this.passesTab = savedTab;
@@ -426,7 +426,7 @@ class UIStore {
       case 'showGrid': this.showGrid = value; localStorage.setItem('satvisor_grid', String(value)); break;
       case 'showSkyGrid': this.showSkyGrid = value; localStorage.setItem('satvisor_skygrid', String(value)); break;
       case 'radarVfx': this.radarVfx = value; localStorage.setItem('satvisor_radar_vfx', String(value)); break;
-      case 'radarOpen': this.radarOpen = value; break; // persisted by DraggableWindow
+      case 'rotatorOpen': this.rotatorOpen = value; break; // persisted by DraggableWindow
     }
     this.onToggleChange?.(key, value);
   }

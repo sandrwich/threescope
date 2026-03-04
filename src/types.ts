@@ -58,7 +58,8 @@ export interface AppConfig {
 export interface SelectedSatInfo {
   noradId: number;
   name: string;
-  color: [number, number, number]; // RGB 0-1 from ORBIT_COLORS
+  colorIndex: number;               // Index into SAT_COLORS
+  color: [number, number, number]; // RGB 0-1 (derived from SAT_COLORS_GL)
   altKm: number;
   speedKmS: number;
   latDeg: number;

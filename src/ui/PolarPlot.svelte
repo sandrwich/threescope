@@ -4,7 +4,7 @@
   import { uiStore } from '../stores/ui.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { ICON_POLAR } from './shared/icons';
-  import { SAT_COLORS, DEG2RAD, MOON_RADIUS_KM } from '../constants';
+  import { SAT_COLORS, DEG2RAD, MOON_RADIUS_KM, satColorCss } from '../constants';
   import { palette } from './shared/theme';
   import { initHiDPICanvas } from './shared/canvas';
   import { moonPositionECI } from '../astro/moon-observer';
@@ -160,7 +160,7 @@
     if (selectedPass) {
       const pass = selectedPass;
       const c = SAT_COLORS[pass.satColorIndex % SAT_COLORS.length];
-      const cssColor = `rgb(${c[0]},${c[1]},${c[2]})`;
+      const cssColor = satColorCss(pass.satColorIndex);
 
       // Sky track — per-segment shadow + magnitude bloom via shadowBlur
       if (pass.skyPath.length > 1) {

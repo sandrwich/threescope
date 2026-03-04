@@ -3,7 +3,7 @@ import type { Satellite, Marker } from '../types';
 import type { AppConfig, MarkerGroup } from '../types';
 import { parseHexColor } from '../config';
 import { MAP_W, MAP_H, TWO_PI, FP_RINGS, FP_PTS, DEG2RAD, MOON_RADIUS_KM } from '../constants';
-import { ORBIT_COLORS } from './orbit-renderer';
+import { satColorGl } from '../constants';
 import { computeFootprintGrid } from '../astro/footprint';
 import { getMapCoordinates } from '../astro/coordinates';
 import { calculatePosition } from '../astro/propagator';
@@ -456,7 +456,7 @@ export class MapRenderer {
       for (let si = 0; si < hlSats.length; si++) {
         const sat = hlSats[si];
         if (hiddenIds.has(sat.noradId)) continue;
-        const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
+        const [cr, cg, cb] = satColorGl(si);
         const segments = Math.min(4000, Math.max(50, Math.floor(400 * cfg.orbitsToDraw)));
         const periodDays = TWO_PI / sat.meanMotion / 86400.0;
         const timeStep = (periodDays * cfg.orbitsToDraw) / segments;
@@ -512,7 +512,7 @@ export class MapRenderer {
       for (let si = 0; si < hlSats.length; si++) {
         const sat = hlSats[si];
         if (hiddenIds.has(sat.noradId)) continue;
-        const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
+        const [cr, cg, cb] = satColorGl(si);
         const grid3d = computeFootprintGrid(sat.currentPos);
         if (!grid3d) continue;
 
@@ -676,7 +676,7 @@ export class MapRenderer {
     let selIdx2d = 0;
     for (const s of selectedSats) {
       if (!hiddenIds.has(s.noradId)) {
-        selColorMap2d.set(s, ORBIT_COLORS[selIdx2d % ORBIT_COLORS.length]);
+        selColorMap2d.set(s, satColorGl(selIdx2d) as unknown as number[]);
       }
       selIdx2d++;
     }
@@ -695,7 +695,7 @@ export class MapRenderer {
         const b = isHov ? 1.5 : 1.0;
         cr = rainbow[0] * b; cg = rainbow[1] * b; cb = rainbow[2] * b;
       } else if (isHov) {
-        const rc = ORBIT_COLORS[selectedSats.size % ORBIT_COLORS.length];
+        const rc = satColorGl(selectedSats.size);
         cr = rc[0] * 0.9; cg = rc[1] * 0.9; cb = rc[2] * 0.9;
       } else {
         cr = cNorm.r; cg = cNorm.g; cb = cNorm.b;

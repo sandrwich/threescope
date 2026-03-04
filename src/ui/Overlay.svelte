@@ -22,7 +22,7 @@
   import PassFilterWindow from './PassFilterWindow.svelte';
   import ThemeEditorWindow from './ThemeEditorWindow.svelte';
   import SatDatabaseWindow from './SatDatabaseWindow.svelte';
-  import RadarWindow from './RadarWindow.svelte';
+  import RotatorWindow from './RotatorWindow.svelte';
   import FeedbackWindow from './FeedbackWindow.svelte';
   import SkyReticle from './SkyReticle.svelte';
 
@@ -61,7 +61,7 @@
   <PassFilterWindow />
   <ThemeEditorWindow />
   <SatDatabaseWindow />
-  <RadarWindow />
+  <RotatorWindow />
   <FeedbackWindow />
   <SkyReticle />
 </div>

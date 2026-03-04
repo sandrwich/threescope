@@ -341,7 +341,7 @@ export class InputHandler {
           break;
         case 'r':
         case 'R':
-          uiStore.radarOpen = !uiStore.radarOpen;
+          uiStore.rotatorOpen = !uiStore.rotatorOpen;
           break;
         case 'f':
         case 'F':

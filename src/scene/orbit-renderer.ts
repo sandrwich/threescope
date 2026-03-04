@@ -5,7 +5,7 @@ import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import type { Satellite } from '../types';
-import { DRAW_SCALE, EARTH_RADIUS_KM, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, SAT_COLORS } from '../constants';
+import { DRAW_SCALE, EARTH_RADIUS_KM, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, satColorGl } from '../constants';
 import { parseHexColor } from '../config';
 import { calculatePosition, getCorrectedElements } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
@@ -17,8 +17,6 @@ import { latLonToSurface } from '../astro/coordinates';
 import { palette } from '../ui/shared/theme';
 import { createSquareTexture, createDiamondTexture } from './marker-manager';
 
-// SAT_COLORS as 0–1 floats for WebGL
-export const ORBIT_COLORS = SAT_COLORS.map(c => [c[0] / 255, c[1] / 255, c[2] / 255]);
 
 // Default segment counts for orbit visualization
 const SEGMENTS_NORMAL = 90;
@@ -516,7 +514,7 @@ export class OrbitRenderer {
         for (let si = 0; si < highlightSats.length; si++) {
           const sat = highlightSats[si];
           if (hiddenIds.has(sat.noradId)) continue;
-          const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
+          const [cr, cg, cb] = satColorGl(si);
           const periodDays = TWO_PI / sat.meanMotion / 86400.0;
           // Scale segments by period: LEO gets full 400, long-period sats get fewer but floor at 360.
           const periodScale = Math.min(1.0, Math.sqrt(0.0625 / periodDays));
@@ -582,7 +580,7 @@ export class OrbitRenderer {
         for (let si = 0; si < highlightSats.length; si++) {
           const sat = highlightSats[si];
           if (hiddenIds.has(sat.noradId)) continue;
-          const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
+          const [cr, cg, cb] = satColorGl(si);
           ndPos.push(0, 0, 0, sat.currentPos.x / DRAW_SCALE, sat.currentPos.y / DRAW_SCALE, sat.currentPos.z / DRAW_SCALE);
           ndCol.push(cr, cg, cb, cr, cg, cb);
         }
@@ -615,7 +613,7 @@ export class OrbitRenderer {
             // Skip if sat is below observer's horizon (line would go through Earth)
             const toSatX = sx - obsPos.x, toSatY = sy - obsPos.y, toSatZ = sz - obsPos.z;
             if (toSatX * obsPos.x + toSatY * obsPos.y + toSatZ * obsPos.z <= 0) continue;
-            const [cr, cg, cb] = ORBIT_COLORS[si % ORBIT_COLORS.length];
+            const [cr, cg, cb] = satColorGl(si);
             olPos.push(sx, sy, sz, obsPos.x, obsPos.y, obsPos.z);
             olCol.push(cr, cg, cb, cr, cg, cb);
           }
@@ -653,7 +651,7 @@ export class OrbitRenderer {
             }
           }
           if (arcSat && satIdx >= 0) {
-            const [cr, cg, cb] = ORBIT_COLORS[satIdx % ORBIT_COLORS.length];
+            const [cr, cg, cb] = satColorGl(satIdx);
             const arcDuration = pass.losEpoch - pass.aosEpoch;
             const arcSteps = 60;
             const arcTimeStep = arcDuration / arcSteps;

@@ -9,6 +9,8 @@
   import { ICON_SELECTION, ICON_PASSES, ICON_DATABASE, ICON_RADAR } from './shared/icons';
   import { hasSatnogsData } from '../data/satnogs';
   import { beamStore } from '../stores/beam.svelte';
+  import { satColorCss } from '../constants';
+  import type { SelectedSatInfo } from '../types';
 
   let expandedSats = $state(new Set<number>());
   let searchQuery = $state('');
@@ -106,8 +108,8 @@
     if (uiStore.passesWindowOpen) uiStore.onRequestPasses?.();
   }
 
-  function colorRgb(c: [number, number, number]) {
-    return `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`;
+  function colorRgb(sat: SelectedSatInfo) {
+    return satColorCss(sat.colorIndex);
   }
 
   const fmt = (n: number, d = 1) => n.toFixed(d);
@@ -184,7 +186,7 @@
           {@const hidden = uiStore.hiddenSelectedSats.has(sat.noradId)}
           <div class="sat-row" class:sat-hidden={hidden}>
             <div class="sat-compact">
-              <Checkbox size="sm" color={colorRgb(sat.color)}
+              <Checkbox size="sm" color={colorRgb(sat)}
                 checked={!hidden}
                 onchange={() => uiStore.toggleSatVisibility(sat.noradId)} />
               <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->

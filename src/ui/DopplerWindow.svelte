@@ -10,7 +10,7 @@
   import { ICON_DOPPLER } from './shared/icons';
   import { calculateDopplerShift, createSatrec } from '../astro/doppler';
   import { epochToDatetimeStr, epochToDate } from '../astro/epoch';
-  import { SAT_COLORS } from '../constants';
+  import { satColorCss } from '../constants';
   import { palette } from './shared/theme';
   import { getTransmitters, type SatnogsTransmitter } from '../data/satnogs';
   import { formatFreqHz } from '../format';
@@ -208,8 +208,7 @@
     ctx.rect(gx, gy, gw, gh);
     ctx.clip();
 
-    const sc = SAT_COLORS[pass.satColorIndex % SAT_COLORS.length];
-    const satColor = `rgb(${sc[0]},${sc[1]},${sc[2]})`;
+    const satColor = satColorCss(pass.satColorIndex);
     ctx.strokeStyle = satColor;
     ctx.lineWidth = 2;
     ctx.beginPath();

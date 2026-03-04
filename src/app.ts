@@ -9,7 +9,8 @@ import { CloudLayer } from './scene/cloud-layer';
 import { MoonScene } from './scene/moon-scene';
 import { SunScene } from './scene/sun-scene';
 import { SatelliteManager } from './scene/satellite-manager';
-import { OrbitRenderer, ORBIT_COLORS } from './scene/orbit-renderer';
+import { OrbitRenderer } from './scene/orbit-renderer';
+import { satColorGl } from './constants';
 import { FootprintRenderer, type FootprintEntry } from './scene/footprint-renderer';
 import { BeamConeRenderer } from './scene/beam-cone-renderer';
 import { SkyGridRenderer } from './scene/sky-grid-renderer';
@@ -48,6 +49,7 @@ import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } f
 import { loadElevation, getElevation, isElevationLoaded } from './astro/elevation';
 import { palette } from './ui/shared/theme';
 import { feedbackStore } from './stores/feedback.svelte';
+import { rotatorStore } from './stores/rotator.svelte';
 import { FeedbackEvent } from './feedback/types';
 
 export class App {
@@ -777,6 +779,8 @@ export class App {
     beamStore.load();
     feedbackStore.load();
     feedbackStore.installGlobalListeners();
+    rotatorStore.load();
+    beamStore.onTrackingUpdate = (state) => rotatorStore.handleTrackingUpdate(state);
     uiStore.loadPassFilters();
     uiStore.loadMarkerGroups(this.cfg.markerGroups);
 
@@ -1614,7 +1618,7 @@ export class App {
     );
 
     // Tracking: lock aim (every frame), radar blips + sky path (throttled)
-    if (observerStore.isSet && (uiStore.radarOpen || beamStore.locked || isSkyView)) {
+    if (observerStore.isSet && (uiStore.rotatorOpen || beamStore.locked || isSkyView)) {
       const obs = observerStore.location;
       this.tracker.update(this.satellites, this.selectedSats, epoch, gmstDeg, obs.lat, obs.lon, obs.alt, this.timeSystem.timeMultiplier);
     }
@@ -1694,13 +1698,13 @@ export class App {
               if (!hiddenIds.has(sat.noradId)) {
                 fpEntries.push({
                   position: sat.currentPos,
-                  color: ORBIT_COLORS[fpIdx % ORBIT_COLORS.length] as [number, number, number],
+                  color: satColorGl(fpIdx) as [number, number, number],
                 });
               }
               fpIdx++;
             }
             if (this.hoveredSat && !this.selectedSats.has(this.hoveredSat) && this._hoverSettleFrames >= 6) {
-              const rc = ORBIT_COLORS[this.selectedSats.size % ORBIT_COLORS.length];
+              const rc = satColorGl(this.selectedSats.size);
               fpEntries.push({
                 position: (this.hoveredSat as Satellite).currentPos,
                 color: rc as [number, number, number],
@@ -1709,12 +1713,42 @@ export class App {
           }
           this.footprintRenderer.update(fpEntries);
 
-          // Beam cone visualization
-          if (observerStore.isSet && beamStore.coneVisible) {
+          // Beam cone — always visible when rotator connected, otherwise optional
+          const rotConnected = rotatorStore.status === 'connected';
+          const rotHasPos = rotConnected && rotatorStore.actualAz !== null && rotatorStore.actualEl !== null;
+          const showCone = rotHasPos || beamStore.coneVisible;
+
+          if (observerStore.isSet && showCone) {
             const obs = observerStore.location;
+
+            let coneAz: number, coneEl: number;
+            if (rotHasPos) {
+              coneAz = rotatorStore.actualAz!;
+              coneEl = rotatorStore.actualEl!;
+              const hasTarget = rotatorStore.targetAz !== null && rotatorStore.targetEl !== null;
+              if (hasTarget) {
+                const errAz = Math.abs(coneAz - rotatorStore.targetAz!);
+                const errEl = Math.abs(coneEl - rotatorStore.targetEl!);
+                const onTarget = errAz < 0.5 && errEl < 0.5;
+                // Green when on target, amber when slewing
+                this.beamConeRenderer.setColor(
+                  onTarget ? 0.27 : 1.0,
+                  onTarget ? 1.0  : 0.8,
+                  onTarget ? 0.27 : 0.2,
+                );
+              } else {
+                // Connected but idle — dim neutral
+                this.beamConeRenderer.setColor(0.6, 0.6, 0.6);
+              }
+            } else {
+              coneAz = beamStore.aimAz;
+              coneEl = beamStore.aimEl;
+              this.beamConeRenderer.setColor(1.0, 0.8, 0.2);
+            }
+
             this.beamConeRenderer.update(
               obs.lat, obs.lon, gmstDeg, this.cfg.earthRotationOffset,
-              beamStore.aimAz, beamStore.aimEl, beamStore.beamWidth, true,
+              coneAz, coneEl, beamStore.beamWidth, true,
               beamStore.locked ? beamStore.trackRange : null,
             );
           } else {

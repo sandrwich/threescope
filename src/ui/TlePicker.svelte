@@ -69,7 +69,7 @@
       <button class="icon-btn" class:active={uiStore.passesWindowOpen} title="Passes (P)" onclick={() => uiStore.passesWindowOpen = !uiStore.passesWindowOpen}>
         {@html ICON_PASSES}
       </button>
-      <button class="icon-btn" class:active={uiStore.radarOpen} title="Radar (R)" onclick={() => uiStore.radarOpen = !uiStore.radarOpen}>
+      <button class="icon-btn" class:active={uiStore.rotatorOpen} title="Rotator (R)" onclick={() => uiStore.rotatorOpen = !uiStore.rotatorOpen}>
         {@html ICON_RADAR}
       </button>
       <button class="icon-btn" class:active={uiStore.viewWindowOpen} title="View" onclick={() => uiStore.viewWindowOpen = !uiStore.viewWindowOpen}>

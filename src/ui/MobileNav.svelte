@@ -17,7 +17,7 @@
 
   const moreItems: { id: string; label: string; icon: string }[] = [
     { id: 'sat-database', label: 'SatNOGS Database', icon: ICON_DATABASE },
-    { id: 'radar', label: 'Radar', icon: ICON_RADAR },
+    { id: 'rotator', label: 'Rotator', icon: ICON_RADAR },
     { id: 'observer', label: 'Observer', icon: ICON_OBSERVER },
     { id: 'view', label: 'View', icon: ICON_VIEW },
     { id: 'feedback', label: 'Feedback', icon: ICON_FEEDBACK },

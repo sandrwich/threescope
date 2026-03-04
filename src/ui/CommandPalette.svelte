@@ -1,5 +1,6 @@
 <script lang="ts">
   import { uiStore } from '../stores/ui.svelte';
+  import { rotatorStore } from '../stores/rotator.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { settingsStore } from '../stores/settings.svelte';
   import { getPresetSettings } from '../graphics';
@@ -149,9 +150,12 @@
     actions.push({ id: 'win-passes', category: 'Window', label: 'Toggle Passes', shortcut: 'P', keywords: 'pass predictor observer satellite', execute: () => { uiStore.passesWindowOpen = !uiStore.passesWindowOpen; close(); } });
     actions.push({ id: 'win-observer', category: 'Window', label: 'Toggle Observer', shortcut: 'O', keywords: 'location gps coordinates sun moon twilight', execute: () => { uiStore.observerWindowOpen = !uiStore.observerWindowOpen; close(); } });
     actions.push({ id: 'win-polar', category: 'Window', label: 'Toggle Polar Plot', keywords: 'azimuth elevation tracking', execute: () => { uiStore.polarPlotOpen = !uiStore.polarPlotOpen; close(); } });
-    actions.push({ id: 'win-radar', category: 'Window', label: 'Toggle Radar', shortcut: 'R', keywords: 'radar scope antenna dish sky overhead', execute: () => { uiStore.radarOpen = !uiStore.radarOpen; close(); } });
+    actions.push({ id: 'win-rotator', category: 'Window', label: 'Toggle Rotator', shortcut: 'R', keywords: 'radar scope antenna dish sky overhead rotator', execute: () => { uiStore.rotatorOpen = !uiStore.rotatorOpen; close(); } });
     actions.push({ id: 'win-theme', category: 'Window', label: 'Toggle Theme Editor', keywords: 'color appearance dark light', execute: () => { uiStore.themeEditorOpen = !uiStore.themeEditorOpen; close(); } });
     actions.push({ id: 'win-feedback', category: 'Window', label: 'Toggle Feedback', shortcut: 'F', keywords: 'haptic audio vibration sound buttplug', execute: () => { uiStore.feedbackWindowOpen = !uiStore.feedbackWindowOpen; close(); } });
+    actions.push({ id: 'rotator-connect', category: 'Rotator', label: 'Connect Rotator', keywords: 'antenna serial websocket hamlib rotctld easycomm gs232', execute: () => { rotatorStore.connect(); close(); } });
+    actions.push({ id: 'rotator-disconnect', category: 'Rotator', label: 'Disconnect Rotator', execute: () => { rotatorStore.disconnect(); close(); } });
+    actions.push({ id: 'rotator-autoslew', category: 'Rotator', label: 'Toggle Auto Slew', keywords: 'tracking antenna satellite rotator auto', execute: () => { rotatorStore.setAutoTrack(!rotatorStore.autoTrack); close(); } });
     actions.push({ id: 'win-help', category: 'Window', label: 'Show Help', keywords: 'info controls keyboard', execute: () => { uiStore.infoModalOpen = true; close(); } });
     actions.push({ id: 'win-reset-layout', category: 'Window', label: 'Reset Window Positions', keywords: 'layout default reset restore', execute: () => { close(); resetWindowLayout(); } });
 

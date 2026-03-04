@@ -8,11 +8,14 @@ const CONE_LINES = 8;       // radial edge lines
 const CONE_LENGTH_KM = 42000; // lines extend to GEO orbit distance
 const FILL_FRACTION = 0.15;   // fill only covers first 15% of cone length
 
-// Color: amber #ffcc33 = (1.0, 0.8, 0.2)
-const CR = 1.0, CG = 0.8, CB = 0.2;
+// Default color: amber #ffcc33 = (1.0, 0.8, 0.2)
+const DEFAULT_R = 1.0, DEFAULT_G = 0.8, DEFAULT_B = 0.2;
 
 export class BeamConeRenderer {
   private coneGroup: THREE.Group;
+  private cr = DEFAULT_R;
+  private cg = DEFAULT_G;
+  private cb = DEFAULT_B;
 
   // Rings at different distances (each a LineLoop)
   private rings: THREE.LineLoop[] = [];
@@ -174,8 +177,8 @@ export class BeamConeRenderer {
       radPos[off + 5] = lastRingArr[baseIdx * 3 + 2];
       // Colors: apex bright, base transparent
       const co = i * 8;
-      radCol[co]     = CR; radCol[co + 1] = CG; radCol[co + 2] = CB; radCol[co + 3] = 0.4;  // apex
-      radCol[co + 4] = CR; radCol[co + 5] = CG; radCol[co + 6] = CB; radCol[co + 7] = 0.0;  // base
+      radCol[co]     = this.cr; radCol[co + 1] = this.cg; radCol[co + 2] = this.cb; radCol[co + 3] = 0.4;  // apex
+      radCol[co + 4] = this.cr; radCol[co + 5] = this.cg; radCol[co + 6] = this.cb; radCol[co + 7] = 0.0;  // base
     }
     this.radialPosAttr.needsUpdate = true;
     this.radialColAttr.needsUpdate = true;
@@ -205,12 +208,23 @@ export class BeamConeRenderer {
       fillPos[po + 8] = fillCz + fillRadius * (Math.cos(angle1) * basisU.z + Math.sin(angle1) * basisV.z);
       // Colors: apex visible, base edge transparent
       const co = i * 12;
-      fillCol[co]      = CR; fillCol[co + 1]  = CG; fillCol[co + 2]  = CB; fillCol[co + 3]  = 0.06;
-      fillCol[co + 4]  = CR; fillCol[co + 5]  = CG; fillCol[co + 6]  = CB; fillCol[co + 7]  = 0.0;
-      fillCol[co + 8]  = CR; fillCol[co + 9]  = CG; fillCol[co + 10] = CB; fillCol[co + 11] = 0.0;
+      fillCol[co]      = this.cr; fillCol[co + 1]  = this.cg; fillCol[co + 2]  = this.cb; fillCol[co + 3]  = 0.06;
+      fillCol[co + 4]  = this.cr; fillCol[co + 5]  = this.cg; fillCol[co + 6]  = this.cb; fillCol[co + 7]  = 0.0;
+      fillCol[co + 8]  = this.cr; fillCol[co + 9]  = this.cg; fillCol[co + 10] = this.cb; fillCol[co + 11] = 0.0;
     }
     this.fillPosAttr.needsUpdate = true;
     this.fillColAttr.needsUpdate = true;
+  }
+
+  setColor(r: number, g: number, b: number) {
+    if (this.cr === r && this.cg === g && this.cb === b) return;
+    this.cr = r;
+    this.cg = g;
+    this.cb = b;
+    const color = new THREE.Color(r, g, b);
+    for (const ring of this.rings) {
+      (ring.material as THREE.LineBasicMaterial).color = color;
+    }
   }
 
   hide() {

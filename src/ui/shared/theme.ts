@@ -24,10 +24,11 @@ export function initTheme() {
     apsisPeri: r('--apsis-peri'), apsisApo: r('--apsis-apo'),
     radarBg: r('--radar-bg'), radarGrid: r('--radar-grid'),
     radarBlip: r('--radar-blip'), radarBlipDim: r('--radar-blip-dim'),
-    radarText: r('--radar-text'), radarSweep: r('--radar-sweep'),
+    radarText: r('--radar-text'), radarLabel: r('--radar-label'), radarSweep: r('--radar-sweep'),
     heatmapLow: r('--heatmap-low'), heatmapMid: r('--heatmap-mid'), heatmapHigh: r('--heatmap-high'),
     beamReticle: r('--beam-reticle'), beamReticleLocked: r('--beam-reticle-locked'),
     beamCone: r('--beam-cone'), beamHighlight: r('--beam-highlight'), beamArc: r('--beam-arc'),
+    rotator: r('--rotator'),
     skyGrid: r('--sky-grid'), skyGridLabel: r('--sky-grid-label'),
   };
 }

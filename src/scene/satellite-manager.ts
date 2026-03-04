@@ -3,7 +3,7 @@ import type { Satellite } from '../types';
 import { DRAW_SCALE, EARTH_RADIUS_KM } from '../constants';
 import { parseHexColor } from '../config';
 import { calculatePosition } from '../astro/propagator';
-import { ORBIT_COLORS } from './orbit-renderer';
+import { satColorGl } from '../constants';
 import { uiStore } from '../stores/ui.svelte';
 import { earthShadowFactor } from '../astro/eclipse';
 import { estimateVisualMagnitude, computePhaseAngle, slantRange } from '../astro/magnitude';
@@ -299,7 +299,7 @@ export class SatelliteManager {
       let selIdx = 0;
       for (const s of selectedSats) {
         if (!hiddenIds.has(s.noradId)) {
-          selectedColorMap.set(s, ORBIT_COLORS[selIdx % ORBIT_COLORS.length]);
+          selectedColorMap.set(s, satColorGl(selIdx) as unknown as number[]);
         }
         selIdx++;
       }
@@ -317,7 +317,7 @@ export class SatelliteManager {
           this.colorAttr.array[i * 3 + 2] = rainbow[2] * b;
         } else if (isHovered) {
           const nextIdx = selectedSats.size;
-          const rc = ORBIT_COLORS[nextIdx % ORBIT_COLORS.length];
+          const rc = satColorGl(nextIdx);
           this.colorAttr.array[i * 3] = rc[0] * 0.9;
           this.colorAttr.array[i * 3 + 1] = rc[1] * 0.9;
           this.colorAttr.array[i * 3 + 2] = rc[2] * 0.9;
