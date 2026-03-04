@@ -50,6 +50,8 @@ class UIStore {
   viewMode = $state(ViewMode.VIEW_3D);
   orreryMode = $state(false);
   activePlanetId = $state<string | null>(null);
+  /** Camera azimuth heading in radians (0 = north, CW = east). Updated each frame in sky view. */
+  skyHeading = $state(0);
 
   // Toggles (persisted via localStorage)
   hideUnselected = $state(true);

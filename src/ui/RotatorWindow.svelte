@@ -10,6 +10,7 @@
   import { rotatorStore, PARK_PRESETS, type ParkPreset, type PassEndAction } from '../stores/rotator.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { satColorRgba } from '../constants';
+  import { ViewMode } from '../types';
   import { chart, pointerHitRadius } from './shared/touch-metrics';
 
   function fmtCountdown(sec: number): string {
@@ -86,6 +87,9 @@
 
   let tab = $state<'radar' | 'setup'>('radar');
   let rateDisplay = $derived(`${(rotatorStore.updateIntervalMs / 1000).toFixed(1)}s`);
+
+  // In sky view, rotate the radar so the viewer's look direction is at the top
+  let headingRad = $derived(uiStore.viewMode === ViewMode.VIEW_SKY ? uiStore.skyHeading : 0);
 
   const SIZE = 400;
   const CX = SIZE / 2;
@@ -205,7 +209,7 @@
 
   function azElToXY(az: number, el: number): { x: number; y: number } {
     const r = R_MAX * (90 - Math.max(0, el)) / 90;
-    const azRad = az * Math.PI / 180;
+    const azRad = az * Math.PI / 180 - headingRad;
     return {
       x: (r * Math.sin(azRad)) * zoom + CX + panX,
       y: (-r * Math.cos(azRad)) * zoom + CY + panY,
@@ -217,8 +221,9 @@
     const dy = -((y - CY - panY) / zoom);
     const r = Math.sqrt(dx * dx + dy * dy);
     const el = Math.max(0, Math.min(90, 90 * (1 - r / R_MAX)));
-    let az = Math.atan2(dx, dy) * 180 / Math.PI;
+    let az = Math.atan2(dx, dy) * 180 / Math.PI + headingRad * 180 / Math.PI;
     if (az < 0) az += 360;
+    if (az >= 360) az -= 360;
     return { az, el };
   }
 
@@ -398,13 +403,13 @@
         const inBeam = isInsideBeam(az, el, bAz, bEl, bW);
 
         // How far behind the sweep is this blip?
-        const angDist = ((sweepAngle - az * Math.PI / 180) % TWO_PI + TWO_PI) % TWO_PI;
+        const blipAngle = az * Math.PI / 180 - headingRad;
+        const angDist = ((sweepAngle - blipAngle) % TWO_PI + TWO_PI) % TWO_PI;
         // Only paint when sweep is within ~3° of the blip
         if (angDist < 0.06 || angDist > TWO_PI - 0.02) {
           const r = R_MAX * (90 - Math.max(0, el)) / 90;
-          const azRad = az * Math.PI / 180;
-          const bx = r * Math.sin(azRad) + CX;
-          const by = -r * Math.cos(azRad) + CY;
+          const bx = r * Math.sin(blipAngle) + CX;
+          const by = -r * Math.cos(blipAngle) + CY;
           const radius = isSelected ? 4 : inBeam ? 3 : 2.5;
 
           // Bright white-green flash
@@ -454,9 +459,14 @@
         ctx.arc(zCX, zCY, r, 0, TWO_PI);
         ctx.stroke();
       }
+      // N-S / E-W crosshair (rotated by heading)
+      const nsX = -sweepLen * Math.sin(headingRad);
+      const nsY = -sweepLen * Math.cos(headingRad);
+      const ewX = sweepLen * Math.cos(headingRad);
+      const ewY = -sweepLen * Math.sin(headingRad);
       ctx.beginPath();
-      ctx.moveTo(zCX - sweepLen, zCY); ctx.lineTo(zCX + sweepLen, zCY);
-      ctx.moveTo(zCX, zCY - sweepLen); ctx.lineTo(zCX, zCY + sweepLen);
+      ctx.moveTo(zCX - nsX, zCY - nsY); ctx.lineTo(zCX + nsX, zCY + nsY);
+      ctx.moveTo(zCX - ewX, zCY - ewY); ctx.lineTo(zCX + ewX, zCY + ewY);
       ctx.stroke();
 
       // Draw hover ring on main canvas (interactive, not on phosphor)
@@ -484,10 +494,17 @@
         ctx.arc(zCX, zCY, r, 0, TWO_PI);
         ctx.stroke();
       }
-      ctx.beginPath();
-      ctx.moveTo(zCX - sweepLen, zCY); ctx.lineTo(zCX + sweepLen, zCY);
-      ctx.moveTo(zCX, zCY - sweepLen); ctx.lineTo(zCX, zCY + sweepLen);
-      ctx.stroke();
+      // N-S / E-W crosshair (rotated by heading)
+      {
+        const nsX = -sweepLen * Math.sin(headingRad);
+        const nsY = -sweepLen * Math.cos(headingRad);
+        const ewX = sweepLen * Math.cos(headingRad);
+        const ewY = -sweepLen * Math.sin(headingRad);
+        ctx.beginPath();
+        ctx.moveTo(zCX - nsX, zCY - nsY); ctx.lineTo(zCX + nsX, zCY + nsY);
+        ctx.moveTo(zCX - ewX, zCY - ewY); ctx.lineTo(zCX + ewX, zCY + ewY);
+        ctx.stroke();
+      }
 
       // Blips
       for (let i = 0; i < count; i++) {
@@ -610,17 +627,21 @@
     ctx.arc(CX, CY, R_MAX, 0, 2 * Math.PI);
     ctx.stroke();
 
-    // ── Cardinal labels ──
+    // ── Cardinal labels (rotate with heading) ──
     ctx.fillStyle = palette.radarText;
     ctx.font = `11px ${font}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom'; ctx.fillText('N', CX, CY - R_MAX - 6);
-    ctx.textBaseline = 'top'; ctx.fillText('S', CX, CY + R_MAX + 6);
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'right'; ctx.fillText('W', CX - R_MAX - 8, CY);
-    ctx.textAlign = 'left'; ctx.fillText('E', CX + R_MAX + 8, CY);
+    const cardinals: [string, number][] = [['N', 0], ['E', 90], ['S', 180], ['W', 270]];
+    const labelR = R_MAX + 10;
+    for (const [label, deg] of cardinals) {
+      const a = (deg * Math.PI / 180) - headingRad;
+      const lx = CX + labelR * Math.sin(a);
+      const ly = CY - labelR * Math.cos(a);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, lx, ly);
+    }
 
-    // ── Elevation labels ──
+    // ── Elevation labels (along north axis, rotated by heading) ──
     ctx.fillStyle = palette.radarLabel;
     ctx.font = `8px ${font}`;
     ctx.textAlign = 'left';
@@ -628,9 +649,12 @@
     for (const frac of [1 / 3, 2 / 3]) {
       const elDeg = Math.round((90 - visRange + visRange * frac) / ringStep) * ringStep;
       if (elDeg <= 0 || elDeg >= 90) continue;
-      const ly = zCY - R_MAX * zoom * (90 - elDeg) / 90;
-      if (ly < CY - R_MAX + 5 || ly > CY + R_MAX - 5) continue;
-      ctx.fillText(`${elDeg}°`, zCX + 3, ly + 2);
+      const elR = R_MAX * zoom * (90 - elDeg) / 90;
+      const lx = zCX + elR * Math.sin(-headingRad) + 3 * Math.cos(headingRad);
+      const ly = zCY - elR * Math.cos(-headingRad) + 3 * Math.sin(headingRad);
+      const dist = Math.sqrt((lx - CX) ** 2 + (ly - CY) ** 2);
+      if (dist > R_MAX - 5) continue;
+      ctx.fillText(`${elDeg}°`, lx, ly);
     }
 
     // ── Hover tooltip ──

@@ -1529,6 +1529,9 @@ export class App {
     this.camera.updateFrame(dt, earthRotRad, isOrreryOrPlanet);
     this.camera3d.updateMatrixWorld();
 
+    // Push camera heading to UI store for radar alignment
+    if (isSkyView) uiStore.skyHeading = this.camera.angleX;
+
     // Project sky grid labels + beam reticle after camera update
     if (isSkyView) {
       this.skyGridRenderer.projectLabels(this.camera3d);
