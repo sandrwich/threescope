@@ -115,7 +115,10 @@ function posStr() {
   return `az=${az.toFixed(1)}° el=${el.toFixed(1)}°`;
 }
 
-const wss = new WebSocketServer({ port: PORT });
+const wss = new WebSocketServer({
+  port: PORT,
+  handleProtocols: (protocols) => protocols.has('binary') ? 'binary' : false,
+});
 
 console.log(`\n  Rotator simulator listening on ws://localhost:${PORT}`);
 console.log(`  Az max: ${AZ_MAX_SPEED}°/s  El max: ${EL_MAX_SPEED}°/s  Accel: ${ACCEL}°/s²`);
