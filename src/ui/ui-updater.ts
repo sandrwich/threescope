@@ -32,6 +32,9 @@ function formatKm(km: number): string {
   return `${Math.round(km).toLocaleString('en-US').replace(/,/g, ' ')} km`;
 }
 
+// Track previous az/el + time per satellite for angular rate computation
+const _prevSatAzEl = new Map<number, { az: number; el: number; time: number; rate: number }>();
+
 export class UIUpdater {
   update(params: {
     activeSat: Satellite | null;
@@ -96,6 +99,33 @@ export class UIUpdater {
         }
       }
 
+      // Compute apparent angular rate from observer
+      let angularRateDegS: number | null = null;
+      if (hasObs && selObs) {
+        const satEci2 = { x: sat.currentPos.x, y: -sat.currentPos.z, z: sat.currentPos.y };
+        const { az, el } = getAzEl(satEci2.x, satEci2.y, satEci2.z, selGmstRad, selObs.lat, selObs.lon, selObs.alt);
+        const now = performance.now();
+        const prev = _prevSatAzEl.get(sat.noradId);
+        if (prev) {
+          const dt = (now - prev.time) / 1000;
+          if (dt > 0.05) {
+            let dAz = az - prev.az;
+            if (dAz > 180) dAz -= 360;
+            else if (dAz < -180) dAz += 360;
+            const dAzDeg = Math.abs(dAz);
+            const dEl = Math.abs(el - prev.el);
+            const rate = Math.sqrt(dAzDeg * dAzDeg + dEl * dEl) / dt;
+            // Smooth with previous
+            angularRateDegS = prev.rate > 0 ? prev.rate * 0.7 + rate * 0.3 : rate;
+            _prevSatAzEl.set(sat.noradId, { az, el, time: now, rate: angularRateDegS });
+          } else {
+            angularRateDegS = prev.rate > 0 ? prev.rate : null;
+          }
+        } else {
+          _prevSatAzEl.set(sat.noradId, { az, el, time: now, rate: 0 });
+        }
+      }
+
       satDataArr.push({
         noradId: sat.noradId,
         name: sat.name,
@@ -109,6 +139,7 @@ export class UIUpdater {
         eccen: sat.eccentricity,
         raanDeg: getCorrectedElements(sat, currentEpoch).raan * RAD2DEG,
         periodMin: (TWO_PI / sat.meanMotion) / 60,
+        angularRateDegS,
         magStr,
       });
       selIdx++;

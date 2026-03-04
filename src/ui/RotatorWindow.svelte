@@ -675,11 +675,9 @@
         <span class="info-left">{zoom > 1.05 ? `${infoCount} vis  ${zoom.toFixed(1)}×` : `${infoCount} visible`}</span>
         <span class="info-center">
           {#if rotatorStore.status === 'connected'}
-            <svg class="legend-icon" viewBox="0 0 8 8" width="7" height="7"><polygon points="4,0 8,4 4,8 0,4" fill="none" stroke="var(--rotator)" stroke-width="1.2"/></svg>
-            <span class="legend-label" style="color: var(--rotator)">Rotator</span>
+            <svg class="legend-icon" viewBox="0 0 8 8" width="7" height="7"><polygon points="4,0 8,4 4,8 0,4" fill="none" stroke="var(--rotator)" stroke-width="1.2"/></svg><span class="legend-label" style="color: var(--rotator)">Rotator</span>
           {/if}
-          <svg class="legend-icon" viewBox="0 0 8 8" width="7" height="7"><line x1="0" y1="4" x2="8" y2="4" stroke="var(--beam-reticle)" stroke-width="1.2"/><line x1="4" y1="0" x2="4" y2="8" stroke="var(--beam-reticle)" stroke-width="1.2"/></svg>
-          <span class="legend-label" style="color: var(--beam-reticle)">Target</span>
+          <svg class="legend-icon" viewBox="0 0 8 8" width="7" height="7"><line x1="0" y1="4" x2="8" y2="4" stroke="var(--beam-reticle)" stroke-width="1.2"/><line x1="4" y1="0" x2="4" y2="8" stroke="var(--beam-reticle)" stroke-width="1.2"/></svg><span class="legend-label" style="color: var(--beam-reticle)">Target</span>
         </span>
         <span class="info-right" class:info-locked={beamStore.locked}>{infoHoverLabel}</span>
       </div>
@@ -736,16 +734,19 @@
         {@const tEl = rotatorStore.targetEl}
         {@const hasActual = aAz !== null && aEl !== null}
         {@const hasTarget = tAz !== null && tEl !== null}
-        {@const errAz = hasActual && hasTarget ? Math.abs(aAz - tAz) : null}
-        {@const errEl = hasActual && hasTarget ? Math.abs(aEl - tEl) : null}
-        {@const isSlewing = errAz !== null && errEl !== null && (errAz > 0.5 || errEl > 0.5)}
+        {@const errAz = hasActual && hasTarget ? Math.abs(aAz! - tAz!) : null}
+        {@const errEl = hasActual && hasTarget ? Math.abs(aEl! - tEl!) : null}
 
         <div class="rot-pos">
           <span class="rot-pos-label">Az</span>
           <span class="rot-pos-val">{aAz?.toFixed(1) ?? '—'}°</span>
           <span class="rot-pos-label">El</span>
           <span class="rot-pos-val">{aEl?.toFixed(1) ?? '—'}°</span>
-          {#if isSlewing}
+          <span class="rot-pos-label">Rate</span>
+          <span class="rot-pos-val">{rotatorStore.velocityDegS.toFixed(1)}°/s</span>
+          {#if rotatorStore.slewWarning}
+            <span class="rot-pos-warn">CAN'T KEEP UP</span>
+          {:else if rotatorStore.isSlewing}
             <span class="rot-pos-err">&Delta; {errAz?.toFixed(1)}° / {errEl?.toFixed(1)}°</span>
           {:else if hasActual && hasTarget}
             <span class="rot-pos-ok">{beamStore.locked ? `ON ${beamStore.lockedSatName}` : 'ON TARGET'}</span>
@@ -941,7 +942,7 @@
   }
   .legend-icon {
     vertical-align: -1px;
-    margin-right: 2px;
+    margin-right: 3px;
   }
   .legend-label {
     font-size: 10px;
@@ -1087,6 +1088,12 @@
   }
   .rot-pos-idle {
     color: var(--text-ghost);
+    margin-left: auto;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+  }
+  .rot-pos-warn {
+    color: var(--danger-bright);
     margin-left: auto;
     font-size: 9px;
     letter-spacing: 0.5px;

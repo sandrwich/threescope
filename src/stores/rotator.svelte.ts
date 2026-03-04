@@ -36,10 +36,24 @@ class RotatorStore {
   targetAz = $state<number | null>(null);
   targetEl = $state<number | null>(null);
 
+  // Slewing state with hysteresis (>2° to enter, <0.5° to leave)
+  isSlewing = $state(false);
+  // Warning: rotator can't keep up with target
+  slewWarning = $state(false);
+  // Rotator angular velocity (°/s), smoothed over recent polls
+  velocityDegS = $state(0);
+
   // Internals
   private driver: RotatorDriver | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private trackTimer: ReturnType<typeof setInterval> | null = null;
+  private _wasSlewing = false;
+  private _errHistory: number[] = [];
+  private _highErrSince: number | null = null;
+  private _prevAz: number | null = null;
+  private _prevEl: number | null = null;
+  private _prevTime: number | null = null;
+  private _velocityBuf: number[] = [];
 
   async connect(): Promise<void> {
     if (this.status === 'connected' || this.status === 'connecting') return;
@@ -109,6 +123,16 @@ class RotatorStore {
     this.actualEl = null;
     this.targetAz = null;
     this.targetEl = null;
+    this.isSlewing = false;
+    this.slewWarning = false;
+    this.velocityDegS = 0;
+    this._wasSlewing = false;
+    this._errHistory.length = 0;
+    this._highErrSince = null;
+    this._prevAz = null;
+    this._prevEl = null;
+    this._prevTime = null;
+    this._velocityBuf.length = 0;
   }
 
   async goto(az: number, el: number): Promise<void> {
@@ -158,6 +182,60 @@ class RotatorStore {
         const pos = await this.driver.getPosition();
         this.actualAz = pos.az;
         this.actualEl = pos.el;
+
+        // Compute angular velocity (°/s)
+        const now = performance.now();
+        if (this._prevAz !== null && this._prevEl !== null && this._prevTime !== null) {
+          const dt = (now - this._prevTime) / 1000;
+          if (dt > 0.05) {
+            const dAz = Math.abs(pos.az - this._prevAz);
+            const dEl = Math.abs(pos.el - this._prevEl);
+            const rate = Math.sqrt(dAz * dAz + dEl * dEl) / dt;
+            this._velocityBuf.push(rate);
+            if (this._velocityBuf.length > 4) this._velocityBuf.shift();
+            this.velocityDegS = this._velocityBuf.reduce((a, b) => a + b, 0) / this._velocityBuf.length;
+          }
+        }
+        this._prevAz = pos.az;
+        this._prevEl = pos.el;
+        this._prevTime = now;
+
+        // Compute slewing state with hysteresis
+        if (this.targetAz !== null && this.targetEl !== null) {
+          const maxErr = Math.max(Math.abs(pos.az - this.targetAz), Math.abs(pos.el - this.targetEl));
+          this.isSlewing = this._wasSlewing ? maxErr > 0.5 : maxErr > 2;
+          this._wasSlewing = this.isSlewing;
+
+          // Warning: rotator can't keep up (error not decreasing)
+          this._errHistory.push(maxErr);
+          if (this._errHistory.length > 6) this._errHistory.shift();
+
+          // Sustained: error stays >5° for 3+ seconds AND not shrinking
+          const high = maxErr > 5;
+          if (high) {
+            if (this._highErrSince === null) this._highErrSince = Date.now();
+          } else {
+            this._highErrSince = null;
+          }
+          const sustainedHigh = this._highErrSince !== null && Date.now() - this._highErrSince > 3000;
+
+          // Check if error is shrinking — if so, rotator is making progress, no warning
+          let shrinking = false;
+          if (this._errHistory.length >= 3) {
+            const h = this._errHistory;
+            shrinking = h[h.length - 1] < h[h.length - 2] - 0.3
+                     && h[h.length - 2] < h[h.length - 3] - 0.3;
+          }
+
+          this.slewWarning = this.autoTrack && sustainedHigh && !shrinking;
+        } else {
+          this.isSlewing = false;
+          this._wasSlewing = false;
+          this.slewWarning = false;
+          this._errHistory.length = 0;
+          this._highErrSince = null;
+        }
+
         // Clear target once arrived (manual slew only, not auto-track)
         if (!this.autoTrack && this.targetAz !== null && this.targetEl !== null) {
           const errAz = Math.abs(pos.az - this.targetAz);

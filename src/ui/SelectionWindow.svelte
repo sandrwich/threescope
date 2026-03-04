@@ -204,15 +204,18 @@
               <div class="sat-detail">
                 <div class="detail-grid">
                   <span class="dl">NORAD ID</span><span class="dv">{sat.noradId}</span>
-                  <span class="dl">Inclination</span><span class="dv">{fmt(sat.incDeg, 2)}&deg;</span>
-                  <span class="dl">Eccentricity</span><span class="dv">{sat.eccen.toFixed(5)}</span>
-                  <span class="dl">RAAN</span><span class="dv">{fmt(sat.raanDeg, 2)}&deg;</span>
-                  <span class="dl">Period</span><span class="dv">{fmt(sat.periodMin, 1)} min</span>
                   <span class="dl">Latitude</span><span class="dv">{fmt(sat.latDeg, 2)}&deg;</span>
                   <span class="dl">Longitude</span><span class="dv">{fmt(sat.lonDeg, 2)}&deg;</span>
+                  {#if sat.angularRateDegS !== null}
+                    <span class="dl">Ang. rate</span><span class="dv">{sat.angularRateDegS.toFixed(2)}°/s</span>
+                  {/if}
                   {#if sat.magStr !== null}
                     <span class="dl">Magnitude</span><span class="dv">{sat.magStr}</span>
                   {/if}
+                  <span class="dl">Period</span><span class="dv">{fmt(sat.periodMin, 1)} min</span>
+                  <!-- <span class="dl">Inclination</span><span class="dv">{fmt(sat.incDeg, 2)}&deg;</span>
+                  <span class="dl">Eccentricity</span><span class="dv">{sat.eccen.toFixed(5)}</span>
+                  <span class="dl">RAAN</span><span class="dv">{fmt(sat.raanDeg, 2)}&deg;</span> -->
                 </div>
                 <div class="detail-actions">
                   <Button size="xs" active={beamStore.locked && beamStore.lockedNoradId === sat.noradId} onclick={() => {
