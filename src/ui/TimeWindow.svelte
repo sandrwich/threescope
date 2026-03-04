@@ -346,6 +346,7 @@
     flex-direction: column;
     gap: 10px;
     min-width: 240px;
+    padding-bottom: 8px;
   }
   .tc-mobile { min-width: unset; }
   .transport-row {
@@ -515,6 +516,7 @@
   .warning {
     font-size: 11px;
     color: var(--warning);
+    margin-top: -2px;
   }
 
   /* ─── Mobile datetime display ─── */
@@ -553,7 +555,6 @@
 
   /* ─── Time scrub strip ─── */
   .scrub-strip {
-    padding: 0 0 10px;
     cursor: ew-resize;
     user-select: none;
   }

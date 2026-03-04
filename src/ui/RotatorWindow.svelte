@@ -27,6 +27,62 @@
   import { palette, parseRgba } from './shared/theme';
   import { initHiDPICanvas } from './shared/canvas';
 
+  // ── CRT phosphor palette (derived from theme radar colors) ──
+  // Rebuilt when CRT canvases init or theme changes; avoids per-frame parsing
+  let crt = {
+    decayFill: 'rgba(5,10,5,0.028)',
+    sweepLine: 'rgba(60,200,60,0.2)',
+    sweepTrail: 'rgba(50,180,50,0.07)',
+    flashSelected: 'rgba(200,255,200,0.95)',
+    flashBeam: 'rgba(180,255,130,0.9)',
+    flashNormal: 'rgba(100,255,100,0.85)',
+    bloomBright: 'rgba(68,255,68,0.25)',
+    bloomDim: 'rgba(68,255,68,0.15)',
+    glowRing: 'rgba(68,255,68,0.15)',
+    tickLocked: 'rgba(68,255,68,0.35)',
+    tickUnlocked: 'rgba(255,204,51,0.35)',
+    rotatorDash: 'rgba(255,102,204,0.3)',
+    tooltipBg: 'rgba(0,0,0,0.85)',
+    scanline: 'rgba(0,0,0,0.05)',
+    vignetteA: 'rgba(0,0,0,0)',
+    vignetteB: 'rgba(0,0,0,0.3)',
+    vignetteC: 'rgba(0,0,0,0.7)',
+  };
+
+  function buildCrtPalette() {
+    const blip = parseRgba(palette.radarBlip);
+    const bg = parseRgba(palette.radarBg);
+    const reticle = parseRgba(palette.beamReticle);
+    const rot = parseRgba(palette.rotator);
+    const br = Math.round(blip.r * 255), bg_ = Math.round(blip.g * 255), bb = Math.round(blip.b * 255);
+    const bgr = Math.round(bg.r * 255), bgg = Math.round(bg.g * 255), bgb = Math.round(bg.b * 255);
+    const rr = Math.round(reticle.r * 255), rg = Math.round(reticle.g * 255), rb = Math.round(reticle.b * 255);
+    const rotr = Math.round(rot.r * 255), rotg = Math.round(rot.g * 255), rotb = Math.round(rot.b * 255);
+    // Bright version of blip for flash highlights
+    const hr = Math.min(255, br + Math.round((255 - br) * 0.6));
+    const hg = Math.min(255, bg_ + Math.round((255 - bg_) * 0.6));
+    const hb = Math.min(255, bb + Math.round((255 - bb) * 0.6));
+    crt = {
+      decayFill: `rgba(${bgr},${bgg},${bgb},0.028)`,
+      sweepLine: `rgba(${br},${bg_},${bb},0.2)`,
+      sweepTrail: `rgba(${br},${bg_},${bb},0.07)`,
+      flashSelected: `rgba(${hr},${hg},${hb},0.95)`,
+      flashBeam: `rgba(${Math.round((br + hr) / 2)},${Math.round((bg_ + hg) / 2)},${Math.round((bb + hb) / 2)},0.9)`,
+      flashNormal: `rgba(${br},${bg_},${bb},0.85)`,
+      bloomBright: `rgba(${br},${bg_},${bb},0.25)`,
+      bloomDim: `rgba(${br},${bg_},${bb},0.15)`,
+      glowRing: `rgba(${br},${bg_},${bb},0.15)`,
+      tickLocked: `rgba(${br},${bg_},${bb},0.35)`,
+      tickUnlocked: `rgba(${rr},${rg},${rb},0.35)`,
+      rotatorDash: `rgba(${rotr},${rotg},${rotb},0.3)`,
+      tooltipBg: `rgba(${bgr},${bgg},${bgb},0.85)`,
+      scanline: `rgba(${bgr},${bgg},${bgb},0.08)`,
+      vignetteA: `rgba(${bgr},${bgg},${bgb},0)`,
+      vignetteB: `rgba(${bgr},${bgg},${bgb},0.35)`,
+      vignetteC: `rgba(${bgr},${bgg},${bgb},0.75)`,
+    };
+  }
+
   let tab = $state<'radar' | 'setup'>('radar');
   let rateDisplay = $derived(`${(rotatorStore.updateIntervalMs / 1000).toFixed(1)}s`);
 
@@ -71,6 +127,7 @@
   let scanlineCanvas: HTMLCanvasElement | null = null;
   let vignetteCanvas: HTMLCanvasElement | null = null;
   let prevSweepAngle = 0;
+  let prevPaletteKey = '';
 
   function buildPhosphor() {
     const c = document.createElement('canvas');
@@ -87,7 +144,7 @@
     const c = document.createElement('canvas');
     c.width = SIZE; c.height = SIZE;
     const sc = c.getContext('2d')!;
-    sc.strokeStyle = 'rgba(0,0,0,0.05)';
+    sc.strokeStyle = crt.scanline;
     sc.lineWidth = 1;
     for (let y = 0; y < SIZE; y += 2) {
       sc.beginPath();
@@ -103,10 +160,10 @@
     c.width = SIZE; c.height = SIZE;
     const vc = c.getContext('2d')!;
     const grad = vc.createRadialGradient(CX, CY, 0, CX, CY, R_MAX);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(0.55, 'rgba(0,0,0,0)');
-    grad.addColorStop(0.85, 'rgba(0,0,0,0.3)');
-    grad.addColorStop(1.0, 'rgba(0,0,0,0.7)');
+    grad.addColorStop(0, crt.vignetteA);
+    grad.addColorStop(0.55, crt.vignetteA);
+    grad.addColorStop(0.85, crt.vignetteB);
+    grad.addColorStop(1.0, crt.vignetteC);
     vc.fillStyle = grad;
     vc.beginPath();
     vc.arc(CX, CY, R_MAX, 0, 2 * Math.PI);
@@ -267,6 +324,18 @@
     ctx.save();
     ctx.scale(dpr, dpr);
 
+    // Rebuild CRT palette + canvases on theme change
+    const pKey = palette.radarBg + palette.radarBlip;
+    if (pKey !== prevPaletteKey) {
+      prevPaletteKey = pKey;
+      buildCrtPalette();
+      if (vfx && phosphorCtx) {
+        buildPhosphor();
+        buildScanlines();
+        buildVignette();
+      }
+    }
+
     // ── Background ──
     ctx.fillStyle = palette.radarBg;
     ctx.fillRect(0, 0, SIZE, SIZE + INFO_H);
@@ -296,14 +365,14 @@
       if (sweepAngle > TWO_PI) sweepAngle -= TWO_PI;
 
       // Fade the phosphor buffer — this creates the persistence decay
-      pc.fillStyle = 'rgba(5, 10, 5, 0.028)';
+      pc.fillStyle = crt.decayFill;
       pc.fillRect(0, 0, SIZE, SIZE);
 
       // Draw bright sweep line onto phosphor
       const edgeA = sweepAngle - Math.PI / 2;
       const sx = CX + sweepLen * Math.cos(edgeA);
       const sy = CY + sweepLen * Math.sin(edgeA);
-      pc.strokeStyle = 'rgba(60, 200, 60, 0.15)';
+      pc.strokeStyle = crt.sweepLine;
       pc.lineWidth = 1.5;
       pc.beginPath();
       pc.moveTo(CX, CY);
@@ -311,7 +380,7 @@
       pc.stroke();
       // Dimmer trailing line
       const trailA = sweepAngle - 0.04 - Math.PI / 2;
-      pc.strokeStyle = 'rgba(50, 180, 50, 0.05)';
+      pc.strokeStyle = crt.sweepTrail;
       pc.lineWidth = 1;
       pc.beginPath();
       pc.moveTo(CX, CY);
@@ -338,16 +407,16 @@
           const radius = isSelected ? 4 : inBeam ? 3 : 2.5;
 
           // Bright white-green flash
-          pc.fillStyle = isSelected ? 'rgba(200, 255, 200, 0.95)'
-                       : inBeam    ? 'rgba(180, 255, 130, 0.9)'
-                       :             'rgba(100, 255, 100, 0.85)';
+          pc.fillStyle = isSelected ? crt.flashSelected
+                       : inBeam    ? crt.flashBeam
+                       :             crt.flashNormal;
           pc.beginPath();
           pc.arc(bx, by, radius, 0, TWO_PI);
           pc.fill();
 
           // Bloom glow
           if (isSelected || inBeam) {
-            pc.fillStyle = isSelected ? 'rgba(68, 255, 68, 0.25)' : 'rgba(68, 255, 68, 0.15)';
+            pc.fillStyle = isSelected ? crt.bloomBright : crt.bloomDim;
             pc.beginPath();
             pc.arc(bx, by, radius + 4, 0, TWO_PI);
             pc.fill();
@@ -433,7 +502,7 @@
         if (isSelected) {
           ctx.beginPath();
           ctx.arc(x, y, 7, 0, TWO_PI);
-          ctx.fillStyle = 'rgba(68, 255, 68, 0.15)';
+          ctx.fillStyle = crt.glowRing;
           ctx.fill();
           ctx.beginPath();
           ctx.arc(x, y, 3.5, 0, TWO_PI);
@@ -487,7 +556,7 @@
 
       const gap = beamRadiusPx + 3;
       const tick = 5;
-      ctx.strokeStyle = beamStore.locked ? 'rgba(68, 255, 68, 0.35)' : 'rgba(255, 204, 51, 0.35)';
+      ctx.strokeStyle = beamStore.locked ? crt.tickLocked : crt.tickUnlocked;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(bx - gap, by); ctx.lineTo(bx - gap - tick, by);
@@ -514,7 +583,7 @@
 
       if (rotatorStore.targetAz !== null && rotatorStore.targetEl !== null) {
         const { x: tx, y: ty } = azElToXY(rotatorStore.targetAz, rotatorStore.targetEl);
-        ctx.strokeStyle = 'rgba(255, 102, 204, 0.3)';
+        ctx.strokeStyle = crt.rotatorDash;
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
@@ -587,7 +656,7 @@
         if (tx + boxW > SIZE) tx = x - boxW - 10;
         if (ty < 0) ty = y + 10;
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillStyle = crt.tooltipBg;
         ctx.fillRect(tx, ty, boxW, boxH);
         ctx.strokeStyle = palette.radarGrid;
         ctx.lineWidth = 1;
@@ -627,6 +696,7 @@
   }
 
   function initCrtCanvases() {
+    buildCrtPalette();
     buildPhosphor();
     buildScanlines();
     buildVignette();

@@ -44,6 +44,8 @@ class ThemeStore {
     for (const [prop, value] of Object.entries(theme.vars)) {
       root.style.setProperty(prop, value);
     }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme.vars['--bg']);
     refreshTheme();
     this.onThemeChange?.();
   }

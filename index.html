@@ -85,6 +85,10 @@
             if (vars.hasOwnProperty(k)) root.style.setProperty(k, vars[k]);
           }
         }
+        if (vars && vars['--bg']) {
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute('content', vars['--bg']);
+        }
         if (id === 'light' || (vars && vars['--bg'] && parseInt(vars['--bg'].replace('#','').slice(0,2), 16) > 128)) {
           document.documentElement.style.setProperty('color-scheme', 'light');
         }
