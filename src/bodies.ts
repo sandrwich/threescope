@@ -116,6 +116,34 @@ export const PLANETS: PlanetDef[] = [
   },
 ];
 
+// In lite mode, use lower-resolution color textures and skip displacement entirely.
+// Tiny textures (neptune, uranus) stay as-is.
+const LITE_COLORS = new Set([
+  '/textures/sun/color.webp',
+  '/textures/mercury/color.webp',
+  '/textures/venus/color.webp',
+  '/textures/mars/color.webp',
+  '/textures/jupiter/color.webp',
+  '/textures/saturn/color.webp',
+]);
+
+const _isLite = __FORCED_TEXTURE_QUALITY__
+  ? __FORCED_TEXTURE_QUALITY__ === 'lite'
+  : localStorage.getItem('satvisor_lite_mode') === 'true';
+
+if (_isLite) {
+  const liteUrl = (url: string) => url.replace('.webp', '.lite.webp');
+  for (const p of PLANETS) {
+    if (LITE_COLORS.has(p.textureUrl)) p.textureUrl = liteUrl(p.textureUrl);
+    p.thumbnailUrl = liteUrl(p.thumbnailUrl);
+    p.displacementMapUrl = undefined;
+    p.displacementScale = 0;
+  }
+  for (const b of Object.values(BODIES)) {
+    if (b.thumbnailUrl) b.thumbnailUrl = liteUrl(b.thumbnailUrl);
+  }
+}
+
 export function getMinZoom(lock: TargetLock): number {
   // Promoted planets use uniform orrery ball size (radius 3.0)
   if (lock === TargetLock.PLANET) return 4.0;

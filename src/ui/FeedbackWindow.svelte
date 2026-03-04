@@ -36,6 +36,7 @@
     <div class="bt-help"><strong>Vibration not supported in this browser.</strong></div>
   {/if}
 
+  {#if __FEEDBACK_TOYS__}
   <div class="row">
     <label>Toys<InfoTip>Connect to Bluetooth vibration devices via WebBluetooth. Uses an embedded WASM Buttplug server — no external app needed. Requires a compatible browser with Web Bluetooth enabled.</InfoTip></label>
     <Checkbox checked={feedbackStore.buttplugEnabled} onchange={() => feedbackStore.setButtplugEnabled(!feedbackStore.buttplugEnabled)} />
@@ -93,6 +94,7 @@
       </ul>
       <span class="bt-note">Linux needs BlueZ 5.43+ and bluetooth service running.</span>
     </div>
+  {/if}
   {/if}
 
   {#if feedbackStore.hapticEnabled || feedbackStore.audioEnabled || feedbackStore.buttplugEnabled}

@@ -76,6 +76,19 @@
     settingsStore.applyFov(Number((e.target as HTMLInputElement).value));
   }
 
+  // --- Texture Quality (lite mode) ---
+  const textureQualityForced = !!__FORCED_TEXTURE_QUALITY__;
+  let liteMode = $state(
+    __FORCED_TEXTURE_QUALITY__
+      ? __FORCED_TEXTURE_QUALITY__ === 'lite'
+      : localStorage.getItem('satvisor_lite_mode') === 'true'
+  );
+
+  function setTextureQuality(lite: boolean) {
+    localStorage.setItem('satvisor_lite_mode', String(lite));
+    location.reload();
+  }
+
   let fpsLabelText = $derived(
     settingsStore.fpsSliderValue === 0 ? 'Vsync' :
     settingsStore.fpsSliderValue > 480 ? 'Unlocked' :
@@ -92,6 +105,27 @@
 {#snippet settIcon()}<span class="title-icon">{@html ICON_SETTINGS}</span>{/snippet}
 {#snippet windowContent()}
   <h4 class="section-header">Graphics</h4>
+  {#if !textureQualityForced}
+    <div class="row">
+      <label>Texture Quality<InfoTip>Controls texture resolution and total download size. Requires a page reload.
+        <div class="tip-options">
+          <div><b>Full</b> (~74 MB total)</div>
+          <div>8K earth &amp; moon, 4K clouds, displacement &amp; normal maps, elevation grid, 8K planet textures in orrery</div>
+          <div>~26 MB blocking before app loads</div>
+          <div>~18 MB elevation grid loaded in background</div>
+          <div>~22 MB planet textures on demand in orrery</div>
+          <div style="margin-top:6px"><b>Lite</b> (~4 MB total)</div>
+          <div>4K earth, 2K night &amp; stars, 1K clouds &amp; moon, no displacement/normal/elevation, lower-res planet &amp; orrery thumbnails</div>
+          <div>~2 MB blocking before app loads</div>
+          <div>~1 MB planet textures on demand in orrery</div>
+        </div>
+      </InfoTip></label>
+      <Select size="xs" value={liteMode ? 'lite' : 'full'} onchange={(e) => setTextureQuality((e.target as HTMLSelectElement).value === 'lite')}>
+        <option value="full">Full</option>
+        <option value="lite">Lite</option>
+      </Select>
+    </div>
+  {/if}
   <div class="row">
     <label>Preset</label>
     <Select size="xs" value={settingsStore.graphicsPreset ?? 'custom'} onchange={onGfxPresetChange}>

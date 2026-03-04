@@ -181,14 +181,16 @@ export function getSatellitesByFreqRange(minHz: number, maxHz: number): Set<numb
 
 // ─── Display helpers ────────────────────────────────────────────
 
+const SATNOGS_BASE = __SATNOGS_BASE__ || 'https://db.satnogs.org';
+
 /** Full URL for a SatNOGS satellite image. */
 export function satnogsImageUrl(relativePath: string): string {
-  return `https://db.satnogs.org/media/${relativePath}`;
+  return `${SATNOGS_BASE}/media/${relativePath}`;
 }
 
 /** URL to the SatNOGS satellite detail page. */
 export function satnogsPageUrl(satId: string): string {
-  return `https://db.satnogs.org/satellite/${satId}/`;
+  return `${SATNOGS_BASE}/satellite/${satId}/`;
 }
 
 // Re-export frequency formatters from shared utility

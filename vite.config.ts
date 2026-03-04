@@ -34,6 +34,13 @@ export default defineConfig({
   define: {
     __COMMIT_HASH__: JSON.stringify(commitHash),
     __COMMIT_DATE__: JSON.stringify(commitDate),
+    __FORCED_TEXTURE_QUALITY__: JSON.stringify(process.env.VITE_TEXTURE_QUALITY || ''),
+    __DATA_MIRROR__: JSON.stringify(process.env.VITE_DATA_MIRROR || ''),
+    __CELESTRAK_BASE__: JSON.stringify(process.env.VITE_CELESTRAK_BASE || ''),
+    __SATNOGS_BASE__: JSON.stringify(process.env.VITE_SATNOGS_BASE || ''),
+    __TLE_CACHE_MAX_AGE_H__: JSON.stringify(Number(process.env.VITE_TLE_CACHE_MAX_AGE_H) || 1),
+    __TLE_CACHE_EVICT_AGE_H__: JSON.stringify(Number(process.env.VITE_TLE_CACHE_EVICT_AGE_H) || 24),
+    __FEEDBACK_TOYS__: JSON.stringify(process.env.VITE_FEEDBACK_TOYS !== 'false'),
   },
   optimizeDeps: {
     exclude: ['@satvisorcom/buttplug-wasm'],
@@ -46,6 +53,12 @@ export default defineConfig({
     watch: { ignored: ['**/src-tauri/**'] },
   },
   plugins: [
+    {
+      name: 'html-texture-quality',
+      transformIndexHtml(html) {
+        return html.replace(/%VITE_TEXTURE_QUALITY%/g, process.env.VITE_TEXTURE_QUALITY || '');
+      },
+    },
     buttplugWasmPlugin(),
     svelte(),
     VitePWA({
@@ -67,7 +80,14 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,png,jpg,ttf,json}'],
-        globIgnores: ['**/textures/icons/**', '**/buttplug_wasm*'],
+        globIgnores: [
+          '**/textures/icons/**',
+          '**/buttplug_wasm*',
+          // In lite mode, don't precache full-size country grid
+          ...(process.env.VITE_TEXTURE_QUALITY === 'lite' ? ['**/countries-110m.json'] : ['**/countries-110m.lite.json']),
+          // Never precache elevation.bin (18MB, loaded lazily and skipped in lite)
+          '**/elevation.bin',
+        ],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Don't auto-create a NavigationRoute that serves precached index.html
         // — we add our own NetworkFirst navigation rule below
@@ -85,7 +105,9 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: /^https:\/\/celestrak\.org\//,
+            urlPattern: process.env.VITE_CELESTRAK_BASE
+              ? new RegExp(`^${process.env.VITE_CELESTRAK_BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
+              : /^https:\/\/celestrak\.org\//,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'tle-data-cache',

@@ -26,7 +26,7 @@ import { InputHandler } from './interaction/input-handler';
 import { OrreryController } from './scene/orrery-controller';
 import { getMapCoordinates, latLonToSurface, observerFrame, observerFrameInto } from './astro/coordinates';
 import { calculateSunPosition } from './astro/sun';
-import { fetchTLEData, parseSatelliteDataParallel, warmupTLEWorkers } from './data/tle-loader';
+import { fetchTLEData, parseSatelliteDataParallel, warmupTLEWorkers, evictExpiredTLECaches } from './data/tle-loader';
 import { getSatellitesByFreqRange } from './data/satnogs';
 import { loadStdmag, loadSatnogs, applyStdmag, onStdmagRefresh } from './data/catalog';
 import { sourcesStore, type TLESourceConfig } from './stores/sources.svelte';
@@ -245,6 +245,9 @@ export class App {
     this.scene2d = new THREE.Scene();
     this.scene2d.background = new THREE.Color(palette.bg);
 
+    // Evict expired TLE caches on startup to prevent unbounded localStorage growth
+    evictExpiredTLECaches();
+
     // Warm up TLE parsing workers — compile in background during texture download.
     // On slow networks: ready in time for TLE parsing. On fast/localhost: readiness check falls back to sync.
     warmupTLEWorkers();
@@ -338,10 +341,31 @@ export class App {
     this.loadingMsg.textContent = msg;
   }
 
+  private liteMode = __FORCED_TEXTURE_QUALITY__
+    ? __FORCED_TEXTURE_QUALITY__ === 'lite'
+    : localStorage.getItem('satvisor_lite_mode') === 'true';
+
   private async loadTextures() {
     const loader = new THREE.TextureLoader();
     let texLoaded = 0;
-    const texTotal = 9;
+    const lite = this.liteMode;
+    const ext = lite ? '.lite.webp' : '.webp';
+
+    const texUrls: string[] = [
+      `/textures/earth/color${ext}`,
+      `/textures/earth/night${ext}`,
+      '/textures/ui/sat_sprites.png',
+      `/textures/stars${ext}`,
+      `/textures/earth/clouds${ext}`,
+      `/textures/moon/color${ext}`,
+      ...(lite ? [] : [
+        '/textures/earth/normal.webp',
+        '/textures/earth/displacement.webp',
+        '/textures/moon/displacement.webp',
+      ]),
+    ];
+    const texTotal = texUrls.length;
+
     const load = (url: string) => new Promise<THREE.Texture>((resolve) => {
       loader.load(url, (tex) => {
         texLoaded++;
@@ -351,19 +375,13 @@ export class App {
     });
 
     // Load ALL textures behind the loading screen — no deferred loads, no post-load stutter
-    const [dayTex, nightTex, satTex, starTex, cloudTex, moonTex, earthNormal, earthDisp, moonDisp] = await Promise.all([
-      load('/textures/earth/color.webp'),
-      load('/textures/earth/night.webp'),
-      load('/textures/ui/sat_sprites.png'),
-      load('/textures/stars.webp'),
-      load('/textures/earth/clouds.webp'),
-      load('/textures/moon/color.webp'),
-      load('/textures/earth/normal.webp'),
-      load('/textures/earth/displacement.webp'),
-      load('/textures/moon/displacement.webp'),
-    ]);
+    const results = await Promise.all(texUrls.map(load));
+    const [dayTex, nightTex, satTex, starTex, cloudTex, moonTex] = results;
+    const earthNormal = lite ? null : results[6];
+    const earthDisp = lite ? null : results[7];
+    const moonDisp = lite ? null : results[8];
 
-    for (const tex of [dayTex, nightTex, cloudTex, earthNormal, earthDisp, moonTex, moonDisp]) {
+    for (const tex of [dayTex, nightTex, cloudTex, moonTex, ...(lite ? [] : [earthNormal!, earthDisp!, moonDisp!])]) {
       tex.flipY = false;
       tex.colorSpace = THREE.NoColorSpace;
     }
@@ -375,14 +393,14 @@ export class App {
     this.scene3d.background = starTex;
 
     // Pre-upload all textures to GPU behind the loading screen
-    for (const tex of [dayTex, nightTex, satTex, starTex, cloudTex, moonTex, earthNormal, earthDisp, moonDisp]) {
+    for (const tex of results) {
       this.renderer.initTexture(tex);
     }
 
     this.setLoading(0.5, 'Building scene...');
 
     // Earth
-    this.earth = new Earth(dayTex, nightTex, earthNormal, earthDisp);
+    this.earth = new Earth(dayTex, nightTex, earthNormal ?? null, earthDisp ?? null);
     this.scene3d.add(this.earth.mesh);
 
     // Sky-view ground disc: flat plane with projected Earth texture for realistic ground
@@ -431,7 +449,7 @@ export class App {
     this.scene3d.add(this.cloudLayer.mesh);
 
     // Moon
-    this.moonScene = new MoonScene(moonTex, moonDisp);
+    this.moonScene = new MoonScene(moonTex, moonDisp ?? null);
     this.scene3d.add(this.moonScene.mesh);
 
     // Sun
@@ -455,7 +473,7 @@ export class App {
 
     // Geographic overlays (country outlines + lat/lon grid)
     this.geoOverlay = new GeoOverlay(this.scene3d, this.scene2d);
-    this.geoOverlay.setCountriesUrl('/data/countries-110m.json');
+    this.geoOverlay.setCountriesUrl(this.liteMode ? '/data/countries-110m.lite.json' : '/data/countries-110m.json');
 
     this.mapRenderer = new MapRenderer(this.scene2d, {
       dayTex, nightTex, satTex, spriteCount,
@@ -1045,8 +1063,8 @@ export class App {
       if (uiStore.passesVisible && uiStore.passesTab === 'nearby') this.requestNearbyPasses();
       this.updateObserverMarker();
     };
-    // Load elevation grid in background
-    loadElevation();
+    // Load elevation grid in background (skip in lite mode — getElevation() returns 0m)
+    if (!this.liteMode) loadElevation();
     this.updateObserverMarker();
 
     // Mini planet renderer — wait for Svelte to mount the canvas

@@ -5,7 +5,8 @@ import { getMirrorUrl, getCelestrakUrl, getSourceByGroup } from './tle-sources';
 import { applyStdmag } from './catalog';
 
 const CACHE_KEY_PREFIX = 'tlescope_tle_';
-const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_MAX_AGE_MS = __TLE_CACHE_MAX_AGE_H__ * 60 * 60 * 1000;
+const CACHE_EVICT_AGE_MS = __TLE_CACHE_EVICT_AGE_H__ * 60 * 60 * 1000;
 const RATELIMIT_KEY = 'tlescope_ratelimited';
 const RATELIMIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
@@ -261,10 +262,80 @@ export function getCacheAge(group: string): number | null {
 }
 
 function saveToCache(group: string, data: string, count?: number) {
+  const value = JSON.stringify({ ts: Date.now(), data, count });
   try {
-    localStorage.setItem(CACHE_KEY_PREFIX + group, JSON.stringify({ ts: Date.now(), data, count }));
+    localStorage.setItem(CACHE_KEY_PREFIX + group, value);
   } catch {
-    // localStorage full or unavailable — silently ignore
+    // localStorage full — evict oldest non-active TLE caches and retry
+    console.warn(`[TLE cache] localStorage quota exceeded while caching "${group}", evicting stale entries...`);
+    evictStaleTLECaches(group);
+    try {
+      localStorage.setItem(CACHE_KEY_PREFIX + group, value);
+    } catch {
+      console.warn(`[TLE cache] still over quota after eviction, cache for "${group}" not saved`);
+    }
+  }
+}
+
+/** Remove TLE cache entries that aren't currently enabled, oldest first. */
+function evictStaleTLECaches(keepGroup: string) {
+  // Read active source IDs from localStorage to avoid circular imports
+  const activeGroups = new Set<string>();
+  activeGroups.add(keepGroup);
+  try {
+    const enabledRaw = localStorage.getItem('satvisor_sources_enabled');
+    if (enabledRaw) {
+      // Enabled IDs are like "celestrak:visual" — the group is after the colon
+      for (const id of JSON.parse(enabledRaw)) {
+        const group = typeof id === 'string' ? id.split(':').slice(1).join(':') : '';
+        if (group) activeGroups.add(group);
+      }
+    }
+  } catch {}
+
+  const entries: { key: string; ts: number }[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(CACHE_KEY_PREFIX)) continue;
+    const group = key.slice(CACHE_KEY_PREFIX.length);
+    if (activeGroups.has(group)) continue;
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key)!);
+      entries.push({ key, ts: parsed.ts ?? 0 });
+    } catch {
+      entries.push({ key, ts: 0 });
+    }
+  }
+  // Evict oldest first
+  entries.sort((a, b) => a.ts - b.ts);
+  for (const e of entries) {
+    console.warn(`[TLE cache] evicting inactive source "${e.key.slice(CACHE_KEY_PREFIX.length)}"`);
+    localStorage.removeItem(e.key);
+  }
+}
+
+/**
+ * Delete all TLE cache entries older than CACHE_EVICT_AGE_MS.
+ * Called once at startup to prevent unbounded localStorage growth.
+ * Set VITE_TLE_CACHE_EVICT_AGE_H=0 to disable (useful for offline/air-gapped deployments).
+ */
+export function evictExpiredTLECaches() {
+  if (!CACHE_EVICT_AGE_MS) return;
+  const now = Date.now();
+  const toRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(CACHE_KEY_PREFIX)) continue;
+    try {
+      const { ts } = JSON.parse(localStorage.getItem(key)!);
+      if (now - ts > CACHE_EVICT_AGE_MS) toRemove.push(key);
+    } catch {
+      toRemove.push(key); // unparseable — remove
+    }
+  }
+  for (const key of toRemove) {
+    console.warn(`[TLE cache] evicting expired cache "${key.slice(CACHE_KEY_PREFIX.length)}" (older than ${__TLE_CACHE_EVICT_AGE_H__}h)`);
+    localStorage.removeItem(key);
   }
 }
 

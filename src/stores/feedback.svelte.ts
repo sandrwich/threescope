@@ -153,6 +153,7 @@ class FeedbackStore {
   }
 
   async setButtplugEnabled(value: boolean): Promise<void> {
+    if (!__FEEDBACK_TOYS__) return;
     this.buttplugEnabled = value;
     localStorage.setItem(PREFIX + 'buttplug', String(value));
     if (value && !this.buttplugTarget) {

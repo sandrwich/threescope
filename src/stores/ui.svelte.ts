@@ -416,17 +416,21 @@ class UIStore {
   }
 
   setToggle(key: string, value: boolean) {
-    switch (key) {
-      case 'hideUnselected': this.hideUnselected = value; localStorage.setItem('satvisor_spotlight', String(value)); break;
-      case 'showOrbits': this.showOrbits = value; localStorage.setItem('satvisor_orbits', String(value)); break;
-      case 'showClouds': this.showClouds = value; localStorage.setItem('satvisor_clouds', String(value)); break;
-      case 'showNightLights': this.showNightLights = value; localStorage.setItem('satvisor_night', String(value)); break;
-      case 'showSkybox': this.showSkybox = value; localStorage.setItem('satvisor_skybox', String(value)); break;
-      case 'showCountries': this.showCountries = value; localStorage.setItem('satvisor_countries', String(value)); break;
-      case 'showGrid': this.showGrid = value; localStorage.setItem('satvisor_grid', String(value)); break;
-      case 'showSkyGrid': this.showSkyGrid = value; localStorage.setItem('satvisor_skygrid', String(value)); break;
-      case 'radarVfx': this.radarVfx = value; localStorage.setItem('satvisor_radar_vfx', String(value)); break;
-      case 'rotatorOpen': this.rotatorOpen = value; break; // persisted by DraggableWindow
+    try {
+      switch (key) {
+        case 'hideUnselected': this.hideUnselected = value; localStorage.setItem('satvisor_spotlight', String(value)); break;
+        case 'showOrbits': this.showOrbits = value; localStorage.setItem('satvisor_orbits', String(value)); break;
+        case 'showClouds': this.showClouds = value; localStorage.setItem('satvisor_clouds', String(value)); break;
+        case 'showNightLights': this.showNightLights = value; localStorage.setItem('satvisor_night', String(value)); break;
+        case 'showSkybox': this.showSkybox = value; localStorage.setItem('satvisor_skybox', String(value)); break;
+        case 'showCountries': this.showCountries = value; localStorage.setItem('satvisor_countries', String(value)); break;
+        case 'showGrid': this.showGrid = value; localStorage.setItem('satvisor_grid', String(value)); break;
+        case 'showSkyGrid': this.showSkyGrid = value; localStorage.setItem('satvisor_skygrid', String(value)); break;
+        case 'radarVfx': this.radarVfx = value; localStorage.setItem('satvisor_radar_vfx', String(value)); break;
+        case 'rotatorOpen': this.rotatorOpen = value; break; // persisted by DraggableWindow
+      }
+    } catch {
+      // localStorage quota exceeded — toggle still applies in memory
     }
     this.onToggleChange?.(key, value);
   }

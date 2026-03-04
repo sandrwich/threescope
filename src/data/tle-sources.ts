@@ -92,7 +92,7 @@ export const TLE_SOURCES: TLESource[] = [
 
 // ── Mirror (satvisor-data repo) ──
 
-const MIRROR_BASE = 'https://raw.githubusercontent.com/satvisorcom/satvisor-data/master';
+const MIRROR_BASE = __DATA_MIRROR__ || 'https://raw.githubusercontent.com/satvisorcom/satvisor-data/master';
 
 export function getMirrorUrl(group: string, special = false): string {
   const dir = special ? 'celestrak/special/json' : 'celestrak/json';
@@ -111,9 +111,11 @@ export function getMirrorCatalogUrl(name: CatalogName): string {
 
 // ── CelesTrak direct (fallback) ──
 
+const CELESTRAK_BASE = __CELESTRAK_BASE__ || 'https://celestrak.org';
+
 export function getCelestrakUrl(group: string, special = false): string {
   const param = special ? 'SPECIAL' : 'GROUP';
-  return `https://celestrak.org/NORAD/elements/gp.php?${param}=${group}&FORMAT=json`;
+  return `${CELESTRAK_BASE}/NORAD/elements/gp.php?${param}=${group}&FORMAT=json`;
 }
 
 /** Look up a source definition by group slug. */

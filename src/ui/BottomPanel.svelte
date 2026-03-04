@@ -14,6 +14,8 @@
 
   const hash = __COMMIT_HASH__;
   const version = __COMMIT_DATE__ ? 'v' + __COMMIT_DATE__.slice(2, 10).replace(/-/g, '') : '';
+  const liteMode = __FORCED_TEXTURE_QUALITY__ ? __FORCED_TEXTURE_QUALITY__ === 'lite' : localStorage.getItem('satvisor_lite_mode') === 'true';
+  const liteClickable = !__FORCED_TEXTURE_QUALITY__;
 
   let showRotator = $derived(
     rotatorStore.status === 'connected' && !uiStore.rotatorOpen
@@ -51,6 +53,11 @@
     </span>
   {:else}
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    {#if liteMode}
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+      <span class="lite-badge" class:clickable={liteClickable} onclick={() => { if (liteClickable) { uiStore.settingsOpen = true; if (uiStore.isMobile) uiStore.openMobileSheet('settings'); } }}>lite textures</span>
+    {/if}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <span class="about-link" onclick={() => uiStore.infoModalOpen = true}>satvisor{#if version}<span class="dot">&middot;</span><span class="build">{version}</span>{/if}{#if hash}<span class="dot">&middot;</span><span class="build">{hash}</span>{/if}</span>
   {/if}
 </div>
@@ -71,6 +78,9 @@
   .about-link:hover { color: var(--scene-text); }
   .dot { padding: 0 4px; }
   .build { opacity: 0.5; }
+  .lite-badge { opacity: 0.5; }
+  .lite-badge.clickable { cursor: pointer; }
+  .lite-badge.clickable:hover { opacity: 1; }
 
   .rot-line {
     display: flex;

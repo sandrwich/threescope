@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Satvisor</title>
   <link rel="icon" type="image/png" href="/textures/ui/sat_icon.png">
-  <link rel="preload" href="/textures/earth/color.webp" as="image">
+  <link rel="preload" id="preload-earth" as="image">
+  <script>var f='%VITE_TEXTURE_QUALITY%';var lite=f?(f==='lite'):localStorage.getItem('satvisor_lite_mode')==='true';document.getElementById('preload-earth').href=lite?'/textures/earth/color.lite.webp':'/textures/earth/color.webp';</script>
   <meta name="description" content="Real-time 3D satellite tracker with pass predictions, orbit visualization, and Doppler analysis. Works on desktop and mobile.">
   <meta name="theme-color" content="#101010">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -36,6 +37,12 @@
       margin: 4px; height: calc(100% - 8px);
     }
     #loading-screen .msg { margin-bottom: 16px; font-size: 18px; color: var(--text, #fff); }
+    #loading-screen .mode-hint {
+      margin-top: 8px; font-size: 11px; color: var(--warning, #e8a735);
+      cursor: pointer; opacity: 0; transition: opacity 0.5s;
+    }
+    #loading-screen .mode-hint.visible { opacity: 1; }
+    #loading-screen .mode-hint:hover { text-decoration: underline; text-underline-offset: 3px; }
     @media (max-width: 600px) {
       #loading-screen .bar-outer { width: 80%; max-width: 280px; height: 22px; }
       #loading-screen .msg { font-size: 15px; }
@@ -82,6 +89,44 @@
   <div id="loading-screen">
     <div class="msg" id="loading-msg">Initializing...</div>
     <div class="bar-outer"><div class="bar-inner" id="loading-bar"></div></div>
+    <div class="mode-hint" id="loading-slow-hint">&nbsp;</div>
+    <script>
+      (function() {
+        var forced = '%VITE_TEXTURE_QUALITY%';
+        if (forced === 'lite' || forced === 'full') return;
+        var lite = localStorage.getItem('satvisor_lite_mode') === 'true';
+        if (lite) return; // In lite mode: indicator shown in main UI instead
+
+        var hint = document.getElementById('loading-slow-hint');
+        var switchToLite = function() {
+          localStorage.setItem('satvisor_lite_mode', 'true');
+          location.reload();
+        };
+
+        var slow = false;
+        var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (conn && conn.effectiveType && conn.effectiveType !== '4g') slow = true;
+        if (conn && typeof conn.downlink === 'number' && conn.downlink < 2) slow = true;
+
+        var showHint = function(msg) {
+          hint.textContent = msg;
+          hint.classList.add('visible');
+          hint.onclick = switchToLite;
+        };
+
+        if (slow) {
+          showHint('Slow connection detected — switch to lite version? (~15x smaller)');
+        } else {
+          setTimeout(function() {
+            var bar = document.getElementById('loading-bar');
+            var pct = bar ? parseFloat(bar.style.width) : 0;
+            if (!(pct > 40)) {
+              showHint('Loading slowly? Switch to lite version (~15x smaller)');
+            }
+          }, 8000);
+        }
+      })();
+    </script>
   </div>
 
   <div id="svelte-ui"></div>
