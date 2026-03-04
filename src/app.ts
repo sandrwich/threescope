@@ -1700,6 +1700,7 @@ export class App {
           this.unselectedFade, this.hideUnselected,
           { normal: this.cfg.satNormal, highlighted: this.cfg.satHighlighted, selected: this.cfg.satSelected },
           this.bloomEnabled, this.fadingInSats, sunEciDir, obsRenderPos, dt,
+          isSkyView ? this.camera.skyUp : null,
         );
 
         // Orbits — visible in both 3D and sky view

@@ -243,6 +243,8 @@ export class SatelliteManager {
     /** Observer position in render coords (ECI→render converted) */
     obsPos: { x: number; y: number; z: number } | null = null,
     dt = 0,
+    /** Sky-view up vector — when set, satellites below the horizon are hidden */
+    skyUp: THREE.Vector3 | null = null,
   ) {
     const count = Math.min(satellites.length, this.maxSats);
     this.points.geometry.drawRange.count = count;
@@ -380,7 +382,15 @@ export class SatelliteManager {
         const dx = this.posAttr.array[i * 3];
         const dy = this.posAttr.array[i * 3 + 1];
         const dz = this.posAttr.array[i * 3 + 2];
-        if (this.isOccludedByEarth(cameraPos, dx, dy, dz, earthRadius)) {
+        if (skyUp) {
+          // Sky view: hide satellites below the local horizon
+          const toCamX = dx - cameraPos.x;
+          const toCamY = dy - cameraPos.y;
+          const toCamZ = dz - cameraPos.z;
+          if (toCamX * skyUp.x + toCamY * skyUp.y + toCamZ * skyUp.z < 0) {
+            alpha = 0;
+          }
+        } else if (this.isOccludedByEarth(cameraPos, dx, dy, dz, earthRadius)) {
           alpha = 0;
         }
 
