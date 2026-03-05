@@ -6,20 +6,27 @@ export const THEME_RGB: ThemeDef = {
   builtin: true,
   colorScheme: 'dark',
   themeStyle: 'rgb',
-  css: `/* Animated rainbow gradient borders */
+  css: `/* Single root animation drives all rainbow effects */
 @property --rgb-angle {
   syntax: '<angle>';
-  inherits: false;
+  inherits: true;
   initial-value: 0deg;
 }
+html[data-theme-style="rgb"] {
+  --accent: hsl(var(--rgb-angle) 100% 55%) !important;
+  animation: rgb-rotate 4s linear infinite;
+}
+@keyframes rgb-rotate {
+  to { --rgb-angle: 360deg; }
+}
+/* Rainbow gradient borders on windows */
 html[data-theme-style="rgb"] .draggable-window {
   border: 2px solid;
-  border-image: linear-gradient(
-    var(--rgb-angle, 0deg),
+  border-image: conic-gradient(
+    from var(--rgb-angle, 0deg),
     #ff0000, #ff8800, #ffff00, #00ff00,
     #0088ff, #8800ff, #ff0088, #ff0000
   ) 1;
-  animation: rgb-border-rotate 4s linear infinite;
   box-shadow: 0 0 12px rgba(100,0,255,0.15), 0 0 30px rgba(0,100,255,0.08);
 }
 html[data-theme-style="rgb"] .draggable-window .window-titlebar {
@@ -28,8 +35,14 @@ html[data-theme-style="rgb"] .draggable-window .window-titlebar {
 html[data-theme-style="rgb"] .modal-overlay .draggable-window {
   box-shadow: 0 0 20px rgba(100,0,255,0.25), 0 0 50px rgba(0,100,255,0.12);
 }
-@keyframes rgb-border-rotate {
-  to { --rgb-angle: 360deg; }
+/* Rainbow border on active theme row */
+html[data-theme-style="rgb"] .theme-row.active .theme-btn {
+  border: 2px solid;
+  border-image: conic-gradient(
+    from var(--rgb-angle, 0deg),
+    #ff0000, #ff8800, #ffff00, #00ff00,
+    #0088ff, #8800ff, #ff0088, #ff0000
+  ) 1;
 }`,
   vars: {
     '--bg': '#050505',
