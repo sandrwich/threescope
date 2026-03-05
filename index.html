@@ -84,6 +84,19 @@
     @keyframes rgb-border-rotate {
       to { --rgb-angle: 360deg; }
     }
+    /* Neon loading screen */
+    html[data-theme-style="neon"] #loading-screen .bar-outer {
+      border: 1px solid rgba(255,0,180,0.4);
+      box-shadow: 0 0 8px rgba(255,0,180,0.25), 0 0 24px rgba(0,200,255,0.12);
+      animation: neon-bar-pulse 3s ease-in-out infinite alternate;
+    }
+    html[data-theme-style="neon"] #loading-screen .bar-inner {
+      background: linear-gradient(90deg, #ff00b4, #00ccff);
+    }
+    @keyframes neon-bar-pulse {
+      0% { box-shadow: 0 0 8px rgba(255,0,180,0.25), 0 0 24px rgba(0,200,255,0.12); }
+      100% { box-shadow: 0 0 12px rgba(0,200,255,0.30), 0 0 30px rgba(255,0,180,0.15); }
+    }
   </style>
   <script>
     // Apply saved theme before first paint to prevent flash
@@ -101,6 +114,7 @@
           'tokyo-night': { '--bg': '#1a1b26', '--ui-bg': '#292e42', '--text': '#c0caf5', '--text-muted': '#9aa5ce' },
           'dracula': { '--bg': '#282a36', '--ui-bg': '#363848', '--text': '#f8f8f2', '--text-muted': '#bfc0c0' },
           'redshift': { '--bg': '#0a0000', '--ui-bg': '#120000', '--text': '#cc8866', '--text-muted': '#995544' },
+          'neon': { '--bg': '#06000a', '--ui-bg': '#0a0012', '--text': '#eeddff', '--text-muted': '#9977bb' },
           'legacy': { '--bg': '#c0c0c0', '--ui-bg': '#c0c0c0', '--text': '#000000', '--text-muted': '#222222', '--border': '#808080', '--warning': '#cc6600' },
           'gg-ez': { '--bg': '#050505', '--ui-bg': '#0a0a0a', '--text': '#ffffff', '--text-muted': '#bbbbbb' },
         };
@@ -125,7 +139,7 @@
         if (id === 'light' || id === 'legacy' || (vars && vars['--bg'] && parseInt(vars['--bg'].replace('#','').slice(0,2), 16) > 128)) {
           document.documentElement.style.setProperty('color-scheme', 'light');
         }
-        var styles = { 'legacy': 'legacy', 'gg-ez': 'rgb' };
+        var styles = { 'legacy': 'legacy', 'gg-ez': 'rgb', 'neon': 'neon' };
         if (styles[id]) {
           document.documentElement.dataset.themeStyle = styles[id];
         }
