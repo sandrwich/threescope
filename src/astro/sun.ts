@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { DEG2RAD } from '../constants';
-import { epochToJulianDate, normalizeEpoch } from './epoch';
+import { epochToJulianDateTT, normalizeEpoch } from './epoch';
 
 /** Sun direction in **render coords** (x=eci.x, y=eci.z, z=-eci.y). NOT standard ECI. */
 export function calculateSunPosition(currentEpoch: number): THREE.Vector3 {
   currentEpoch = normalizeEpoch(currentEpoch);
-  const jd = epochToJulianDate(currentEpoch);
+  const jd = epochToJulianDateTT(currentEpoch);
   const n = jd - 2451545.0;
 
   let L = (280.460 + 0.9856474 * n) % 360.0;

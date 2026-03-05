@@ -1,3 +1,5 @@
+import { DELTA_T_S } from '../constants';
+
 // Epoch format: YY * 1000 + day_of_year.fraction (e.g. 26051.5 = 2026 day 51 noon)
 
 export function getCurrentRealTimeEpoch(): number {
@@ -68,6 +70,12 @@ export function unixToEpoch(unixSeconds: number): number {
 export function epochToJulianDate(epoch: number): number {
   const unix = epochToUnix(epoch);
   return unix / 86400.0 + 2440587.5;
+}
+
+/** Julian Date in Terrestrial Time (TT). Use for Meeus ephemeris formulas. */
+export function epochToJulianDateTT(epoch: number): number {
+  const unix = epochToUnix(epoch);
+  return (unix + DELTA_T_S) / 86400.0 + 2440587.5;
 }
 
 export function epochToGmst(epoch: number): number {

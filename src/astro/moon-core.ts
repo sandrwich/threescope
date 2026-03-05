@@ -5,7 +5,7 @@
  * No THREE.js dependency so it can run in Web Workers.
  */
 import { DEG2RAD } from '../constants';
-import { epochToJulianDate, normalizeEpoch } from './epoch';
+import { epochToJulianDateTT, normalizeEpoch } from './epoch';
 
 export interface MoonEcliptic {
   lambda: number; // ecliptic longitude (radians)
@@ -145,7 +145,7 @@ const B_TABLE: [number, number, number, number, number][] = [
 
 export function computeMoonEcliptic(epoch: number): MoonEcliptic {
   epoch = normalizeEpoch(epoch);
-  const jd = epochToJulianDate(epoch);
+  const jd = epochToJulianDateTT(epoch);
   const T = (jd - 2451545.0) / 36525.0; // Julian centuries from J2000
   const T2 = T * T;
 

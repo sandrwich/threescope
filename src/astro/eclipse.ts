@@ -4,7 +4,7 @@
  * No Three.js dependency so it can run in the pass Web Worker.
  */
 import { DEG2RAD, RAD2DEG, EARTH_RADIUS_KM, MOON_RADIUS_KM } from '../constants';
-import { epochToJulianDate, normalizeEpoch } from './epoch';
+import { epochToJulianDateTT, normalizeEpoch } from './epoch';
 import { getAzEl } from './az-el';
 
 /**
@@ -17,7 +17,7 @@ import { getAzEl } from './az-el';
  */
 export function sunDirectionECI(epoch: number): { x: number; y: number; z: number } {
   epoch = normalizeEpoch(epoch);
-  const jd = epochToJulianDate(epoch);
+  const jd = epochToJulianDateTT(epoch);
 
   // Days since J2000.0 epoch (2000-01-01 12:00 TT)
   const n = jd - 2451545.0;

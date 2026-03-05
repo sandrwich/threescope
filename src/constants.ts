@@ -2,6 +2,7 @@ export const EARTH_RADIUS_KM = 6371.0;
 export const MOON_RADIUS_KM = 1737.4;
 export const MU = 398600.4418;
 export const DRAW_SCALE = 3000.0;
+export const DELTA_T_S = 69.0; // TT - UTC (seconds, ~2026). Meeus formulas expect TT, not UTC.
 export const FP_RINGS = 12;
 export const FP_PTS = 120;
 export const DEG2RAD = Math.PI / 180.0;
