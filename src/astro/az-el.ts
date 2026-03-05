@@ -22,17 +22,13 @@ export function getAzEl(
 ): { az: number; el: number } {
   const DEG2RAD = Math.PI / 180;
 
-  const satR = Math.sqrt(eciX * eciX + eciY * eciY + eciZ * eciZ);
-  if (satR === 0) return { az: 0, el: -90 };
+  if (eciX === 0 && eciY === 0 && eciZ === 0) return { az: 0, el: -90 };
 
-  // Satellite geocentric lat/lon from ECI, then to ECEF
-  const satLat = Math.asin(eciZ / satR);
-  const satLonEci = Math.atan2(eciY, eciX);
-  const satLonEcef = satLonEci - gmstRad;
-
-  const sx = satR * Math.cos(satLat) * Math.cos(satLonEcef);
-  const sy = satR * Math.cos(satLat) * Math.sin(satLonEcef);
-  const sz = satR * Math.sin(satLat);
+  // ECI to ECEF via Rz(-GMST)
+  const cg = Math.cos(gmstRad), sg = Math.sin(gmstRad);
+  const sx =  cg * eciX + sg * eciY;
+  const sy = -sg * eciX + cg * eciY;
+  const sz = eciZ;
 
   // Observer ECEF position (WGS-84 ellipsoid)
   const obs = geodeticToEcef(obsLatDeg, obsLonDeg, obsAltM);
