@@ -6,7 +6,7 @@
  * No THREE.js dependency so it can run in the pass Web Worker.
  *
  * References:
- *   - McCants standard magnitude convention (1000 km range, 90° phase)
+ *   - Molczan standard magnitude convention (1000 km range, 90° phase)
  *   - Kasten & Young (1989) airmass formula
  *
  * Standard magnitude data is fetched at runtime from the satvisor-data mirror

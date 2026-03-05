@@ -1,6 +1,6 @@
 /**
  * Satellite eclipse (Earth shadow) detection.
- * Uses a cylindrical shadow model — accurate enough for LEO/MEO pass prediction.
+ * Uses a conical shadow model (umbra + penumbra) with linear penumbra transition.
  * No Three.js dependency so it can run in the pass Web Worker.
  */
 import { DEG2RAD, RAD2DEG, EARTH_RADIUS_KM, MOON_RADIUS_KM } from '../constants';
