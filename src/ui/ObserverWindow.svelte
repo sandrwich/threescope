@@ -7,7 +7,7 @@
   import { observerStore } from '../stores/observer.svelte';
   import { beamStore } from '../stores/beam.svelte';
   import { timeStore } from '../stores/time.svelte';
-  import { ICON_OBSERVER } from './shared/icons';
+  import { ICON_OBSERVER, ICON_RADAR } from './shared/icons';
   import { getElevation, isElevationLoaded } from '../astro/elevation';
   import { sunAltitude, sunLabel } from '../astro/eclipse';
   import { epochToGmst, epochToUnix } from '../astro/epoch';
@@ -90,6 +90,9 @@
     const illum = moonIllumination(epoch);
     return { el, illum };
   });
+
+  let sunTracking = $derived(beamStore.locked && beamStore.lockedBodyType === 'sun');
+  let moonTracking = $derived(beamStore.locked && beamStore.lockedBodyType === 'moon');
 
   // --- Observation window (tonight) ---
   // Find when sun crosses -6° and -18° thresholds
@@ -217,10 +220,18 @@
         <span class="sky-label">Sun</span>
         <span class="sky-value">{sunEl !== null ? `${sunEl.toFixed(1)}\u00b0` : '\u2014'}</span>
         <span class="sky-note">{sunEl !== null ? sunLabel(sunEl) : ''}</span>
+        <Button size="xs" disabled={sunEl === null || sunEl < 0}
+          active={sunTracking}
+          onclick={() => { if (sunTracking) { beamStore.unlock(); } else { beamStore.lockToBody('sun'); uiStore.rotatorOpen = true; if (uiStore.isMobile) uiStore.openMobileSheet('rotator'); } }}
+        >{@html ICON_RADAR} {sunTracking ? 'Untrack' : 'Track'}</Button>
 
         <span class="sky-label">Moon</span>
         <span class="sky-value">{moonData ? `${moonData.el.toFixed(1)}\u00b0` : '\u2014'}</span>
         <span class="sky-note">{moonData ? `${moonData.illum.toFixed(0)}% illuminated` : ''}</span>
+        <Button size="xs" disabled={!moonData || moonData.el < 0}
+          active={moonTracking}
+          onclick={() => { if (moonTracking) { beamStore.unlock(); } else { beamStore.lockToBody('moon'); uiStore.rotatorOpen = true; if (uiStore.isMobile) uiStore.openMobileSheet('rotator'); } }}
+        >{@html ICON_RADAR} {moonTracking ? 'Untrack' : 'Track'}</Button>
       </div>
 
       <!-- Tonight -->
@@ -326,8 +337,9 @@
   /* Sky section */
   .sky-grid {
     display: grid;
-    grid-template-columns: auto auto 1fr;
+    grid-template-columns: auto auto 1fr auto;
     gap: 2px 10px;
+    align-items: center;
     font-size: 12px;
   }
   .sky-label {

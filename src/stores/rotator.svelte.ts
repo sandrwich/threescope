@@ -1,5 +1,6 @@
 import type { RotatorDriver, RotatorMode, SerialProtocol } from '../rotator/protocol';
 import type { BeamTrackingState } from './beam.svelte';
+import { beamStore } from './beam.svelte';
 import { uiStore } from './ui.svelte';
 import { timeStore } from './time.svelte';
 
@@ -409,8 +410,29 @@ class RotatorStore {
     }
   }
 
+  private _nudgeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Debounced immediate track command (e.g. after manual reticle move). */
+  nudge(): void {
+    if (!this.autoTrack || !this.driver?.connected || beamStore.locked) return;
+    this.targetAz = beamStore.aimAz;
+    this.targetEl = beamStore.aimEl;
+    if (this._nudgeTimer) return; // already scheduled
+    this._nudgeTimer = setTimeout(() => {
+      this._nudgeTimer = null;
+      this.targetAz = beamStore.aimAz;
+      this.targetEl = beamStore.aimEl;
+      this.tickTrack();
+    }, 500);
+  }
+
   private async tickTrack(): Promise<void> {
     if (!this.autoTrack || !this.driver?.connected) return;
+    // When not locked to a target, follow the beam reticle for manual positioning
+    if (!beamStore.locked && this.nextAosEpoch === 0) {
+      this.targetAz = beamStore.aimAz;
+      this.targetEl = beamStore.aimEl;
+    }
     if (this.targetAz === null || this.targetEl === null) return;
 
     // Skip if target hasn't moved since last command (within 0.05°)

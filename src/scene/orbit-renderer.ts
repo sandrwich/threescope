@@ -9,7 +9,8 @@ import { DRAW_SCALE, EARTH_RADIUS_KM, TWO_PI, MU, ORBIT_RECOMPUTE_INTERVAL_S, sa
 import { parseHexColor } from '../config';
 import { calculatePosition, getCorrectedElements } from '../astro/propagator';
 import { epochToUnix } from '../astro/epoch';
-import { sunDirectionECI, earthShadowFactor, isSolarEclipsed, solarEclipsePossible } from '../astro/eclipse';
+import { sunDirectionECI } from '../astro/sun-core';
+import { earthShadowFactor, isSolarEclipsed, solarEclipsePossible } from '../astro/eclipse';
 import { moonPositionECI } from '../astro/moon-observer';
 import { uiStore } from '../stores/ui.svelte';
 import { observerStore } from '../stores/observer.svelte';

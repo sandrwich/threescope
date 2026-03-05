@@ -9,7 +9,7 @@
   import { initHiDPICanvas } from './shared/canvas';
   import { chart, pointerHitRadius } from './shared/touch-metrics';
   import { moonPositionECI } from '../astro/moon-observer';
-  import { sunDirectionECI } from '../astro/eclipse';
+  import { sunDirectionECI } from '../astro/sun-core';
   import { getAzEl } from '../astro/az-el';
   import { epochToGmst } from '../astro/epoch';
   import { observerStore } from '../stores/observer.svelte';

@@ -130,7 +130,9 @@
   let infoCount = $state(0);
   let infoHoverLabel = $state('');
 
-  // Hover state
+  // Hover state (-1 = none, >= 0 = satellite blip index, HOVER_SUN/HOVER_MOON = celestial)
+  const HOVER_SUN = -2;
+  const HOVER_MOON = -3;
   let hoverIdx = -1;
   let mouseX = -1;
   let mouseY = -1;
@@ -267,11 +269,10 @@
     if (draggingReticle) {
       const { az, el } = xyToAzEl(p.x, p.y);
       beamStore.setAim(az, el);
-      if (beamStore.locked) beamStore.unlock();
       return;
     }
 
-    // Find nearest blip for hover
+    // Find nearest blip for hover (satellites + celestial bodies)
     const blips = uiStore.radarBlips;
     const count = uiStore.radarBlipCount;
     let bestDist = pointerHitRadius(e);
@@ -287,8 +288,24 @@
         bestIdx = i;
       }
     }
+    // Check sun/moon markers
+    const showCelestial = uiStore.radarShowCelestial || beamStore.lockedBodyType !== 'satellite';
+    if (showCelestial) {
+      const sunAE = uiStore.radarSunAzEl;
+      if (sunAE) {
+        const { x, y } = azElToXY(sunAE.az, sunAE.el);
+        const dist = Math.sqrt((x - mouseX) ** 2 + (y - mouseY) ** 2);
+        if (dist < bestDist) { bestDist = dist; bestIdx = HOVER_SUN; }
+      }
+      const moonAE = uiStore.radarMoonAzEl;
+      if (moonAE) {
+        const { x, y } = azElToXY(moonAE.az, moonAE.el);
+        const dist = Math.sqrt((x - mouseX) ** 2 + (y - mouseY) ** 2);
+        if (dist < bestDist) { bestDist = dist; bestIdx = HOVER_MOON; }
+      }
+    }
     hoverIdx = bestIdx;
-    if (canvasEl && !draggingReticle) canvasEl.style.cursor = bestIdx >= 0 ? 'pointer' : 'crosshair';
+    if (canvasEl && !draggingReticle) canvasEl.style.cursor = bestIdx !== -1 ? 'pointer' : beamStore.locked ? 'default' : 'crosshair';
   }
 
   function onCanvasPointerDown(e: PointerEvent) {
@@ -296,7 +313,19 @@
     const p = canvasToLogical(e.clientX, e.clientY);
     const { az, el } = xyToAzEl(p.x, p.y);
 
-    // Click near a blip → select it + lock beam to it
+    // Click near a blip → toggle track (click again to unlock)
+    if (hoverIdx === HOVER_SUN) {
+      if (beamStore.locked && beamStore.lockedBodyType === 'sun') beamStore.unlock();
+      else beamStore.lockToBody('sun');
+      e.preventDefault();
+      return;
+    }
+    if (hoverIdx === HOVER_MOON) {
+      if (beamStore.locked && beamStore.lockedBodyType === 'moon') beamStore.unlock();
+      else beamStore.lockToBody('moon');
+      e.preventDefault();
+      return;
+    }
     if (hoverIdx >= 0) {
       const blips = uiStore.radarBlips;
       const satAz = blips[hoverIdx * 4];
@@ -304,17 +333,22 @@
       const satIdx = blips[hoverIdx * 4 + 2];
       const sat = uiStore.getSatelliteByIndex?.(satIdx);
       if (sat) {
-        uiStore.onSelectSatellite?.(sat.noradId);
-        beamStore.lockToSatellite(sat.noradId, sat.name);
-        beamStore.setAim(satAz, satEl);
+        if (beamStore.locked && beamStore.lockedNoradId === sat.noradId) {
+          beamStore.unlock();
+        } else {
+          uiStore.onSelectSatellite?.(sat.noradId);
+          beamStore.lockToSatellite(sat.noradId, sat.name);
+          beamStore.setAim(satAz, satEl);
+        }
       }
       e.preventDefault();
       return;
     }
 
-    // Click empty space → move reticle, unlock, start drag
+    // Click empty space → move reticle + start drag (only when not locked)
+    if (beamStore.locked) return;
     beamStore.setAim(az, el);
-    if (beamStore.locked) beamStore.unlock();
+    rotatorStore.nudge();
     draggingReticle = true;
     if (canvasEl) canvasEl.style.cursor = 'none';
     canvasEl!.setPointerCapture(e.pointerId);
@@ -322,13 +356,14 @@
   }
 
   function onCanvasPointerUp(_e: PointerEvent) {
+    if (draggingReticle) rotatorStore.nudge();
     draggingReticle = false;
-    if (canvasEl) canvasEl.style.cursor = hoverIdx >= 0 ? 'pointer' : 'crosshair';
+    if (canvasEl) canvasEl.style.cursor = hoverIdx !== -1 ? 'pointer' : beamStore.locked ? 'default' : 'crosshair';
   }
 
   function onCanvasLostCapture(_e: PointerEvent) {
     draggingReticle = false;
-    if (canvasEl) canvasEl.style.cursor = 'crosshair';
+    if (canvasEl) canvasEl.style.cursor = beamStore.locked ? 'default' : 'crosshair';
   }
 
   function onCanvasWheel(e: WheelEvent) {
@@ -509,6 +544,20 @@
         ctx.beginPath();
         ctx.arc(hx, hy, chart.dotLarge, 0, TWO_PI);
         ctx.stroke();
+      } else if (hoverIdx === HOVER_SUN && uiStore.radarSunAzEl) {
+        const { x: hx, y: hy } = azElToXY(uiStore.radarSunAzEl.az, uiStore.radarSunAzEl.el);
+        ctx.strokeStyle = 'rgba(255,200,50,0.7)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(hx, hy, chart.dotLarge, 0, TWO_PI);
+        ctx.stroke();
+      } else if (hoverIdx === HOVER_MOON && uiStore.radarMoonAzEl) {
+        const { x: hx, y: hy } = azElToXY(uiStore.radarMoonAzEl.az, uiStore.radarMoonAzEl.el);
+        ctx.strokeStyle = 'rgba(200,200,220,0.7)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(hx, hy, chart.dotLarge, 0, TWO_PI);
+        ctx.stroke();
       }
 
     } else {
@@ -572,6 +621,59 @@
           ctx.arc(x, y, chart.dotSmall - 1.5, 0, TWO_PI);
           ctx.fillStyle = palette.radarBlipDim;
           ctx.fill();
+        }
+      }
+    }
+
+    // ── Sun/Moon celestial markers ──
+    {
+      const showCelestial = uiStore.radarShowCelestial || beamStore.lockedBodyType !== 'satellite';
+      if (showCelestial) {
+        const sunAE = uiStore.radarSunAzEl;
+        if (sunAE) {
+          const { x: sx, y: sy } = azElToXY(sunAE.az, sunAE.el);
+          const isTracked = beamStore.locked && beamStore.lockedBodyType === 'sun';
+          const r = isTracked ? 5 : 4;
+          // Sun: golden filled circle with rays
+          ctx.fillStyle = 'rgba(255,200,50,0.85)';
+          ctx.beginPath();
+          ctx.arc(sx, sy, r, 0, 2 * Math.PI);
+          ctx.fill();
+          if (isTracked) {
+            ctx.strokeStyle = 'rgba(255,200,50,0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(sx, sy, r + 3, 0, 2 * Math.PI);
+            ctx.stroke();
+          }
+          ctx.fillStyle = 'rgba(255,200,50,0.7)';
+          ctx.font = `8px ${font}`;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('☀', sx + r + 3, sy);
+        }
+        const moonAE = uiStore.radarMoonAzEl;
+        if (moonAE) {
+          const { x: mx, y: my } = azElToXY(moonAE.az, moonAE.el);
+          const isTracked = beamStore.locked && beamStore.lockedBodyType === 'moon';
+          const r = isTracked ? 5 : 4;
+          // Moon: silver filled circle
+          ctx.fillStyle = 'rgba(200,200,220,0.85)';
+          ctx.beginPath();
+          ctx.arc(mx, my, r, 0, 2 * Math.PI);
+          ctx.fill();
+          if (isTracked) {
+            ctx.strokeStyle = 'rgba(200,200,220,0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(mx, my, r + 3, 0, 2 * Math.PI);
+            ctx.stroke();
+          }
+          ctx.fillStyle = 'rgba(200,200,220,0.7)';
+          ctx.font = `8px ${font}`;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('☽', mx + r + 3, my);
         }
       }
     }
@@ -689,28 +791,54 @@
     }
 
     // ── Hover tooltip ──
-    if (hoverIdx >= 0) {
-      const off = hoverIdx * 4;
-      const az = blips[off];
-      const el = blips[off + 1];
-      const satIdx = blips[off + 2];
-      const sat = uiStore.getSatelliteByIndex?.(satIdx);
-      const { x, y } = azElToXY(az, el);
+    {
+      let tooltipLabel: string | null = null;
+      let tooltipDetail = '';
+      let tooltipAction = '';
+      let tooltipX = 0, tooltipY = 0;
+      let tooltipColor = palette.radarBlip;
 
-      if (sat) {
-        const label = sat.name;
-        const detail = `Az ${az.toFixed(1)}°  El ${el.toFixed(1)}°`;
+      if (hoverIdx === HOVER_SUN && uiStore.radarSunAzEl) {
+        const ae = uiStore.radarSunAzEl;
+        ({ x: tooltipX, y: tooltipY } = azElToXY(ae.az, ae.el));
+        tooltipLabel = 'Sun';
+        tooltipDetail = `Az ${ae.az.toFixed(1)}°  El ${ae.el.toFixed(1)}°`;
+        tooltipColor = 'rgba(255,200,50,0.9)';
+        tooltipAction = beamStore.locked && beamStore.lockedBodyType === 'sun' ? 'Click to untrack' : 'Click to track';
+      } else if (hoverIdx === HOVER_MOON && uiStore.radarMoonAzEl) {
+        const ae = uiStore.radarMoonAzEl;
+        ({ x: tooltipX, y: tooltipY } = azElToXY(ae.az, ae.el));
+        tooltipLabel = 'Moon';
+        tooltipDetail = `Az ${ae.az.toFixed(1)}°  El ${ae.el.toFixed(1)}°`;
+        tooltipColor = 'rgba(200,200,220,0.9)';
+        tooltipAction = beamStore.locked && beamStore.lockedBodyType === 'moon' ? 'Click to untrack' : 'Click to track';
+      } else if (hoverIdx >= 0) {
+        const off = hoverIdx * 4;
+        const az = blips[off];
+        const el = blips[off + 1];
+        const satIdx = blips[off + 2];
+        const sat = uiStore.getSatelliteByIndex?.(satIdx);
+        if (sat) {
+          ({ x: tooltipX, y: tooltipY } = azElToXY(az, el));
+          tooltipLabel = sat.name;
+          tooltipDetail = `Az ${az.toFixed(1)}°  El ${el.toFixed(1)}°`;
+          tooltipAction = beamStore.locked && beamStore.lockedNoradId === sat.noradId ? 'Click to untrack' : 'Click to track';
+        }
+      }
 
+      if (tooltipLabel) {
         ctx.font = `10px ${font}`;
-        const nameW = ctx.measureText(label).width;
-        const detailW = ctx.measureText(detail).width;
-        const boxW = Math.max(nameW, detailW) + 12;
-        const boxH = 30;
+        const nameW = ctx.measureText(tooltipLabel).width;
+        const detailW = ctx.measureText(tooltipDetail).width;
+        ctx.font = `9px ${font}`;
+        const actionW = tooltipAction ? ctx.measureText(tooltipAction).width : 0;
+        const boxW = Math.max(nameW, detailW, actionW) + 12;
+        const boxH = tooltipAction ? 42 : 30;
 
-        let tx = x + 10;
-        let ty = y - boxH - 4;
-        if (tx + boxW > SIZE) tx = x - boxW - 10;
-        if (ty < 0) ty = y + 10;
+        let tx = tooltipX + 10;
+        let ty = tooltipY - boxH - 4;
+        if (tx + boxW > SIZE) tx = tooltipX - boxW - 10;
+        if (ty < 0) ty = tooltipY + 10;
 
         ctx.fillStyle = crt.tooltipBg;
         ctx.fillRect(tx, ty, boxW, boxH);
@@ -718,12 +846,18 @@
         ctx.lineWidth = 1;
         ctx.strokeRect(tx, ty, boxW, boxH);
 
-        ctx.fillStyle = palette.radarBlip;
+        ctx.font = `10px ${font}`;
+        ctx.fillStyle = tooltipColor;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText(label, tx + 6, ty + 3);
+        ctx.fillText(tooltipLabel, tx + 6, ty + 3);
         ctx.fillStyle = palette.radarText;
-        ctx.fillText(detail, tx + 6, ty + 16);
+        ctx.fillText(tooltipDetail, tx + 6, ty + 16);
+        if (tooltipAction) {
+          ctx.font = `9px ${font}`;
+          ctx.fillStyle = palette.textGhost;
+          ctx.fillText(tooltipAction, tx + 6, ty + 29);
+        }
       }
     }
 
@@ -731,6 +865,10 @@
     infoCount = count;
     if (beamStore.locked) {
       infoHoverLabel = beamStore.lockedSatName ?? '';
+    } else if (hoverIdx === HOVER_SUN) {
+      infoHoverLabel = 'Sun';
+    } else if (hoverIdx === HOVER_MOON) {
+      infoHoverLabel = 'Moon';
     } else if (hoverIdx >= 0) {
       const satIdx = blips[hoverIdx * 4 + 2];
       const sat = uiStore.getSatelliteByIndex?.(satIdx);
@@ -873,6 +1011,7 @@
         {@const hasTarget = tAz !== null && tEl !== null}
         {@const errAz = hasActual && hasTarget ? Math.abs(aAz! - tAz!) : null}
         {@const errEl = hasActual && hasTarget ? Math.abs(aEl! - tEl!) : null}
+        {@const offTarget = errAz !== null && errEl !== null && (errAz > rotatorStore.tolerance || errEl > rotatorStore.tolerance)}
 
         <div class="rot-pos">
           <span class="rot-pos-label">Az</span>
@@ -886,7 +1025,7 @@
           {:else if rotatorStore.nextAosEpoch > 0}
             {@const secToAos = (rotatorStore.nextAosEpoch - timeStore.epoch) * 86400}
             <span class="rot-pos-wait">AOS in {fmtCountdown(secToAos)}</span>
-          {:else if rotatorStore.isSlewing}
+          {:else if offTarget}
             <span class="rot-pos-err">&Delta; {errAz?.toFixed(1)}° / {errEl?.toFixed(1)}°</span>
           {:else if hasActual && hasTarget}
             <span class="rot-pos-ok">{beamStore.locked ? `ON ${beamStore.lockedSatName}` : 'ON TARGET'}</span>
@@ -898,7 +1037,7 @@
         <div class="rot-actions">
           <label class="rot-autotrack">
             <Checkbox checked={rotatorStore.autoTrack} onchange={() => rotatorStore.setAutoTrack(!rotatorStore.autoTrack)} />
-            Auto slew<InfoTip>Continuously slew the rotator to follow the beam. When locked to a satellite, the rotator tracks it automatically at the configured update rate.</InfoTip>
+            Auto slew<InfoTip>Continuously slew the rotator to follow the beam reticle. When tracking a satellite, sun, or moon, the rotator follows the target automatically. When unlocked, it follows manual reticle placement.</InfoTip>
           </label>
           <div class="rot-btns">
             <Button size="xs" title="Slew to beam reticle position ({beamStore.aimAz.toFixed(1)}° / {beamStore.aimEl.toFixed(1)}°)" disabled={rotatorStore.autoTrack} onclick={() => rotatorStore.goto(beamStore.aimAz, beamStore.aimEl)}>Slew</Button>
@@ -1029,6 +1168,12 @@
       <div class="row">
         <label>Radar VFX<InfoTip>Sweep line and phosphor afterglow effect on satellite blips.</InfoTip></label>
         <Checkbox checked={uiStore.radarVfx} onchange={() => uiStore.setToggle('radarVfx', !uiStore.radarVfx)} />
+      </div>
+      <div class="row">
+        <label>Sun / Moon<InfoTip>Show sun and moon positions on the radar. Always shown when tracking a celestial body.</InfoTip></label>
+        <Checkbox checked={uiStore.radarShowCelestial || beamStore.lockedBodyType !== 'satellite'}
+          disabled={beamStore.lockedBodyType !== 'satellite'}
+          onchange={() => uiStore.setToggle('radarShowCelestial', !uiStore.radarShowCelestial)} />
       </div>
 
       <details class="guide-details">

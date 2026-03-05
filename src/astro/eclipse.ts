@@ -4,51 +4,8 @@
  * No Three.js dependency so it can run in the pass Web Worker.
  */
 import { DEG2RAD, RAD2DEG, EARTH_RADIUS_KM, MOON_RADIUS_KM } from '../constants';
-import { epochToJulianDateTT, normalizeEpoch } from './epoch';
 import { getAzEl } from './az-el';
-
-/**
- * Compute unit sun direction in **standard ECI** (Earth-Centered Inertial) coordinates.
- * NOT render coords — use calculateSunPosition() from sun.ts for render coords.
- * Same low-precision solar ephemeris as sun.ts but returns plain {x,y,z}
- * instead of THREE.Vector3 for Web Worker compatibility.
- *
- * Reference: Meeus, "Astronomical Algorithms" — low-precision solar position.
- */
-export function sunDirectionECI(epoch: number): { x: number; y: number; z: number } {
-  epoch = normalizeEpoch(epoch);
-  const jd = epochToJulianDateTT(epoch);
-
-  // Days since J2000.0 epoch (2000-01-01 12:00 TT)
-  const n = jd - 2451545.0;
-
-  // Mean longitude of the Sun (degrees), moves ~0.986°/day
-  let L = (280.460 + 0.9856474 * n) % 360.0;
-  if (L < 0) L += 360.0;
-
-  // Mean anomaly of the Sun (degrees), ~0.986°/day from perihelion
-  let g = (357.528 + 0.9856003 * n) % 360.0;
-  if (g < 0) g += 360.0;
-
-  // Ecliptic longitude: mean longitude + equation of center (1st & 2nd harmonic)
-  // 1.915° and 0.020° are amplitudes of Earth's orbital eccentricity correction
-  const lambda = L + 1.915 * Math.sin(g * DEG2RAD) + 0.020 * Math.sin(2.0 * g * DEG2RAD);
-
-  // Obliquity of the ecliptic (axial tilt), ~23.44° with slow drift
-  const epsilon = 23.439 - 0.0000004 * n;
-
-  // Ecliptic to ECI rotation (sun is at distance 1 AU, we only need direction)
-  const xEcl = Math.cos(lambda * DEG2RAD);
-  const yEcl = Math.sin(lambda * DEG2RAD);
-
-  // Rotate from ecliptic plane to equatorial (ECI) by obliquity angle
-  const x = xEcl;
-  const y = yEcl * Math.cos(epsilon * DEG2RAD);
-  const z = yEcl * Math.sin(epsilon * DEG2RAD);
-
-  const len = Math.sqrt(x * x + y * y + z * z);
-  return { x: x / len, y: y / len, z: z / len };
-}
+import { sunDirectionECI } from './sun-core';
 
 // Sun angular radius as seen from Earth (radians)
 const SUN_DISTANCE_KM = 149597870.7;
@@ -148,7 +105,7 @@ export function solarEclipsePossible(
  * Compute Sun elevation angle (degrees) at the observer's location.
  * Positive = above horizon, negative = below.
  *
- * Uses the same low-precision ephemeris as sunDirectionECI(), scaled to a
+ * Uses Meeus Ch.25 ephemeris via sunDirectionECI(), scaled to a
  * large distance so getAzEl()'s range math works correctly.
  */
 export function sunAltitude(

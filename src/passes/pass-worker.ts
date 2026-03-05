@@ -5,7 +5,8 @@
 import { twoline2satrec, json2satrec, propagate } from 'satellite.js';
 import { normalizeEpoch, epochToUnix, epochToGmst } from '../astro/epoch';
 import { getAzEl } from '../astro/az-el';
-import { sunDirectionECI, isEclipsed, earthShadowFactor, isSolarEclipsed, solarEclipsePossible, sunAltitude, solarElongation } from '../astro/eclipse';
+import { sunDirectionECI } from '../astro/sun-core';
+import { isEclipsed, earthShadowFactor, isSolarEclipsed, solarEclipsePossible, sunAltitude, solarElongation } from '../astro/eclipse';
 import { moonPositionECI } from '../astro/moon-observer';
 import { computePhaseAngle, observerEci, slantRange, estimateVisualMagnitude } from '../astro/magnitude';
 import type { PassRequest, PassResponse, PassPartial, SatellitePass, PassProgress } from './pass-types';

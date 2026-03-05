@@ -4,7 +4,7 @@
  */
 import { DEG2RAD } from '../constants';
 import { computeMoonEcliptic } from './moon-core';
-import { sunDirectionECI } from './eclipse';
+import { sunDirectionECI } from './sun-core';
 
 /**
  * Compute Moon position in standard ECI (km).

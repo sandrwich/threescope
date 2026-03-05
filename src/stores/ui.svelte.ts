@@ -63,6 +63,11 @@ class UIStore {
   showGrid = $state(false);
   showSkyGrid = $state(true);
   radarVfx = $state(true);
+  radarShowCelestial = $state(false);
+
+  // Sun/Moon az/el for radar display (null = below horizon)
+  radarSunAzEl: { az: number; el: number } | null = null;
+  radarMoonAzEl: { az: number; el: number } | null = null;
 
   // Marker group visibility (keyed by group id)
   markerVisibility = $state<Record<string, boolean>>({});
@@ -291,6 +296,7 @@ class UIStore {
     this.showGrid = load('satvisor_grid', false);
     this.showSkyGrid = load('satvisor_skygrid', true);
     this.radarVfx = load('satvisor_radar_vfx', true);
+    this.radarShowCelestial = load('satvisor_radar_celestial', false);
     this.singleSelectMode = load('satvisor_single_select', true);
     const savedTab = localStorage.getItem('satvisor_passes_tab');
     if (savedTab === 'selected' || savedTab === 'nearby') this.passesTab = savedTab;
@@ -442,6 +448,7 @@ class UIStore {
         case 'showGrid': this.showGrid = value; localStorage.setItem('satvisor_grid', String(value)); break;
         case 'showSkyGrid': this.showSkyGrid = value; localStorage.setItem('satvisor_skygrid', String(value)); break;
         case 'radarVfx': this.radarVfx = value; localStorage.setItem('satvisor_radar_vfx', String(value)); break;
+        case 'radarShowCelestial': this.radarShowCelestial = value; localStorage.setItem('satvisor_radar_celestial', String(value)); break;
         case 'rotatorOpen': this.rotatorOpen = value; break; // persisted by DraggableWindow
       }
     } catch {

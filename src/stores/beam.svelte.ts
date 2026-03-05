@@ -16,6 +16,7 @@ export interface BeamTrackingState {
   beamWidth: number;
   locked: boolean;
   lockedNoradId: number | null;
+  lockedBodyType: 'satellite' | 'sun' | 'moon';
   lockedSatName: string;
   trackAz: number | null;
   trackEl: number | null;
@@ -46,6 +47,7 @@ class BeamStore {
   // Lock-to-selected tracking
   locked = $state(false);
   lockedNoradId = $state<number | null>(null);
+  lockedBodyType = $state<'satellite' | 'sun' | 'moon'>('satellite');
   lockedSatName = $state('');
 
   // Live tracking output (updated each radar cycle when locked)
@@ -78,7 +80,15 @@ class BeamStore {
   lockToSatellite(noradId: number, name: string) {
     this.locked = true;
     this.lockedNoradId = noradId;
+    this.lockedBodyType = 'satellite';
     this.lockedSatName = name;
+  }
+
+  lockToBody(body: 'sun' | 'moon') {
+    this.locked = true;
+    this.lockedNoradId = null;
+    this.lockedBodyType = body;
+    this.lockedSatName = body === 'sun' ? 'Sun' : 'Moon';
   }
 
   setConeVisible(v: boolean) {
@@ -89,6 +99,7 @@ class BeamStore {
   unlock() {
     this.locked = false;
     this.lockedNoradId = null;
+    this.lockedBodyType = 'satellite';
     this.lockedSatName = '';
     this.trackAz = null;
     this.trackEl = null;
@@ -126,6 +137,7 @@ class BeamStore {
       beamWidth: this.beamWidth,
       locked: this.locked,
       lockedNoradId: this.lockedNoradId,
+      lockedBodyType: this.lockedBodyType,
       lockedSatName: this.lockedSatName,
       trackAz: this.trackAz,
       trackEl: this.trackEl,
