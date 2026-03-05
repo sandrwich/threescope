@@ -84,7 +84,7 @@ export class SkyGridRenderer {
       el.style.cssText = `
         position: absolute; pointer-events: none; font-size: 11px;
         font-family: 'Overpass Mono', monospace; color: var(--sky-grid-label);
-        text-shadow: 0 0 3px var(--bg); transform: translate(-50%, -50%);
+        text-shadow: 0 0 3px var(--scene-shadow); transform: translate(-50%, -50%);
         white-space: nowrap; display: none; z-index: 5;
       `;
       overlay.appendChild(el);
@@ -102,7 +102,7 @@ export class SkyGridRenderer {
       el.style.cssText = `
         position: absolute; pointer-events: none; font-size: 10px;
         font-family: 'Overpass Mono', monospace; color: var(--sky-grid-label);
-        text-shadow: 0 0 3px var(--bg); transform: translate(-50%, -50%);
+        text-shadow: 0 0 3px var(--scene-shadow); transform: translate(-50%, -50%);
         white-space: nowrap; display: none; z-index: 5; opacity: 0.7;
       `;
       overlay.appendChild(el);
@@ -120,7 +120,7 @@ export class SkyGridRenderer {
       el.style.cssText = `
         position: absolute; pointer-events: none; font-size: 10px;
         font-family: 'Overpass Mono', monospace; color: var(--sky-grid-label);
-        text-shadow: 0 0 3px var(--bg); transform: translate(-50%, -50%);
+        text-shadow: 0 0 3px var(--scene-shadow); transform: translate(-50%, -50%);
         white-space: nowrap; display: none; z-index: 5;
       `;
       overlay.appendChild(el);

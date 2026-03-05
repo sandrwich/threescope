@@ -94,7 +94,7 @@
     font-family: 'Overpass Mono', monospace;
     color: var(--beam-reticle);
     white-space: nowrap;
-    text-shadow: 0 0 3px var(--bg);
+    text-shadow: 0 0 3px var(--scene-shadow);
   }
   .locked .label {
     color: var(--beam-reticle-locked);

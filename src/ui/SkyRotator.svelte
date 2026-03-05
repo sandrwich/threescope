@@ -54,6 +54,6 @@
     white-space: nowrap;
     text-align: right;
     line-height: 1.3;
-    text-shadow: 0 0 3px var(--bg);
+    text-shadow: 0 0 3px var(--scene-shadow);
   }
 </style>

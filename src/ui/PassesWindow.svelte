@@ -266,7 +266,7 @@
         <div class="day-header" style="top:{headerH}px">{dayLabel(pass.aosEpoch)}</div>
       {/if}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
-      <div class="pass-row" class:active={isActive(pass)} onclick={() => openPolar(pass, i)}>
+      <div class="pass-row" class:active={isActive(pass)} class:selected={uiStore.selectedPassIdx === i} onclick={() => openPolar(pass, i)}>
         <span class="td td-sat">
           <svg class="color-dot" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="{satColor(pass.satColorIndex)}"/></svg>
           <span class="sat-name" title={pass.satName}>{pass.satName}</span>
@@ -587,6 +587,7 @@
   .pass-row:last-child { border-bottom: none; }
   .pass-row:hover { background: var(--row-hover); }
   .pass-row.active { background: var(--row-active); }
+  .pass-row.selected { background: var(--row-highlight); }
 
   .td {
     color: var(--text-muted);

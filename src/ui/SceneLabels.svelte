@@ -31,10 +31,10 @@
     white-space: nowrap;
     will-change: transform;
     text-shadow:
-      -1px -1px 0 var(--bg),
-       1px -1px 0 var(--bg),
-      -1px  1px 0 var(--bg),
-       1px  1px 0 var(--bg);
+      -1px -1px 0 var(--scene-shadow),
+       1px -1px 0 var(--scene-shadow),
+      -1px  1px 0 var(--scene-shadow),
+       1px  1px 0 var(--scene-shadow);
   }
   .scene-label.visible { display: block; }
 </style>

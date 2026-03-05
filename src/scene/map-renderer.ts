@@ -286,7 +286,7 @@ export class MapRenderer {
         allMarkers.push({ groupId: group.id, mapX, mapY, color });
 
         const label = document.createElement('div');
-        label.style.cssText = `position:absolute;font-size:11px;color:${group.color};pointer-events:none;white-space:nowrap;display:none;text-shadow:-1px -1px 0 var(--bg),1px -1px 0 var(--bg),-1px 1px 0 var(--bg),1px 1px 0 var(--bg);`;
+        label.style.cssText = `position:absolute;font-size:11px;color:${group.color};pointer-events:none;white-space:nowrap;display:none;text-shadow:-1px -1px 0 var(--scene-shadow),1px -1px 0 var(--scene-shadow),-1px 1px 0 var(--scene-shadow),1px 1px 0 var(--scene-shadow);`;
         label.textContent = m.name;
         overlay.appendChild(label);
         this.markerLabels2d.push({ div: label, groupId: group.id, mapX, mapY });
@@ -352,7 +352,7 @@ export class MapRenderer {
       this.markerData2d.push({ groupId, mapX, mapY, color: c });
 
       const label = document.createElement('div');
-      label.style.cssText = `position:absolute;font-size:11px;color:${color};pointer-events:none;white-space:nowrap;display:none;text-shadow:-1px -1px 0 var(--bg),1px -1px 0 var(--bg),-1px 1px 0 var(--bg),1px 1px 0 var(--bg);`;
+      label.style.cssText = `position:absolute;font-size:11px;color:${color};pointer-events:none;white-space:nowrap;display:none;text-shadow:-1px -1px 0 var(--scene-shadow),1px -1px 0 var(--scene-shadow),-1px 1px 0 var(--scene-shadow),1px 1px 0 var(--scene-shadow);`;
       label.textContent = m.name;
       overlay.appendChild(label);
       this.markerLabels2d.push({ div: label, groupId, mapX, mapY });

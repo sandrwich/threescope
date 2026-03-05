@@ -6,6 +6,7 @@ import { refreshTheme } from '../ui/shared/theme';
 
 const ACTIVE_KEY = 'satvisor_theme_active';
 const CUSTOM_KEY = 'satvisor_themes_custom';
+const STYLE_EL_ID = 'satvisor-theme-css';
 
 class ThemeStore {
   activeId = $state(DEFAULT_THEME_ID);
@@ -44,6 +45,12 @@ class ThemeStore {
     for (const [prop, value] of Object.entries(theme.vars)) {
       root.style.setProperty(prop, value);
     }
+    if (theme.themeStyle) {
+      root.dataset.themeStyle = theme.themeStyle;
+    } else {
+      delete root.dataset.themeStyle;
+    }
+    this.injectCss(theme.css);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', theme.vars['--bg']);
     refreshTheme();
@@ -69,6 +76,8 @@ class ThemeStore {
       builtin: false,
       colorScheme: source.colorScheme,
       vars: { ...source.vars },
+      themeStyle: source.themeStyle,
+      css: source.css,
     };
     this.customThemes = [...this.customThemes, clone];
     this.persistCustom();
@@ -83,6 +92,15 @@ class ThemeStore {
     document.documentElement.style.setProperty(varName, value);
     refreshTheme();
     this.onThemeChange?.();
+    this.persistCustom();
+  }
+
+  /** Update the custom CSS of the active custom theme (live preview) */
+  updateCss(css: string) {
+    const theme = this.activeTheme;
+    if (theme.builtin) return;
+    theme.css = css || undefined;
+    this.injectCss(theme.css);
     this.persistCustom();
   }
 
@@ -122,6 +140,8 @@ class ThemeStore {
       name: theme.name,
       colorScheme: theme.colorScheme,
       vars: theme.vars,
+      ...(theme.themeStyle ? { themeStyle: theme.themeStyle } : {}),
+      ...(theme.css ? { css: theme.css } : {}),
     }, null, 2);
   }
 
@@ -138,12 +158,29 @@ class ThemeStore {
         builtin: false,
         colorScheme: data.colorScheme === 'light' ? 'light' : 'dark',
         vars: { ...BUILTIN_THEMES[0].vars, ...data.vars },
+        themeStyle: data.themeStyle,
+        css: data.css,
       };
       this.customThemes = [...this.customThemes, theme];
       this.persistCustom();
       return id;
     } catch {
       return null;
+    }
+  }
+
+  /** Inject or remove the theme's custom CSS <style> tag */
+  private injectCss(css: string | undefined) {
+    let el = document.getElementById(STYLE_EL_ID) as HTMLStyleElement | null;
+    if (css) {
+      if (!el) {
+        el = document.createElement('style');
+        el.id = STYLE_EL_ID;
+        document.head.appendChild(el);
+      }
+      el.textContent = css;
+    } else {
+      el?.remove();
     }
   }
 

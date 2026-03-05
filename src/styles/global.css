@@ -77,6 +77,7 @@
   /* ── Scene overlay text (always over dark 3D scene) ── */
   --scene-text: rgba(255,255,255,0.75);
   --scene-text-dim: rgba(255,255,255,0.45);
+  --scene-shadow: #000000;
 
   /* ── Misc ── */
   --snap-guide: rgba(100,150,255,0.3);

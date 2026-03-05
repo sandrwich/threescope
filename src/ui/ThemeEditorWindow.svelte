@@ -91,6 +91,12 @@
       themeStore.updateVar(key as keyof ThemeVars, value);
     }
   }
+
+  let cssExpanded = $state(false);
+
+  function onCssInput(e: Event) {
+    themeStore.updateCss((e.target as HTMLTextAreaElement).value);
+  }
 </script>
 
 {#snippet themeIcon()}<span class="title-icon">{@html ICON_THEME}</span>{/snippet}
@@ -155,13 +161,30 @@
           {/each}
         </div>
 
+        <button class="group-header" onclick={() => cssExpanded = !cssExpanded}>
+          <span class="group-arrow">{cssExpanded ? '\u25BE' : '\u25B8'}</span>
+          Custom CSS
+        </button>
+        {#if cssExpanded}
+          <div class="css-editor">
+            <textarea
+              class="css-textarea"
+              placeholder="/* Custom CSS overrides */&#10;html[data-theme-style] .draggable-window &#123;&#10;  ...&#10;&#125;"
+              value={themeStore.activeTheme.css ?? ''}
+              oninput={onCssInput}
+              spellcheck="false"
+            ></textarea>
+            <span class="css-hint">Use html[data-theme-style] prefix for specificity</span>
+          </div>
+        {/if}
+
         <div class="editor-footer">
           <Button onclick={onExport}>Export</Button>
           <Button variant="danger" onclick={resetToDefaults}>Reset</Button>
         </div>
       </div>
     {:else}
-      <div class="builtin-note">Clone a theme to customize colors</div>
+      <div class="builtin-note">Clone a theme to customize</div>
     {/if}
   </div>
 {/snippet}
@@ -380,10 +403,42 @@
     border-top: 1px solid var(--border);
   }
 
+  .css-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 0;
+  }
+  .css-textarea {
+    width: 100%;
+    min-height: 120px;
+    max-height: 300px;
+    background: var(--ui-bg);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 10px;
+    padding: 6px;
+    resize: vertical;
+    tab-size: 2;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+  }
+  .css-textarea:focus {
+    border-color: var(--border-hover);
+    outline: none;
+    color: var(--text);
+  }
+  .css-hint {
+    font-size: 9px;
+    color: var(--text-ghost);
+  }
+
   .builtin-note {
     color: var(--text-ghost);
     font-size: 11px;
-    padding: 8px 0;
+    padding-top: 8px;
     text-align: center;
     border-top: 1px solid var(--border);
   }

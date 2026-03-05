@@ -124,7 +124,7 @@ export class MarkerManager {
   private createLabel(name: string, colorStr: string): HTMLDivElement {
     const label = document.createElement('div');
     label.className = 'scene-label';
-    label.style.cssText = `position:absolute;left:0;top:0;font-size:11px;color:${colorStr};pointer-events:none;white-space:nowrap;display:none;will-change:transform;text-shadow:-1px -1px 0 var(--bg),1px -1px 0 var(--bg),-1px 1px 0 var(--bg),1px 1px 0 var(--bg);`;
+    label.style.cssText = `position:absolute;left:0;top:0;font-size:11px;color:${colorStr};pointer-events:none;white-space:nowrap;display:none;will-change:transform;text-shadow:-1px -1px 0 var(--scene-shadow),1px -1px 0 var(--scene-shadow),-1px 1px 0 var(--scene-shadow),1px 1px 0 var(--scene-shadow);`;
     label.textContent = name;
     this.overlay.appendChild(label);
     return label;
