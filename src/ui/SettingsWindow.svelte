@@ -14,6 +14,60 @@
   import { getPresetSettings } from '../graphics';
   import { getSimPresetSettings } from '../simulation';
 
+  // Build timezone list: common zones + all IANA zones from Intl
+  const COMMON_TIMEZONES = [
+    'UTC',
+    'America/New_York',
+    'America/Chicago',
+    'America/Denver',
+    'America/Los_Angeles',
+    'America/Anchorage',
+    'Pacific/Honolulu',
+    'America/Sao_Paulo',
+    'America/Argentina/Buenos_Aires',
+    'Europe/London',
+    'Europe/Paris',
+    'Europe/Berlin',
+    'Europe/Moscow',
+    'Asia/Dubai',
+    'Asia/Kolkata',
+    'Asia/Bangkok',
+    'Asia/Shanghai',
+    'Asia/Tokyo',
+    'Asia/Seoul',
+    'Australia/Sydney',
+    'Pacific/Auckland',
+  ];
+
+  function getAllTimezones(): string[] {
+    try {
+      // @ts-ignore — supportedValuesOf is available in modern browsers
+      const all: string[] = Intl.supportedValuesOf('timeZone');
+      return all;
+    } catch {
+      return COMMON_TIMEZONES;
+    }
+  }
+
+  const allTimezones = getAllTimezones();
+
+  // Timezone label: "America/New_York (EST)"
+  function tzLabel(tz: string): string {
+    const display = tz.replace(/_/g, ' ');
+    if (tz === 'UTC') return 'UTC';
+    try {
+      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' });
+      const abbr = fmt.formatToParts(new Date()).find(p => p.type === 'timeZoneName')?.value;
+      return abbr ? `${display} (${abbr})` : display;
+    } catch {
+      return display;
+    }
+  }
+
+  function onTimezoneChange(e: Event) {
+    settingsStore.applyTimezone((e.target as HTMLSelectElement).value);
+  }
+
   // --- Graphics ---
   function onGfxPresetChange(e: Event) {
     const val = (e.target as HTMLSelectElement).value;
@@ -259,6 +313,14 @@
   </div>
 
   <h4 class="section-header">General</h4>
+  <div class="row">
+    <label>Timezone</label>
+    <Select class="tz-select" size="xs" value={settingsStore.timezone} onchange={onTimezoneChange}>
+      {#each allTimezones as tz}
+        <option value={tz}>{tzLabel(tz)}</option>
+      {/each}
+    </Select>
+  </div>
   <Slider label="FPS Limit" display={fpsLabelText} min={0} max={482} value={settingsStore.fpsSliderValue} oninput={onFpsInput} />
   {#if showFpsWarning}
     <div class="warning">May reduce UI responsiveness</div>
@@ -308,6 +370,11 @@
     margin-bottom: 6px;
   }
   .row label { color: var(--text-dim); font-size: 12px; }
+  :global(.tz-select) {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .warning {
     font-size: 11px;
     color: var(--warning);

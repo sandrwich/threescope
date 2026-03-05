@@ -12,6 +12,7 @@
   import { observerStore } from '../stores/observer.svelte';
   import { getElevation, isElevationLoaded } from '../astro/elevation';
   import { unixToEpoch } from '../astro/epoch';
+  import { formatDatetimeTz } from '../format';
   import { tick } from 'svelte';
   import { resetWindowLayout } from './shared/DraggableWindow.svelte';
 
@@ -321,7 +322,7 @@
       </div>
       <div class="palette-list" bind:this={listEl}>
         {#if epochMode}
-          <div class="palette-empty">{query ? (isNaN(parseInt(query)) ? 'Enter a valid Unix timestamp' : `Jump to ${new Date(parseInt(query) * 1000).toISOString().replace('T', ' ').replace('.000Z', ' UTC')}`) : 'Enter a Unix timestamp and press Enter'}</div>
+          <div class="palette-empty">{query ? (isNaN(parseInt(query)) ? 'Enter a valid Unix timestamp' : `Jump to ${formatDatetimeTz(parseInt(query), settingsStore.timezone)} ${settingsStore.timezoneAbbr}`) : 'Enter a Unix timestamp and press Enter'}</div>
         {:else if satMode}
           {#if satResults.length === 0}
             <div class="palette-empty">{query ? 'No matching satellites' : 'No satellites loaded'}</div>

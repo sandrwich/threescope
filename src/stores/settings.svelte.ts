@@ -7,6 +7,7 @@ class SettingsStore {
   fpsLimit = $state(-1); // -1=vsync, 0=unlocked, >0=cap
   fpsSliderValue = $state(0); // raw slider value (0=Vsync, 1-480=cap, >480=Unlocked)
   fov = $state(45); // camera field of view in degrees (10–120)
+  timezone = $state(Intl.DateTimeFormat().resolvedOptions().timeZone); // IANA timezone ID
 
   // Callbacks registered by App during init
   onGraphicsChange: ((g: GraphicsSettings) => void) | null = null;
@@ -44,6 +45,16 @@ class SettingsStore {
     const savedFov = localStorage.getItem('satvisor_fov');
     if (savedFov !== null) this.fov = Math.max(10, Math.min(120, Number(savedFov)));
 
+    const savedTz = localStorage.getItem('satvisor_timezone');
+    if (savedTz) {
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: savedTz });
+        this.timezone = savedTz;
+      } catch {
+        // Invalid stored timezone — reset to browser default
+        localStorage.removeItem('satvisor_timezone');
+      }
+    }
   }
 
   applyGraphics(g: GraphicsSettings) {
@@ -69,6 +80,23 @@ class SettingsStore {
     this.fov = Math.max(10, Math.min(120, value));
     localStorage.setItem('satvisor_fov', String(this.fov));
     this.onFovChange?.(this.fov);
+  }
+
+  applyTimezone(tz: string) {
+    this.timezone = tz;
+    localStorage.setItem('satvisor_timezone', tz);
+  }
+
+  /** Short label for the current timezone, e.g. "EST", "UTC+2", or "UTC". */
+  get timezoneAbbr(): string {
+    if (this.timezone === 'UTC') return 'UTC';
+    try {
+      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: this.timezone, timeZoneName: 'short' });
+      const parts = fmt.formatToParts(new Date());
+      return parts.find(p => p.type === 'timeZoneName')?.value ?? this.timezone;
+    } catch {
+      return this.timezone;
+    }
   }
 }
 

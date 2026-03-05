@@ -1,11 +1,12 @@
 <script lang="ts">
   import { timeStore } from '../stores/time.svelte';
   import { uiStore } from '../stores/ui.svelte';
+  import { settingsStore } from '../stores/settings.svelte';
 
   let compactDatetime = $derived(() => {
     const dt = timeStore.displayDatetime;
-    // Strip seconds: "2026-02-22 15:57:05 UTC" → "2026-02-22 15:57 UTC"
-    return dt.replace(/:\d{2}\s+UTC/, ' UTC');
+    // Strip seconds: "2026-02-22 15:57:05" → "2026-02-22 15:57 TZ"
+    return dt.replace(/:\d{2}$/, '') + ' ' + settingsStore.timezoneAbbr;
   });
 
   let speedText = $derived(() => {

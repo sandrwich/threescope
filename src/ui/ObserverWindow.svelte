@@ -10,7 +10,9 @@
   import { ICON_OBSERVER } from './shared/icons';
   import { getElevation, isElevationLoaded } from '../astro/elevation';
   import { sunAltitude, sunLabel } from '../astro/eclipse';
-  import { epochToGmst, epochToDate } from '../astro/epoch';
+  import { epochToGmst, epochToUnix } from '../astro/epoch';
+  import { settingsStore } from '../stores/settings.svelte';
+  import { formatTimeShortTz } from '../format';
   import { moonPositionECI, moonIllumination } from '../astro/moon-observer';
   import { getAzEl } from '../astro/az-el';
   import { DEG2RAD } from '../constants';
@@ -123,11 +125,8 @@
     return null;
   }
 
-  function formatUtc(epoch: number): string {
-    const d = epochToDate(epoch);
-    const h = String(d.getUTCHours()).padStart(2, '0');
-    const m = String(d.getUTCMinutes()).padStart(2, '0');
-    return `${h}:${m}`;
+  function formatTzTime(epoch: number): string {
+    return formatTimeShortTz(epochToUnix(epoch), settingsStore.timezone);
   }
 
   // Cache observation window — recompute only when epoch changes significantly
@@ -228,13 +227,13 @@
       <h4 class="section-header">Observation Window</h4>
       {#if obsWindow && obsWindow.start !== null && obsWindow.end !== null}
         <div class="window-row">
-          <span class="window-times">{formatUtc(obsWindow.start)} — {formatUtc(obsWindow.end)} UTC</span>
+          <span class="window-times">{formatTzTime(obsWindow.start)} — {formatTzTime(obsWindow.end)} {settingsStore.timezoneAbbr}</span>
         </div>
         <div class="window-hint">Sun between &minus;6&deg; and &minus;18&deg;</div>
         <div class="window-hint">Satellites sunlit, sky dark enough to observe</div>
       {:else if obsWindow && obsWindow.start !== null}
         <div class="window-row">
-          <span class="window-times">From {formatUtc(obsWindow.start)} UTC</span>
+          <span class="window-times">From {formatTzTime(obsWindow.start)} {settingsStore.timezoneAbbr}</span>
         </div>
         <div class="window-hint">End not found in the next 24h</div>
       {:else if sunEl !== null && sunEl <= -18}

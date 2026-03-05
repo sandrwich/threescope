@@ -7,9 +7,10 @@
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { ICON_PASSES, ICON_DOPPLER, ICON_ECLIPSE, ICON_SUN, ICON_FILTER } from './shared/icons';
-  import { formatMHz, formatMHzRange, fmtDuration } from '../format';
+  import { formatMHz, formatMHzRange, fmtDuration, formatTimeTz, dayKeyTz, getDateComponentsTz } from '../format';
   import { satColorCss } from '../constants';
-  import { epochToDate } from '../astro/epoch';
+  import { epochToUnix } from '../astro/epoch';
+  import { settingsStore } from '../stores/settings.svelte';
   import { sunLabel } from '../astro/eclipse';
   import type { SatellitePass } from '../passes/pass-types';
 
@@ -17,34 +18,27 @@
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   function dayKey(epoch: number): string {
-    const d = epochToDate(epoch);
-    return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+    return dayKeyTz(epochToUnix(epoch), settingsStore.timezone);
   }
 
   function dayLabel(epoch: number): string {
-    const d = epochToDate(epoch);
-    const now = epochToDate(uiStore.passListEpoch);
-    const todayKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
-    const tomorrow = new Date(now.getTime() + 86400000);
-    const tomorrowKey = `${tomorrow.getUTCFullYear()}-${tomorrow.getUTCMonth()}-${tomorrow.getUTCDate()}`;
-    const key = dayKey(epoch);
-    const weekday = WEEKDAYS[d.getUTCDay()];
-    const dateStr = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+    const tz = settingsStore.timezone;
+    const unix = epochToUnix(epoch);
+    const nowUnix = epochToUnix(uiStore.passListEpoch);
+    const todayKey = dayKeyTz(nowUnix, tz);
+    const tomorrowKey = dayKeyTz(nowUnix + 86400, tz);
+    const key = dayKeyTz(unix, tz);
+    const d = new Date(unix * 1000);
+    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(d);
+    const c = getDateComponentsTz(unix, tz);
+    const dateStr = `${c.day} ${MONTHS[c.month - 1]}`;
     if (key === todayKey) return `Today \u2014 ${weekday} ${dateStr}`;
     if (key === tomorrowKey) return `Tomorrow \u2014 ${weekday} ${dateStr}`;
     return `${weekday} ${dateStr}`;
   }
 
   function formatTime(epoch: number): string {
-    const dayFrac = epoch % 1000.0;
-    const frac = dayFrac - Math.floor(dayFrac);
-    const hours = frac * 24;
-    const h = Math.floor(hours);
-    const minutes = (hours - h) * 60;
-    const m = Math.floor(minutes);
-    const s = Math.round((minutes - m) * 60);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    return formatTimeTz(epochToUnix(epoch), settingsStore.timezone);
   }
 
   function elClass(maxEl: number): string {

@@ -1,5 +1,86 @@
 /** Formatting utilities. */
 
+// ── Timezone-aware date/time formatting ──
+
+const dtfCache = new Map<string, Intl.DateTimeFormat>();
+
+function getDateParts(date: Date, tz: string) {
+  const key = tz;
+  let fmt = dtfCache.get(key);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    });
+    dtfCache.set(key, fmt);
+  }
+  const parts = fmt.formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find(p => p.type === type)?.value ?? '00';
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour') === '24' ? '00' : get('hour'),
+    minute: get('minute'),
+    second: get('second'),
+  };
+}
+
+/** Format epoch (unix seconds) as "YYYY-MM-DD HH:MM:SS" in the given timezone. */
+export function formatDatetimeTz(unixSec: number, tz: string): string {
+  const d = new Date(unixSec * 1000);
+  const p = getDateParts(d, tz);
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+}
+
+/** Format epoch (unix seconds) as "HH:MM:SS" in the given timezone. */
+export function formatTimeTz(unixSec: number, tz: string): string {
+  const d = new Date(unixSec * 1000);
+  const p = getDateParts(d, tz);
+  return `${p.hour}:${p.minute}:${p.second}`;
+}
+
+/** Format epoch (unix seconds) as "HH:MM" in the given timezone. */
+export function formatTimeShortTz(unixSec: number, tz: string): string {
+  const d = new Date(unixSec * 1000);
+  const p = getDateParts(d, tz);
+  return `${p.hour}:${p.minute}`;
+}
+
+/** Get date components { year, month, day, hour, minute, second } as numbers in the given timezone. */
+export function getDateComponentsTz(unixSec: number, tz: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const d = new Date(unixSec * 1000);
+  const p = getDateParts(d, tz);
+  return {
+    year: parseInt(p.year),
+    month: parseInt(p.month),
+    day: parseInt(p.day),
+    hour: parseInt(p.hour),
+    minute: parseInt(p.minute),
+    second: parseInt(p.second),
+  };
+}
+
+/** Get a "YYYY-M-D" day key for grouping, in the given timezone. */
+export function dayKeyTz(unixSec: number, tz: string): string {
+  const c = getDateComponentsTz(unixSec, tz);
+  return `${c.year}-${c.month}-${c.day}`;
+}
+
+/** Format epoch (unix seconds) as "YYYY-MM-DD_HHMM" for filenames, in the given timezone. */
+export function formatFileDateTz(unixSec: number, tz: string): { date: string; time: string } {
+  const d = new Date(unixSec * 1000);
+  const p = getDateParts(d, tz);
+  return {
+    date: `${p.year}-${p.month}-${p.day}`,
+    time: `${p.hour}${p.minute}`,
+  };
+}
+
+// ── Number formatting ──
+
 /** Format a number trimming trailing zeros after the decimal. */
 function trimNum(n: number, maxDecimals: number): string {
   const s = n.toFixed(maxDecimals);

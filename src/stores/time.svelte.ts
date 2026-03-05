@@ -1,4 +1,6 @@
-import { getCurrentRealTimeEpoch, epochToDatetimeStr, epochToUnix, unixToEpoch } from '../astro/epoch';
+import { getCurrentRealTimeEpoch, epochToUnix, unixToEpoch } from '../astro/epoch';
+import { formatDatetimeTz } from '../format';
+import { settingsStore } from './settings.svelte';
 import { feedbackStore } from './feedback.svelte';
 import { FeedbackEvent } from '../feedback/types';
 
@@ -93,7 +95,7 @@ class TimeStore {
     const now = performance.now();
     if (now - this.lastDisplayUpdate > 250) {
       this.lastDisplayUpdate = now;
-      this.displayDatetime = epochToDatetimeStr(epoch);
+      this.displayDatetime = formatDatetimeTz(epochToUnix(epoch), settingsStore.timezone);
       this.displaySpeed = formatSpeed(multiplier);
 
       const wallEpoch = getCurrentRealTimeEpoch();
@@ -134,7 +136,7 @@ class TimeStore {
     // Interpolate in linear unix seconds, then convert back to TLE epoch
     const currentUnix = this.warpStartUnix + (this.warpTargetUnix - this.warpStartUnix) * progress;
     this.epoch = unixToEpoch(currentUnix);
-    this.displayDatetime = epochToDatetimeStr(this.epoch);
+    this.displayDatetime = formatDatetimeTz(currentUnix, settingsStore.timezone);
     this.displaySpeed = 'WARP';
     this.isRealtime = false;
 
@@ -144,7 +146,7 @@ class TimeStore {
       this.multiplier = this.preWarpMultiplier;
       this.paused = this.preWarpPaused;
       this.warping = false;
-      this.displayDatetime = epochToDatetimeStr(this.epoch);
+      this.displayDatetime = formatDatetimeTz(epochToUnix(this.epoch), settingsStore.timezone);
       this.displaySpeed = formatSpeed(this.multiplier);
       feedbackStore.fire(FeedbackEvent.TimeWarpComplete);
     }

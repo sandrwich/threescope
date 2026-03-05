@@ -8,9 +8,10 @@
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { ICON_DOPPLER } from './shared/icons';
-  import { fmtDurationClock } from '../format';
+  import { fmtDurationClock, formatDatetimeTz, formatFileDateTz } from '../format';
+  import { settingsStore } from '../stores/settings.svelte';
   import { calculateDopplerShift, createSatrec } from '../astro/doppler';
-  import { epochToDatetimeStr, epochToDate } from '../astro/epoch';
+  import { epochToUnix, epochToDate } from '../astro/epoch';
   import { satColorCss } from '../constants';
   import { palette } from './shared/theme';
   import { getTransmitters, type SatnogsTransmitter } from '../data/satnogs';
@@ -325,7 +326,7 @@
     ctx.fillText(pass.satName, gx + 12, 3);
     ctx.fillStyle = palette.textGhost;
     ctx.font = `9px ${font}`;
-    ctx.fillText(epochToDatetimeStr(pass.aosEpoch), gx + 12, 14);
+    ctx.fillText(formatDatetimeTz(epochToUnix(pass.aosEpoch), settingsStore.timezone) + ' ' + settingsStore.timezoneAbbr, gx + 12, 14);
 
     // Max shift info in top-right
     if (cachedData.length > 0) {
@@ -478,14 +479,13 @@
     }
 
     // Generate filename: doppler_NOAA-18_2026-02-23_2118-2133_137.625MHz.csv
-    const d = epochToDate(pass.aosEpoch);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const date = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-    const dLos = epochToDate(pass.losEpoch);
-    const timeRange = `${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}-${pad(dLos.getUTCHours())}${pad(dLos.getUTCMinutes())}`;
+    const tz = settingsStore.timezone;
+    const aosF = formatFileDateTz(epochToUnix(pass.aosEpoch), tz);
+    const losF = formatFileDateTz(epochToUnix(pass.losEpoch), tz);
+    const timeRange = `${aosF.time}-${losF.time}`;
     const freqLabel = baseFreqHz >= 1e6 ? `${(baseFreqHz / 1e6).toFixed(3)}MHz` : `${(baseFreqHz / 1e3).toFixed(1)}kHz`;
     const safeName = pass.satName.replace(/[^a-zA-Z0-9]/g, '-');
-    const filename = `doppler_${safeName}_${date}_${timeRange}_${freqLabel}.csv`;
+    const filename = `doppler_${safeName}_${aosF.date}_${timeRange}_${freqLabel}.csv`;
 
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

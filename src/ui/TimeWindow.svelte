@@ -4,7 +4,9 @@
   import Button from './shared/Button.svelte';
   import { timeStore, scrubMultiplierFromOffset } from '../stores/time.svelte';
   import { uiStore } from '../stores/ui.svelte';
+  import { settingsStore } from '../stores/settings.svelte';
   import { epochToUnix, unixToEpoch } from '../astro/epoch';
+  import { getDateComponentsTz } from '../format';
   import { ICON_TIME } from './shared/icons';
 
   // Parsed display values — synced from store at ~4Hz
@@ -48,21 +50,20 @@
 
   $effect(() => {
     if (!editField) {
-      const dt = timeStore.displayDatetime;
-      const m = dt.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
-      if (m) {
-        year = parseInt(m[1]);
-        month = parseInt(m[2]);
-        day = parseInt(m[3]);
-        hour = parseInt(m[4]);
-        min = parseInt(m[5]);
-        sec = parseInt(m[6]);
-      }
+      // Re-derive when epoch or timezone changes
+      void timeStore.displayDatetime;
+      const c = getDateComponentsTz(epochToUnix(timeStore.epoch), settingsStore.timezone);
+      year = c.year;
+      month = c.month;
+      day = c.day;
+      hour = c.hour;
+      min = c.minute;
+      sec = c.second;
     }
   });
 
   function nudge(field: string, delta: number) {
-    const date = new Date(Date.UTC(year, month - 1, day, hour, min, sec));
+    const date = tzToDate(year, month, day, hour, min, sec);
     switch (field) {
       case 'year':  date.setUTCFullYear(date.getUTCFullYear() + delta); break;
       case 'month': date.setUTCMonth(date.getUTCMonth() + delta); break;
@@ -72,6 +73,21 @@
       case 'sec':   date.setUTCSeconds(date.getUTCSeconds() + delta); break;
     }
     timeStore.snapToDate(date);
+  }
+
+  /** Convert displayed tz-local components back to a UTC Date for the engine. */
+  function tzToDate(y: number, mo: number, d: number, h: number, mi: number, s: number): Date {
+    const tz = settingsStore.timezone;
+    if (tz === 'UTC') return new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+    // Build an ISO string and parse as if it were in the target timezone
+    // by computing the offset between UTC and the target tz at this approximate time
+    const approx = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+    const utcStr = approx.toLocaleString('en-US', { timeZone: 'UTC' });
+    const tzStr = approx.toLocaleString('en-US', { timeZone: tz });
+    const utcMs = new Date(utcStr).getTime();
+    const tzMs = new Date(tzStr).getTime();
+    const offsetMs = utcMs - tzMs;
+    return new Date(approx.getTime() + offsetMs);
   }
 
   function startEdit(field: string, currentVal: number, w = 2) {
@@ -92,7 +108,7 @@
 
     // Build date with the edited field replaced
     const parts = { year, month, day, hour, min, sec, [field]: val };
-    const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.min, parts.sec));
+    const date = tzToDate(parts.year, parts.month, parts.day, parts.hour, parts.min, parts.sec);
     timeStore.snapToDate(date);
   }
 
@@ -157,7 +173,10 @@
     const val = (e.target as HTMLInputElement).value;
     if (!val) return;
     // datetime-local gives YYYY-MM-DDTHH:MM or YYYY-MM-DDTHH:MM:SS
-    const date = new Date(val + 'Z'); // treat as UTC
+    // Parse the components and interpret in the configured timezone
+    const m = val.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (!m) return;
+    const date = tzToDate(+m[1], +m[2], +m[3], +m[4], +m[5], +(m[6] || 0));
     if (!isNaN(date.getTime())) {
       timeStore.setEpochFromDate(date);
     }
@@ -260,7 +279,7 @@
       <div class="mobile-datetime" onclick={openDatePicker}>
         <span class="mobile-date">{year}-{pad(month)}-{pad(day)}</span>
         <span class="mobile-time">{pad(hour)}:{pad(min)}:{pad(sec)}</span>
-        <span class="mobile-utc">UTC</span>
+        <span class="mobile-utc">{settingsStore.timezoneAbbr}</span>
       </div>
       <input
         bind:this={datePickerEl}
@@ -317,7 +336,7 @@
         {@render nudgeGroup('hour', hour, 'hr')}
         {@render nudgeGroup('min', min, 'mn')}
         {@render nudgeGroup('sec', sec, 'sc')}
-        <span class="utc-label">UTC</span>
+        <span class="utc-label">{settingsStore.timezoneAbbr}</span>
       </div>
     {:else}
       <div class="epoch-panel">
