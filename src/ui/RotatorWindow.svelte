@@ -390,10 +390,8 @@
       const pc = phosphorCtx;
 
       // Run phosphor simulation at fixed 60Hz — accumulate real time, consume in ticks
-      phosphorAccum += dt;
-      const maxTicks = PHOSPHOR_MAX_TICKS;
+      phosphorAccum = Math.min(phosphorAccum + dt, PHOSPHOR_MAX_TICKS * PHOSPHOR_TICK);
       let ticks = Math.floor(phosphorAccum / PHOSPHOR_TICK);
-      if (ticks > maxTicks) ticks = maxTicks;
       phosphorAccum -= ticks * PHOSPHOR_TICK;
 
       for (let t = 0; t < ticks; t++) {
@@ -775,6 +773,8 @@
   $effect(() => {
     if (canvasEl) {
       initCanvas();
+      lastFrameTime = 0;
+      phosphorAccum = 0;
       canvasEl.addEventListener('wheel', onCanvasWheel, { passive: false });
       animFrameId = requestAnimationFrame(drawFrame);
       return () => {
