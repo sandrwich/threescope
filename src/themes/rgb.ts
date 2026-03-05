@@ -1,8 +1,8 @@
 import type { ThemeDef } from './types';
 
 export const THEME_RGB: ThemeDef = {
-  id: 'gg-ez',
-  name: 'GG EZ',
+  id: 'ggez',
+  name: 'GGEZ',
   builtin: true,
   colorScheme: 'dark',
   themeStyle: 'rgb',

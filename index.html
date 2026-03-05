@@ -132,7 +132,7 @@
           'neon': { '--bg': '#06000a', '--ui-bg': '#0a0012', '--text': '#eeddff', '--text-muted': '#9977bb' },
           'crt': { '--bg': '#020a02', '--ui-bg': '#051005', '--text': '#44dd66', '--text-muted': '#22aa44' },
           'legacy': { '--bg': '#c0c0c0', '--ui-bg': '#c0c0c0', '--text': '#000000', '--text-muted': '#222222', '--border': '#808080', '--warning': '#cc6600' },
-          'gg-ez': { '--bg': '#050505', '--ui-bg': '#0a0a0a', '--text': '#ffffff', '--text-muted': '#bbbbbb' },
+          'ggez': { '--bg': '#050505', '--ui-bg': '#0a0a0a', '--text': '#ffffff', '--text-muted': '#bbbbbb' },
         };
         if (minimal[id]) {
           vars = minimal[id];
@@ -155,7 +155,7 @@
         if (id === 'light' || id === 'legacy' || (vars && vars['--bg'] && parseInt(vars['--bg'].replace('#','').slice(0,2), 16) > 128)) {
           document.documentElement.style.setProperty('color-scheme', 'light');
         }
-        var styles = { 'legacy': 'legacy', 'gg-ez': 'rgb', 'neon': 'neon', 'crt': 'crt' };
+        var styles = { 'legacy': 'legacy', 'ggez': 'rgb', 'neon': 'neon', 'crt': 'crt' };
         if (styles[id]) {
           document.documentElement.dataset.themeStyle = styles[id];
         }
