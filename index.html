@@ -93,6 +93,21 @@
     html[data-theme-style="neon"] #loading-screen .bar-inner {
       background: linear-gradient(90deg, #ff00b4, #00ccff);
     }
+    /* CRT loading screen */
+    html[data-theme-style="crt"] #loading-screen .bar-outer {
+      border: 1px solid rgba(50,255,100,0.3);
+      box-shadow: 0 0 8px rgba(50,255,100,0.1);
+    }
+    html[data-theme-style="crt"] #loading-screen .bar-inner {
+      background: #22aa44;
+    }
+    html[data-theme-style="crt"] #loading-screen {
+      animation: crt-flicker-screen 0.1s infinite;
+    }
+    @keyframes crt-flicker-screen {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.985; }
+    }
     @keyframes neon-bar-pulse {
       0% { box-shadow: 0 0 8px rgba(255,0,180,0.25), 0 0 24px rgba(0,200,255,0.12); }
       100% { box-shadow: 0 0 12px rgba(0,200,255,0.30), 0 0 30px rgba(255,0,180,0.15); }
@@ -115,6 +130,7 @@
           'dracula': { '--bg': '#282a36', '--ui-bg': '#363848', '--text': '#f8f8f2', '--text-muted': '#bfc0c0' },
           'redshift': { '--bg': '#0a0000', '--ui-bg': '#120000', '--text': '#cc8866', '--text-muted': '#995544' },
           'neon': { '--bg': '#06000a', '--ui-bg': '#0a0012', '--text': '#eeddff', '--text-muted': '#9977bb' },
+          'crt': { '--bg': '#020a02', '--ui-bg': '#051005', '--text': '#44dd66', '--text-muted': '#22aa44' },
           'legacy': { '--bg': '#c0c0c0', '--ui-bg': '#c0c0c0', '--text': '#000000', '--text-muted': '#222222', '--border': '#808080', '--warning': '#cc6600' },
           'gg-ez': { '--bg': '#050505', '--ui-bg': '#0a0a0a', '--text': '#ffffff', '--text-muted': '#bbbbbb' },
         };
@@ -139,7 +155,7 @@
         if (id === 'light' || id === 'legacy' || (vars && vars['--bg'] && parseInt(vars['--bg'].replace('#','').slice(0,2), 16) > 128)) {
           document.documentElement.style.setProperty('color-scheme', 'light');
         }
-        var styles = { 'legacy': 'legacy', 'gg-ez': 'rgb', 'neon': 'neon' };
+        var styles = { 'legacy': 'legacy', 'gg-ez': 'rgb', 'neon': 'neon', 'crt': 'crt' };
         if (styles[id]) {
           document.documentElement.dataset.themeStyle = styles[id];
         }
