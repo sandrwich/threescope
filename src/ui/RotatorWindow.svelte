@@ -4,6 +4,8 @@
   import Button from './shared/Button.svelte';
   import Checkbox from './shared/Checkbox.svelte';
   import Slider from './shared/Slider.svelte';
+  import Select from './shared/Select.svelte';
+  import Input from './shared/Input.svelte';
   import InfoTip from './shared/InfoTip.svelte';
   import { uiStore } from '../stores/ui.svelte';
   import { beamStore, isInsideBeam } from '../stores/beam.svelte';
@@ -890,7 +892,7 @@
   {:else}
     <div class="setup-panel">
       <h4 class="section-header">Antenna</h4>
-      <div class="rot-row">
+      <div class="row">
         <label>Preset<InfoTip>Sets beam width, tolerance, and update rate for common antenna types.</InfoTip></label>
         <div class="antenna-presets">
           {#each Object.entries(ANTENNA_PRESETS) as [key, p]}
@@ -898,14 +900,14 @@
           {/each}
         </div>
       </div>
-      <div class="rot-row antenna-summary">
+      <div class="row antenna-summary">
         <span>Beam {beamStore.beamWidth}°</span>
         <span>Tolerance {rotatorStore.tolerance}°</span>
         <span>Rate {rateDisplay}</span>
       </div>
 
       <h4 class="section-header">Connection</h4>
-      <div class="rot-row">
+      <div class="row">
         <label>Mode</label>
         <div class="rot-mode-btns">
           <Button size="xs" variant="ghost" active={rotatorStore.mode === 'serial'}
@@ -916,29 +918,29 @@
       </div>
 
       {#if rotatorStore.mode === 'serial'}
-        <div class="rot-row">
+        <div class="row">
           <label>Protocol</label>
-          <select class="rot-select" value={rotatorStore.serialProtocol}
-            onchange={(e) => rotatorStore.setSerialProtocol((e.currentTarget as HTMLSelectElement).value as any)}>
+          <Select size="xs" value={rotatorStore.serialProtocol}
+            onchange={(e) => rotatorStore.setSerialProtocol((e.target as HTMLSelectElement).value as any)}>
             <option value="gs232">GS-232</option>
             <option value="easycomm">EasyComm II</option>
-          </select>
+          </Select>
         </div>
-        <div class="rot-row">
+        <div class="row">
           <label>Baud</label>
-          <select class="rot-select" value={String(rotatorStore.baudRate)}
-            onchange={(e) => rotatorStore.setBaudRate(Number((e.currentTarget as HTMLSelectElement).value))}>
+          <Select size="xs" value={String(rotatorStore.baudRate)}
+            onchange={(e) => rotatorStore.setBaudRate(Number((e.target as HTMLSelectElement).value))}>
             <option value="4800">4800</option>
             <option value="9600">9600</option>
             <option value="19200">19200</option>
-          </select>
+          </Select>
         </div>
       {/if}
 
       {#if rotatorStore.mode === 'network'}
-        <div class="rot-row">
+        <div class="row">
           <label>URL</label>
-          <input class="radar-input rot-url" type="text"
+          <Input size="xs" class="rot-url" type="text"
             value={rotatorStore.wsUrl}
             onblur={(e) => rotatorStore.setWsUrl((e.currentTarget as HTMLInputElement).value)}
             onkeydown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
@@ -954,50 +956,56 @@
         min={0} max={10} step={0.5} value={rotatorStore.tolerance}
         oninput={(e) => rotatorStore.setTolerance(Number((e.target as HTMLInputElement).value))} />
 
-      <div class="rot-row">
-        <label>Park position</label>
-        <select class="rot-select" value={rotatorStore.parkPreset}
-          onchange={(e) => rotatorStore.setParkPreset((e.currentTarget as HTMLSelectElement).value as ParkPreset)}>
+      <div class="row">
+        <label>Park Position</label>
+        <Select size="xs" value={rotatorStore.parkPreset}
+          onchange={(e) => rotatorStore.setParkPreset((e.target as HTMLSelectElement).value as ParkPreset)}>
           {#each Object.entries(PARK_PRESETS) as [key, p]}
             <option value={key}>{p.label}</option>
           {/each}
           <option value="custom">Custom</option>
-        </select>
+        </Select>
       </div>
       {#if rotatorStore.parkPreset === 'custom'}
-        <div class="rot-row">
+        <div class="row">
           <label>Park Az / El</label>
           <div class="park-custom">
-            <input class="radar-input" type="number" min="0" max="360" step="0.1"
+            <Input size="xs" type="number" min="0" max="360" step="0.1"
               value={rotatorStore.parkAz}
               onblur={(e) => rotatorStore.setParkPosition(Number((e.currentTarget as HTMLInputElement).value), rotatorStore.parkEl)}
               onkeydown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-            <span class="radar-unit">°</span>
-            <input class="radar-input" type="number" min="0" max="90" step="0.1"
+            <span class="unit">°</span>
+            <Input size="xs" type="number" min="0" max="90" step="0.1"
               value={rotatorStore.parkEl}
               onblur={(e) => rotatorStore.setParkPosition(rotatorStore.parkAz, Number((e.currentTarget as HTMLInputElement).value))}
               onkeydown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-            <span class="radar-unit">°</span>
+            <span class="unit">°</span>
           </div>
         </div>
       {/if}
 
-      <div class="rot-row">
-        <label>After pass<InfoTip>Action when a tracked satellite goes below the horizon. Disables auto-slew automatically.</InfoTip></label>
-        <select class="rot-select" value={rotatorStore.passEndAction}
-          onchange={(e) => rotatorStore.setPassEndAction((e.currentTarget as HTMLSelectElement).value as PassEndAction)}>
+      <div class="row">
+        <label>After Pass<InfoTip>Action when a tracked satellite goes below the horizon. Disables auto-slew automatically.</InfoTip></label>
+        <Select size="xs" value={rotatorStore.passEndAction}
+          onchange={(e) => rotatorStore.setPassEndAction((e.target as HTMLSelectElement).value as PassEndAction)}>
           <option value="nothing">Do nothing</option>
           <option value="park">Park</option>
           <option value="slew-next">Slew to next AOS</option>
-        </select>
+        </Select>
       </div>
+      {#if rotatorStore.passEndAction !== 'nothing'}
+        {#snippet settleTip()}<InfoTip>Wait this many seconds after LOS before parking or slewing. Lets large antennas stop wobbling.</InfoTip>{/snippet}
+        <Slider label="Settle Delay" display="{rotatorStore.settleDelaySec}s" tip={settleTip}
+          min={0} max={30} step={1} value={rotatorStore.settleDelaySec}
+          oninput={(e) => rotatorStore.setSettleDelay(Number((e.target as HTMLInputElement).value))} />
+      {/if}
 
       <h4 class="section-header">Visual</h4>
-      <div class="rot-row">
-        <label>Cone without rotator<InfoTip>Show the beam cone in the 3D view when no rotator is connected. The cone always follows the rotator when connected.</InfoTip></label>
+      <div class="row">
+        <label>Cone Without Rotator<InfoTip>Show the beam cone in the 3D view when no rotator is connected. The cone always follows the rotator when connected.</InfoTip></label>
         <Checkbox checked={beamStore.coneVisible} onchange={() => beamStore.setConeVisible(!beamStore.coneVisible)} />
       </div>
-      <div class="rot-row">
+      <div class="row">
         <label>Radar VFX<InfoTip>Sweep line and phosphor afterglow effect on satellite blips.</InfoTip></label>
         <Checkbox checked={uiStore.radarVfx} onchange={() => uiStore.setToggle('radarVfx', !uiStore.radarVfx)} />
       </div>
@@ -1164,18 +1172,6 @@
     display: flex;
     gap: 2px;
   }
-  .rot-select {
-    font-size: 10px;
-    font-family: 'Overpass Mono', monospace;
-    background: var(--ui-bg);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    padding: 1px 3px;
-    border-radius: 2px;
-  }
-  .rot-select:hover { border-color: var(--border-hover); }
-  .rot-select:focus { border-color: var(--border-hover); outline: none; color: var(--text); }
-  .rot-url { width: 160px; }
   .park-custom {
     display: flex;
     align-items: center;
@@ -1281,7 +1277,7 @@
     display: flex;
     gap: 2px;
   }
-  .antenna-summary {
+  .antenna-summary.row {
     gap: 10px;
     justify-content: flex-start;
     font-size: 9px;
@@ -1306,6 +1302,16 @@
     border-bottom: 1px solid var(--border);
   }
   .section-header:first-child { margin-top: 0; }
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .row:last-child { margin-bottom: 0; }
+  .row label { color: var(--text-dim); font-size: 12px; }
+  .unit { color: var(--text-ghost); font-size: 11px; }
+  :global(.rot-url) { width: 160px; }
   .guide-details {
     margin-top: 8px;
   }

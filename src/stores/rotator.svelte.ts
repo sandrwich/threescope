@@ -49,6 +49,7 @@ class RotatorStore {
   parkAz = $state(0);
   parkEl = $state(0);
   passEndAction = $state<PassEndAction>('nothing');
+  settleDelaySec = $state(5);
 
   // Runtime state
   status = $state<RotatorStatus>('disconnected');
@@ -146,6 +147,7 @@ class RotatorStore {
   }
 
   async disconnect(): Promise<void> {
+    if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
     this.stopTimers();
     if (this.driver) {
       await this.driver.disconnect().catch(() => {});
@@ -231,23 +233,34 @@ class RotatorStore {
     this.targetEl = state.trackEl;
   }
 
+  private _settleTimer: ReturnType<typeof setTimeout> | null = null;
+
   private handlePassEnd(noradId: number | null): void {
-    if (this.passEndAction === 'slew-next' && noradId !== null) {
-      // Find next pass for the same sat and pre-position to AOS
-      const nextPass = this.findNextPass(noradId);
-      if (nextPass) {
-        this.goto(nextPass.aosAz, 0);
-        this.nextAosEpoch = nextPass.aosEpoch;
-        this.nextAosSatName = nextPass.satName;
-        // Keep auto-track on so it picks up when sat rises
-        return;
+    if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
+    const act = () => {
+      if (this.passEndAction === 'slew-next' && noradId !== null) {
+        // Find next pass for the same sat and pre-position to AOS
+        const nextPass = this.findNextPass(noradId);
+        if (nextPass) {
+          this.goto(nextPass.aosAz, 0);
+          this.nextAosEpoch = nextPass.aosEpoch;
+          this.nextAosSatName = nextPass.satName;
+          // Keep auto-track on so it picks up when sat rises
+          return;
+        }
       }
-    }
-    this.autoTrack = false;
-    this.targetAz = null;
-    this.targetEl = null;
-    if (this.passEndAction === 'park') {
-      this.park();
+      this.autoTrack = false;
+      this.targetAz = null;
+      this.targetEl = null;
+      if (this.passEndAction === 'park') {
+        this.park();
+      }
+    };
+    const delayMs = this.settleDelaySec * 1000;
+    if (delayMs > 0 && this.passEndAction !== 'nothing') {
+      this._settleTimer = setTimeout(act, delayMs);
+    } else {
+      act();
     }
   }
 
@@ -456,6 +469,8 @@ class RotatorStore {
     if (pEl) this.parkEl = Number(pEl);
     const endAction = g('pass_end_action');
     if (endAction === 'nothing' || endAction === 'park' || endAction === 'slew-next') this.passEndAction = endAction;
+    const settle = g('settle_delay');
+    if (settle) this.settleDelaySec = Number(settle);
     const tol = g('tolerance');
     if (tol) this.tolerance = Number(tol);
     // autoTrack and panelOpen are NOT restored — require explicit user action
@@ -522,6 +537,11 @@ class RotatorStore {
   setPassEndAction(action: PassEndAction): void {
     this.passEndAction = action;
     this.save('pass_end_action', action);
+  }
+
+  setSettleDelay(sec: number): void {
+    this.settleDelaySec = Math.max(0, Math.min(30, sec));
+    this.save('settle_delay', this.settleDelaySec);
   }
 
   setTolerance(deg: number): void {
