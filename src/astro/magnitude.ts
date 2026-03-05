@@ -13,9 +13,10 @@
  * and cached in localStorage. See .docs/magnitude.md for details.
  */
 
+import { geodeticToEci } from './geodetic';
+
 const DEG2RAD = Math.PI / 180.0;
 const RAD2DEG = 180.0 / Math.PI;
-const EARTH_RADIUS_KM = 6371.0;
 
 /**
  * Lambertian (diffuse) sphere phase function.
@@ -74,27 +75,17 @@ export function computePhaseAngle(
 /**
  * Compute observer position in **standard ECI** (km) from geodetic coordinates.
  * Returns standard ECI — convert to render coords (x, z, -y) before mixing with sat.currentPos.
- * Simplified: assumes spherical Earth (good enough for magnitude estimation).
+ * Uses WGS-84 ellipsoid for accurate positioning.
  *
  * @param latDeg  Geodetic latitude (degrees)
  * @param lonDeg  Geodetic longitude (degrees)
- * @param altM    Altitude above sea level (meters)
+ * @param altM    Altitude above WGS-84 ellipsoid (meters)
  * @param gmstRad Greenwich Mean Sidereal Time (radians)
  */
 export function observerEci(
   latDeg: number, lonDeg: number, altM: number, gmstRad: number,
 ): { x: number; y: number; z: number } {
-  const latRad = latDeg * DEG2RAD;
-  const lonRad = lonDeg * DEG2RAD;
-  const r = EARTH_RADIUS_KM + altM / 1000.0;
-  const cosLat = Math.cos(latRad);
-  const sinLat = Math.sin(latRad);
-  const theta = gmstRad + lonRad;  // sidereal angle
-  return {
-    x: r * cosLat * Math.cos(theta),
-    y: r * cosLat * Math.sin(theta),
-    z: r * sinLat,
-  };
+  return geodeticToEci(latDeg, lonDeg, altM, gmstRad);
 }
 
 /**

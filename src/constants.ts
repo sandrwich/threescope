@@ -50,5 +50,10 @@ export function satColorGl(index: number): readonly [number, number, number] {
 // J2 perturbation constants
 export const J2 = 1.08263e-3;                  // Earth's J2 zonal harmonic
 export const EARTH_RADIUS_EQ_KM = 6378.137;    // WGS-84 equatorial radius (km)
+
+// WGS-84 ellipsoid constants
+export const WGS84_A = 6378.137;               // semi-major axis (km)
+export const WGS84_F = 1 / 298.257223563;      // flattening
+export const WGS84_E2 = 2 * WGS84_F - WGS84_F * WGS84_F; // first eccentricity squared
 export const ORBIT_RECOMPUTE_INTERVAL_S = 900;  // recompute orbits every 15 sim-minutes
 export const MOBILE_BREAKPOINT = 768;

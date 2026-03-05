@@ -7,7 +7,8 @@
 import { twoline2satrec, json2satrec, propagate } from 'satellite.js';
 import type { SatRec } from 'satellite.js';
 import { epochToUnix, epochToGmst } from './epoch';
-import { EARTH_RADIUS_KM, DEG2RAD } from '../constants';
+import { DEG2RAD } from '../constants';
+import { geodeticToEcef } from './geodetic';
 
 const C_KM_S = 299792.458;        // speed of light (km/s)
 const OMEGA_E = 7.2921159e-5;     // Earth rotation rate (rad/s)
@@ -16,18 +17,6 @@ export interface DopplerResult {
   frequency: number;      // Hz, Doppler-shifted
   rangeKm: number;        // slant range (km)
   rangeRateKmS: number;   // range rate (km/s, positive = receding)
-}
-
-/** Observer ECEF position from geodetic (spherical Earth). */
-function observerEcef(latDeg: number, lonDeg: number, altM: number) {
-  const lat = latDeg * DEG2RAD;
-  const lon = lonDeg * DEG2RAD;
-  const R = EARTH_RADIUS_KM + altM / 1000;
-  return {
-    x: R * Math.cos(lat) * Math.cos(lon),
-    y: R * Math.cos(lat) * Math.sin(lon),
-    z: R * Math.sin(lat),
-  };
 }
 
 /**
@@ -83,8 +72,8 @@ export function calculateDopplerShift(
     z: velRot.z,
   };
 
-  // Observer (stationary in ECEF)
-  const obs = observerEcef(obsLatDeg, obsLonDeg, obsAltM);
+  // Observer (stationary in ECEF, WGS-84 ellipsoid)
+  const obs = geodeticToEcef(obsLatDeg, obsLonDeg, obsAltM);
 
   // Range vector (observer → satellite)
   const dx = satPos.x - obs.x;
