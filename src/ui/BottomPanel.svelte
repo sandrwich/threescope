@@ -3,14 +3,7 @@
   import { rotatorStore } from '../stores/rotator.svelte';
   import { beamStore } from '../stores/beam.svelte';
   import { timeStore } from '../stores/time.svelte';
-
-  function fmtCountdown(sec: number): string {
-    if (sec <= 0) return '0:00';
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = Math.round(sec % 60);
-    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
-  }
+  import { fmtCountdown } from '../format';
 
   const hash = __COMMIT_HASH__;
   const version = __COMMIT_DATE__ ? 'v' + __COMMIT_DATE__.slice(2, 10).replace(/-/g, '') : '';

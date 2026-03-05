@@ -7,7 +7,7 @@
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { ICON_PASSES, ICON_DOPPLER, ICON_ECLIPSE, ICON_SUN, ICON_FILTER } from './shared/icons';
-  import { formatMHz, formatMHzRange } from '../format';
+  import { formatMHz, formatMHzRange, fmtDuration } from '../format';
   import { satColorCss } from '../constants';
   import { epochToDate } from '../astro/epoch';
   import { sunLabel } from '../astro/eclipse';
@@ -45,12 +45,6 @@
     const s = Math.round((minutes - m) * 60);
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${pad(h)}:${pad(m)}:${pad(s)}`;
-  }
-
-  function formatDuration(sec: number): string {
-    const m = Math.floor(sec / 60);
-    const s = Math.round(sec % 60);
-    return `${m}m${String(s).padStart(2, '0')}s`;
   }
 
   function elClass(maxEl: number): string {
@@ -284,7 +278,7 @@
           <span class="sat-name" title={pass.satName}>{pass.satName}</span>
         </span>
         <span class="td td-time">{formatTime(pass.aosEpoch)} <span class="arrow">&rarr;</span> {formatTime(pass.losEpoch)}</span>
-        <span class="td td-dur">{formatDuration(pass.durationSec)}</span>
+        <span class="td td-dur">{fmtDuration(pass.durationSec)}</span>
         <span class="td td-el {elClass(pass.maxEl)}">{pass.maxEl.toFixed(1)}&deg;</span>
         <span class="td td-mag {magClass(pass)}" title={magTooltip(pass)}>{#if pass.sunAlt > 0 && !pass.eclipsed}<span class="sun-icon">{@html ICON_SUN}</span>{/if}{#if pass.eclipsed}<span class="eclipse-icon">{@html ICON_ECLIPSE}</span>{:else if pass.peakMag !== null}{pass.peakMag.toFixed(1)}{:else}?{/if}</span>
         <span class="td td-actions">

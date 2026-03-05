@@ -11,6 +11,31 @@
   import { beamStore } from '../stores/beam.svelte';
   import { satColorCss } from '../constants';
   import type { SelectedSatInfo } from '../types';
+  import type { SatellitePass } from '../passes/pass-types';
+  import { fmtCountdownCompact } from '../format';
+
+  /** Find the next upcoming (or active) pass for a satellite */
+  function nextPass(noradId: number, passes: SatellitePass[], epoch: number): SatellitePass | null {
+    // Active pass first
+    for (const p of passes) {
+      if (p.satNoradId === noradId && epoch >= p.aosEpoch && epoch <= p.losEpoch) return p;
+    }
+    // Next upcoming
+    for (const p of passes) {
+      if (p.satNoradId === noradId && p.aosEpoch > epoch) return p;
+    }
+    return null;
+  }
+
+  function aosLabel(noradId: number): string | null {
+    const epoch = uiStore.passListEpoch;
+    if (!epoch) return null;
+    const pass = nextPass(noradId, uiStore.passes, epoch);
+    if (!pass) return null;
+    if (epoch >= pass.aosEpoch && epoch <= pass.losEpoch) return 'LIVE';
+    const sec = (pass.aosEpoch - epoch) * 86400;
+    return fmtCountdownCompact(sec);
+  }
 
   let expandedSats = $state(new Set<number>());
   let searchQuery = $state('');
@@ -191,8 +216,11 @@
                 onchange={() => uiStore.toggleSatVisibility(sat.noradId)} />
               <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
               <span class="sat-name" onclick={() => toggle(sat.noradId)}>{sat.name}</span>
-              <span class="pill">{fmt(sat.altKm, 0)} km</span>
-              <span class="pill">{fmt(sat.speedKmS, 2)} km/s</span>
+              <span class="pill">Alt {fmt(sat.altKm, 0)} km</span>
+              {#if aosLabel(sat.noradId) != null}
+                {@const label = aosLabel(sat.noradId)!}
+                <span class="pill aos-pill" class:aos-live={label === 'LIVE'}>{label === 'LIVE' ? 'LIVE' : `AOS ${label}`}</span>
+              {/if}
               <button class="expand-btn" onclick={() => toggle(sat.noradId)} title={expandedSats.has(sat.noradId) ? 'Collapse' : 'Expand'}>
                 <svg viewBox="0 0 10 6" width="8" height="5" fill="currentColor" class:rotated={expandedSats.has(sat.noradId)}>
                   <polygon points="0,0 10,0 5,6"/>
@@ -206,6 +234,7 @@
                   <span class="dl">NORAD ID</span><span class="dv">{sat.noradId}</span>
                   <span class="dl">Latitude</span><span class="dv">{fmt(sat.latDeg, 2)}&deg;</span>
                   <span class="dl">Longitude</span><span class="dv">{fmt(sat.lonDeg, 2)}&deg;</span>
+                  <span class="dl">Speed</span><span class="dv">{fmt(sat.speedKmS, 2)} km/s</span>
                   <span class="dl">Ang. rate</span><span class="dv">{(sat.angularRateDegS ?? 0).toFixed(2)}°/s</span>
                   {#if sat.magStr !== null}
                     <span class="dl">Magnitude</span><span class="dv">{sat.magStr}</span>
@@ -361,6 +390,12 @@
     padding: 1px 4px;
     white-space: nowrap;
     flex-shrink: 0;
+  }
+  .aos-pill {
+    color: var(--text-muted);
+  }
+  .aos-live {
+    color: var(--live);
   }
   .expand-btn {
     background: none;

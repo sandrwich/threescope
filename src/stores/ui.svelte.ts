@@ -291,7 +291,7 @@ class UIStore {
     this.showGrid = load('satvisor_grid', false);
     this.showSkyGrid = load('satvisor_skygrid', true);
     this.radarVfx = load('satvisor_radar_vfx', true);
-    this.singleSelectMode = load('satvisor_single_select', this.isMobile);
+    this.singleSelectMode = load('satvisor_single_select', true);
     const savedTab = localStorage.getItem('satvisor_passes_tab');
     if (savedTab === 'selected' || savedTab === 'nearby') this.passesTab = savedTab;
     const savedTimeTab = localStorage.getItem('satvisor_time_tab');

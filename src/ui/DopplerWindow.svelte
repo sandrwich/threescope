@@ -8,6 +8,7 @@
   import { observerStore } from '../stores/observer.svelte';
   import { timeStore } from '../stores/time.svelte';
   import { ICON_DOPPLER } from './shared/icons';
+  import { fmtDurationClock } from '../format';
   import { calculateDopplerShift, createSatrec } from '../astro/doppler';
   import { epochToDatetimeStr, epochToDate } from '../astro/epoch';
   import { satColorCss } from '../constants';
@@ -350,11 +351,7 @@
     return hz.toFixed(0) + ' Hz';
   }
 
-  function formatDuration(sec: number): string {
-    const m = Math.floor(sec / 60);
-    const s = Math.round(sec % 60);
-    return `${m}:${String(s).padStart(2, '0')}`;
-  }
+  const formatDuration = fmtDurationClock;
 
   /** Linearly interpolate frequency at tSec from cached data. */
   function interpolateFreq(tSec: number): number | null {

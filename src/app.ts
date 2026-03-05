@@ -1003,7 +1003,7 @@ export class App {
       this.updateObserverMarker();
       if (observerPassDebounce) clearTimeout(observerPassDebounce);
       observerPassDebounce = setTimeout(() => {
-        if (uiStore.passesVisible && uiStore.passesTab === 'selected') this.requestPasses();
+        if (uiStore.passesTab === 'selected' || this.selectedSats.size > 0) this.requestPasses();
         if (uiStore.passesVisible && uiStore.passesTab === 'nearby') this.requestNearbyPasses();
       }, 500);
     };
@@ -1764,8 +1764,8 @@ export class App {
     // Keep reactive sat count in sync for UI components (view-independent)
     uiStore.selectedSatCount = this.selectedSats.size;
 
-    // Pass predictor: auto-trigger when selection changes and window is open
-    if (uiStore.passesVisible && this.lastPassSatsVersion !== this.selectedSatsVersion) {
+    // Pass predictor: auto-trigger when selection changes (for AOS countdown in selection window)
+    if (this.lastPassSatsVersion !== this.selectedSatsVersion) {
       // Always allow clearing (0 sats); only gate recomputation on not-busy
       if (this.selectedSats.size === 0 || !this.passPredictor.isComputing()) {
         this.requestPasses();

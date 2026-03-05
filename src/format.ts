@@ -29,3 +29,36 @@ export function formatMHzRange(minMHz: number, maxMHz: number): string {
   if (bothMHz) return trimNum(minMHz, 1) + '–' + trimNum(maxMHz, 1) + ' MHz';
   return formatMHz(minMHz) + '–' + formatMHz(maxMHz);
 }
+
+/** Format seconds as clock-style countdown: "1:05:30" or "5:30". */
+export function fmtCountdown(sec: number): string {
+  if (sec <= 0) return '0:00';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.round(sec % 60);
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** Format seconds as compact countdown: "42s", "3m 42s", "2h 15m", "1d 3h". */
+export function fmtCountdownCompact(sec: number): string {
+  if (sec < 60) return `${Math.floor(sec)}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ${Math.floor(sec % 60)}s`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  return `${d}d ${h}h`;
+}
+
+/** Format seconds as pass duration: "5m30s". */
+export function fmtDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}m${String(s).padStart(2, '0')}s`;
+}
+
+/** Format seconds as "m:ss" duration (for charts/timelines). */
+export function fmtDurationClock(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
