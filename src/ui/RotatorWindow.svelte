@@ -10,6 +10,7 @@
   import { uiStore } from '../stores/ui.svelte';
   import { beamStore, isInsideBeam } from '../stores/beam.svelte';
   import { rotatorStore, PARK_PRESETS, ANTENNA_PRESETS, type ParkPreset, type PassEndAction } from '../stores/rotator.svelte';
+  import { BAUD_RATES } from '../serial/transport';
   import { timeStore } from '../stores/time.svelte';
   import { satColorRgba } from '../constants';
   import { ViewMode } from '../types';
@@ -89,6 +90,8 @@
   }
 
   let tab = $state<'radar' | 'setup'>('radar');
+  let bridgeTool = $state<'websockify' | 'websocat'>('websockify');
+  let rotLocked = $derived(rotatorStore.status === 'connected' || rotatorStore.status === 'connecting');
   let rateDisplay = $derived(`${(rotatorStore.updateIntervalMs / 1000).toFixed(1)}s`);
   let tolDisplay = $derived(`${rotatorStore.tolerance.toFixed(1)}°`);
 
@@ -1071,16 +1074,16 @@
         <label>Mode</label>
         <div class="rot-mode-btns">
           <Button size="xs" variant="ghost" active={rotatorStore.mode === 'serial'}
-            onclick={() => rotatorStore.setMode('serial')}>Serial</Button>
+            disabled={rotLocked} onclick={() => rotatorStore.setMode('serial')}>serial</Button>
           <Button size="xs" variant="ghost" active={rotatorStore.mode === 'network'}
-            onclick={() => rotatorStore.setMode('network')}>Network</Button>
+            disabled={rotLocked} onclick={() => rotatorStore.setMode('network')}>rotctld</Button>
         </div>
       </div>
 
       {#if rotatorStore.mode === 'serial'}
         <div class="row">
           <label>Protocol</label>
-          <Select size="xs" value={rotatorStore.serialProtocol}
+          <Select size="xs" value={rotatorStore.serialProtocol} disabled={rotLocked}
             onchange={(e) => rotatorStore.setSerialProtocol((e.target as HTMLSelectElement).value as any)}>
             <option value="gs232">GS-232</option>
             <option value="easycomm">EasyComm II</option>
@@ -1088,11 +1091,11 @@
         </div>
         <div class="row">
           <label>Baud</label>
-          <Select size="xs" value={String(rotatorStore.baudRate)}
+          <Select size="xs" value={String(rotatorStore.baudRate)} disabled={rotLocked}
             onchange={(e) => rotatorStore.setBaudRate(Number((e.target as HTMLSelectElement).value))}>
-            <option value="4800">4800</option>
-            <option value="9600">9600</option>
-            <option value="19200">19200</option>
+            {#each BAUD_RATES as rate}
+              <option value={String(rate)}>{rate}</option>
+            {/each}
           </Select>
         </div>
       {/if}
@@ -1100,7 +1103,7 @@
       {#if rotatorStore.mode === 'network'}
         <div class="row">
           <label>URL</label>
-          <Input size="xs" class="rot-url" type="text"
+          <Input size="xs" class="rot-url" type="text" disabled={rotLocked}
             value={rotatorStore.wsUrl}
             onblur={(e) => rotatorStore.setWsUrl((e.currentTarget as HTMLInputElement).value)}
             onkeydown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
@@ -1193,16 +1196,17 @@
             <span class="guide-note">Requires Chrome or Edge desktop. Web Serial is not available in Firefox or Safari.</span>
           {:else}
             Browsers can't open raw TCP sockets, so you need a WebSocket-to-TCP bridge
-            between the browser and rotctld:
+            between the browser and rotctld.
             <ol>
               <li>Start rotctld:<br><code>rotctld -m 603 -r /dev/ttyUSB0 -s 9600 -T 0.0.0.0</code></li>
-              <li>Install a bridge (pick one):<br>
-                <code>pip install websockify</code><br>
-                <code>cargo install websocat</code>
-              </li>
-              <li>Run the bridge:<br>
-                <code>websockify 4540 localhost:4533</code><br>
-                <code>websocat --binary ws-l:0.0.0.0:4540 tcp:127.0.0.1:4533</code>
+              <li>Install and run a bridge: <span class="bridge-btns"><Button size="xs" variant="ghost" active={bridgeTool === 'websockify'} onclick={() => bridgeTool = 'websockify'}>websockify</Button><Button size="xs" variant="ghost" active={bridgeTool === 'websocat'} onclick={() => bridgeTool = 'websocat'}>websocat</Button></span>
+                <br>{#if bridgeTool === 'websockify'}
+                  <code>pip install websockify</code><br>
+                  <code>websockify 4540 localhost:4533</code>
+                {:else}
+                  <code>cargo install websocat</code><br>
+                  <code>websocat --binary ws-l:0.0.0.0:4540 tcp:127.0.0.1:4533</code>
+                {/if}
               </li>
               <li>Enter <code>ws://localhost:4540</code> as the URL above</li>
               <li>Switch to the Radar tab and click Connect</li>
@@ -1453,7 +1457,7 @@
 
   /* ── Setup tab ── */
   .setup-panel {
-    padding: 8px;
+    padding: 12px 14px;
     width: 400px;
     box-sizing: border-box;
   }
@@ -1499,9 +1503,14 @@
     overflow-wrap: break-word;
   }
   .guide-body b { color: var(--text-dim); }
-  .guide-body ul, .guide-body ol {
+  .guide-body ul {
     margin: 4px 0;
     padding-left: 16px;
+  }
+  .guide-body ol {
+    margin: 4px 0;
+    padding-left: 22px;
+    list-style-position: outside;
   }
   .guide-body li { margin-bottom: 4px; }
   .guide-body code {
@@ -1515,5 +1524,10 @@
     color: var(--text-muted);
     display: block;
     margin-top: 4px;
+  }
+  .bridge-btns {
+    display: inline-flex;
+    gap: 1px;
+    float: right;
   }
 </style>

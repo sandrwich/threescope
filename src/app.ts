@@ -54,6 +54,7 @@ import { palette } from './ui/shared/theme';
 import { chart } from './ui/shared/touch-metrics';
 import { feedbackStore } from './stores/feedback.svelte';
 import { rotatorStore } from './stores/rotator.svelte';
+import { rigStore } from './stores/rig.svelte';
 import { FeedbackEvent } from './feedback/types';
 
 export class App {
@@ -741,6 +742,7 @@ export class App {
     feedbackStore.load();
     feedbackStore.installGlobalListeners();
     rotatorStore.load();
+    rigStore.load();
     beamStore.onTrackingUpdate = (state) => rotatorStore.handleTrackingUpdate(state);
     uiStore.loadPassFilters();
     uiStore.loadMarkerGroups(this.cfg.markerGroups);

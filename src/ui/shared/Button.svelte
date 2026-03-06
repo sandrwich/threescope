@@ -51,7 +51,7 @@
     border: 1px solid var(--border);
     color: var(--text-dim);
   }
-  .btn-default:hover { border-color: var(--border-hover); color: var(--text); }
+  .btn-default:hover:not(:disabled) { border-color: var(--border-hover); color: var(--text); }
   .btn-default.active { color: var(--accent); border-color: var(--accent); }
 
   .btn-ghost {
@@ -59,7 +59,7 @@
     border: none;
     color: var(--text-ghost);
   }
-  .btn-ghost:hover { color: var(--text-dim); }
+  .btn-ghost:hover:not(:disabled) { color: var(--text-dim); }
   .btn-ghost.active { color: var(--accent); }
 
   .btn-danger {
@@ -67,7 +67,7 @@
     border: 1px solid var(--border);
     color: var(--text-dim);
   }
-  .btn-danger:hover { border-color: var(--danger); color: var(--danger-bright); }
+  .btn-danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger-bright); }
 
   /* ── Sizes ── */
   .btn-xs {

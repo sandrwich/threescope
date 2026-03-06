@@ -72,6 +72,7 @@
     initialY = 50,
     modal = false,
     noPad = false,
+    footerPadding = '',
     children,
   }: {
     title?: string;
@@ -85,6 +86,7 @@
     initialY?: number;
     modal?: boolean;
     noPad?: boolean;
+    footerPadding?: string;
     children: any;
   } = $props();
 
@@ -359,7 +361,7 @@
         {@render children()}
       </div>
       {#if footer}
-        <div class="window-footer">
+        <div class="window-footer" style={footerPadding ? `padding:${footerPadding}` : ''}>
           {@render footer()}
         </div>
       {/if}
@@ -392,7 +394,7 @@
           {@render children()}
         </div>
         {#if footer}
-          <div class="window-footer">
+          <div class="window-footer" style={footerPadding ? `padding:${footerPadding}` : ''}>
             {@render footer()}
           </div>
         {/if}

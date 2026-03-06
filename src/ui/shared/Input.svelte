@@ -22,7 +22,8 @@
     font-family: inherit;
     box-sizing: border-box;
   }
-  .inp:hover { border-color: var(--border-hover); }
+  .inp:disabled { opacity: 0.4; cursor: default; }
+  .inp:hover:not(:disabled) { border-color: var(--border-hover); }
   .inp:focus { border-color: var(--border-hover); outline: none; }
   .inp::placeholder { color: var(--text-ghost); }
 

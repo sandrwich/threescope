@@ -28,7 +28,8 @@
     font-family: inherit;
     cursor: pointer;
   }
-  .sel:hover { border-color: var(--border-hover); }
+  .sel:disabled { opacity: 0.4; cursor: default; }
+  .sel:hover:not(:disabled) { border-color: var(--border-hover); }
   .sel:focus { border-color: var(--border-hover); outline: none; }
 
   .sel-xs { font-size: 9px; padding: 1px 3px; }

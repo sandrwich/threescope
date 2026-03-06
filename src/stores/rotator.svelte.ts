@@ -502,24 +502,33 @@ class RotatorStore {
     localStorage.setItem(PREFIX + key, String(value));
   }
 
+  private clearError(): void {
+    if (this.status === 'error') this.status = 'disconnected';
+    if (this.status !== 'connected') this.error = null;
+  }
+
   setMode(mode: RotatorMode): void {
     this.mode = mode;
     this.save('mode', mode);
+    this.clearError();
   }
 
   setSerialProtocol(proto: SerialProtocol): void {
     this.serialProtocol = proto;
     this.save('serial_protocol', proto);
+    this.clearError();
   }
 
   setBaudRate(rate: number): void {
     this.baudRate = rate;
     this.save('baud_rate', rate);
+    this.clearError();
   }
 
   setWsUrl(url: string): void {
     this.wsUrl = url;
     this.save('ws_url', url);
+    this.clearError();
   }
 
   setUpdateInterval(ms: number): void {

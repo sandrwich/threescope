@@ -18,8 +18,17 @@
   import { formatFreqHz } from '../format';
   import { initHiDPICanvas } from './shared/canvas';
   import { chart } from './shared/touch-metrics';
+  import { rigStore } from '../stores/rig.svelte';
+  import { BAUD_RATES } from '../serial/transport';
+  import { RADIO_MODES, satnogsModeToRadio, type RigSerialProtocol } from '../rig/protocol';
+  import Checkbox from './shared/Checkbox.svelte';
+  import Slider from './shared/Slider.svelte';
+  import InfoTip from './shared/InfoTip.svelte';
 
-  const CANVAS_W = 380;
+  let tab = $state<'chart' | 'setup'>('chart');
+  let bridgeTool = $state<'websockify' | 'websocat'>('websockify');
+
+  const CANVAS_W = 400;
   const CANVAS_H = 200;
   const G_LEFT = 80;
   const G_TOP = 24;
@@ -35,6 +44,13 @@
   let baseFreqHz = $derived(parseFloat(baseFreqMhzStr) * 1e6);
   let txList = $state<SatnogsTransmitter[]>([]);
   let selectedTxIdx = $state<number | null>(null); // null = custom
+  let satnogsModeName = $state(''); // raw SatNOGS mode for display
+
+  function applyTxMode(mode: string | null) {
+    satnogsModeName = mode ?? '';
+    const radioMode = satnogsModeToRadio(mode);
+    rigStore.setRadioMode(radioMode);
+  }
 
   function onTxSelect(e: Event) {
     const val = (e.target as HTMLSelectElement).value;
@@ -45,6 +61,7 @@
       selectedTxIdx = idx;
       baseFreqMhzStr = freqToMhzStr(txList[idx].frequencyHz);
       cacheKey = '';
+      applyTxMode(txList[idx].mode);
     }
   }
 
@@ -70,6 +87,30 @@
       ? uiStore.activePassList[uiStore.selectedPassIdx]
       : null
   );
+
+  // Auto-select next upcoming pass when window opens with none selected
+  $effect(() => {
+    if (!uiStore.dopplerWindowOpen) return;
+    if (uiStore.selectedPassIdx >= 0) return;
+    const passes = uiStore.activePassList;
+    if (passes.length === 0) return;
+    const epoch = timeStore.epoch;
+    // Prefer active pass, then next upcoming
+    for (let i = 0; i < passes.length; i++) {
+      if (epoch >= passes[i].aosEpoch && epoch <= passes[i].losEpoch) {
+        uiStore.selectedPassIdx = i;
+        return;
+      }
+    }
+    for (let i = 0; i < passes.length; i++) {
+      if (passes[i].aosEpoch > epoch) {
+        uiStore.selectedPassIdx = i;
+        return;
+      }
+    }
+    // Fallback: first pass
+    uiStore.selectedPassIdx = 0;
+  });
 
   function recomputeCurve() {
     const pass = selectedPass;
@@ -532,6 +573,7 @@
     if (transmitters.length) {
       selectedTxIdx = 0;
       baseFreqMhzStr = freqToMhzStr(transmitters[0].frequencyHz);
+      applyTxMode(transmitters[0].mode);
       cacheKey = '';
     } else {
       selectedTxIdx = null;
@@ -548,6 +590,7 @@
       // Try to match to a transmitter in the current list
       const matchIdx = txList.findIndex(tx => tx.frequencyHz === hz);
       selectedTxIdx = matchIdx >= 0 ? matchIdx : null;
+      if (matchIdx >= 0) applyTxMode(txList[matchIdx].mode);
       cacheKey = '';
       uiStore.dopplerPrefillHz = 0;
     }
@@ -560,10 +603,46 @@
       return () => cancelAnimationFrame(animFrameId);
     }
   });
+
+  // Push tracking params to rig store for live correction
+  $effect(() => {
+    const pass = selectedPass;
+    if (!pass || !baseFreqHz || baseFreqHz <= 0) {
+      rigStore.clearTracking();
+      return;
+    }
+    const tle = uiStore.getSatTLE?.(pass.satNoradId);
+    if (!tle) { rigStore.clearTracking(); return; }
+    const satrec = createSatrec(tle.line1, tle.line2, tle.omm);
+    rigStore.setTrackingParams(satrec, baseFreqHz);
+  });
+
+  const CIV_PRESETS: Record<string, { label: string; addr: number }> = {
+    '0x94': { label: 'IC-7300', addr: 0x94 },
+    '0xA4': { label: 'IC-705', addr: 0xA4 },
+    '0xA2': { label: 'IC-9700', addr: 0xA2 },
+    '0x88': { label: 'IC-7100', addr: 0x88 },
+    '0x98': { label: 'IC-7610', addr: 0x98 },
+    '0x96': { label: 'IC-R8600', addr: 0x96 },
+  };
+
+  let rigLocked = $derived(rigStore.status === 'connected' || rigStore.status === 'connecting');
+
+  let rateDisplay = $derived(rigStore.updateIntervalMs >= 1000
+    ? `${(rigStore.updateIntervalMs / 1000).toFixed(1)}s`
+    : `${rigStore.updateIntervalMs}ms`);
 </script>
 
 {#snippet dopplerIcon()}<span class="title-icon">{@html ICON_DOPPLER}</span>{/snippet}
+{#snippet headerExtra()}
+  <div class="dw-header-extra">
+    <Button size="xs" variant="ghost" active={tab === 'chart'} onclick={() => tab = 'chart'}>Chart</Button>
+    <Button size="xs" variant="ghost" active={tab === 'setup'} onclick={() => tab = 'setup'}>Setup</Button>
+  </div>
+{/snippet}
+
 {#snippet windowContent()}
+  {#if tab === 'chart'}
   <div class="dw">
     <div class="controls">
       <div class="freq-row">
@@ -606,27 +685,202 @@
       onpointerleave={onCanvasPointerLeave}
     ></canvas>
   </div>
+
+  {:else}
+    <div class="setup-panel">
+      <h4 class="section-header">Connection</h4>
+      <div class="row">
+        <label>Mode</label>
+        <div class="rig-mode-btns">
+          <Button size="xs" variant="ghost" active={rigStore.mode === 'serial'}
+            disabled={rigLocked} onclick={() => rigStore.setMode('serial')}>serial</Button>
+          <Button size="xs" variant="ghost" active={rigStore.mode === 'network'}
+            disabled={rigLocked} onclick={() => rigStore.setMode('network')}>rigctld</Button>
+        </div>
+      </div>
+
+      {#if rigStore.mode === 'serial'}
+        <div class="row">
+          <label>Protocol<InfoTip>CAT (Computer Aided Transceiver) serial protocol. Must match your radio manufacturer. Radios listed are common examples — any radio using the same protocol will work.
+            <div class="tip-options">
+              <div><b>Kenwood / Elecraft</b> — text, ; terminator, 11-digit Hz. e.g. TS-890, TS-590, K3, KX3, K4</div>
+              <div><b>Yaesu (modern)</b> — text, ; terminator, 9-digit Hz. e.g. FT-991A, FT-710, FTDX101, FTDX10</div>
+              <div><b>Yaesu (legacy)</b> — binary 5-byte, 10 Hz resolution, 2 stop bits. e.g. FT-817, FT-857, FT-897</div>
+              <div><b>Icom CI-V</b> — binary, BCD frequency, configurable address. e.g. IC-7300, IC-705, IC-9700</div>
+            </div>
+          </InfoTip></label>
+          <Select size="xs" value={rigStore.serialProtocol} disabled={rigLocked}
+            onchange={(e) => rigStore.setSerialProtocol((e.target as HTMLSelectElement).value as RigSerialProtocol)}>
+            <option value="kenwood">Kenwood / Elecraft</option>
+            <option value="yaesu">Yaesu (modern)</option>
+            <option value="yaesu-legacy">Yaesu (legacy)</option>
+            <option value="civ">Icom CI-V</option>
+          </Select>
+        </div>
+        <div class="row">
+          <label>Baud</label>
+          <Select size="xs" value={String(rigStore.baudRate)} disabled={rigLocked}
+            onchange={(e) => rigStore.setBaudRate(Number((e.target as HTMLSelectElement).value))}>
+            {#each BAUD_RATES as rate}
+              <option value={String(rate)}>{rate}</option>
+            {/each}
+          </Select>
+        </div>
+        {#if rigStore.serialProtocol === 'civ'}
+          <div class="row">
+            <label>CI-V Address<InfoTip>Icom radio CI-V address. Check your radio's settings menu.</InfoTip></label>
+            <Select size="xs" value={'0x' + rigStore.civAddress.toString(16).toUpperCase()} disabled={rigLocked}
+              onchange={(e) => rigStore.setCivAddress(parseInt((e.target as HTMLSelectElement).value, 16))}>
+              {#each Object.entries(CIV_PRESETS) as [hex, p]}
+                <option value={hex}>{p.label} ({hex})</option>
+              {/each}
+            </Select>
+          </div>
+        {/if}
+      {/if}
+
+      {#if rigStore.mode === 'network'}
+        <div class="row">
+          <label>URL<InfoTip>WebSocket URL pointing to your TCP-to-WS bridge. The bridge forwards rigctld text commands (F, f, M) between the browser and the server.
+            <div class="tip-options">
+              <div><b>Hamlib rigctld</b> — default TCP port 4532</div>
+              <div><b>GQRX</b> — remote control on TCP port 7356</div>
+              <div><b>SDR++</b> — rigctld server module, configurable port</div>
+              <div>The port in this URL is the bridge port (e.g. websockify listening port), not the server's TCP port.</div>
+            </div>
+          </InfoTip></label>
+          <Input size="xs" class="rig-url" type="text" disabled={rigLocked}
+            value={rigStore.wsUrl}
+            onblur={(e) => rigStore.setWsUrl((e.currentTarget as HTMLInputElement).value)}
+            onkeydown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+        </div>
+      {/if}
+
+      <h4 class="section-header">Correction</h4>
+      <Slider label="Update rate" display={rateDisplay}
+        min={100} max={5000} step={100} value={rigStore.updateIntervalMs}
+        oninput={(e) => rigStore.setUpdateInterval(Number((e.target as HTMLInputElement).value))} />
+
+      <div class="row">
+        <label>TX Offset<InfoTip>Fixed offset added to the corrected frequency. Use for split/duplex operation.</InfoTip></label>
+        <div class="offset-row">
+          <Input size="xs" class="rig-offset" type="number" step="100"
+            value={rigStore.txOffsetHz}
+            onblur={(e) => rigStore.setTxOffset(Number((e.currentTarget as HTMLInputElement).value))}
+            onkeydown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+          <span class="unit">Hz</span>
+        </div>
+      </div>
+
+      <details class="guide-details">
+        <summary>Guide</summary>
+        <div class="guide-body">
+          {#if rigStore.mode === 'serial'}
+            <ul>
+              <li>Connect radio via USB or serial adapter</li>
+              <li>Select matching protocol and baud rate</li>
+              <li>Click Connect — browser will prompt for the serial port</li>
+              {#if rigStore.serialProtocol === 'civ'}
+                <li>Ensure <b>CI-V Transceive</b> is OFF in radio settings</li>
+                <li>Verify the CI-V address matches your radio model</li>
+              {:else if rigStore.serialProtocol === 'yaesu-legacy'}
+                <li>FT-817/857/897 — uses 2 stop bits automatically</li>
+                <li>Set <b>CAT Rate</b> in radio menu to match baud rate</li>
+              {:else}
+                <li>Enable <b>CAT</b> in radio menu, set matching baud rate</li>
+              {/if}
+            </ul>
+          {:else}
+            Browsers can't open raw TCP sockets, so you need a WebSocket-to-TCP bridge
+            between the app and rigctld.
+            <ol>
+              <li>Start your rigctld-compatible server:
+                <ul>
+                  <li><b>Hamlib</b>: <code>rigctld -m 3085 -r /dev/ttyUSB0 -T 0.0.0.0</code></li>
+                  <li><b>GQRX</b>: Enable remote control in settings (port 7356)</li>
+                  <li><b>SDR++</b>: Enable rigctld server module</li>
+                </ul>
+              </li>
+              <li>Install and run a bridge: <span class="bridge-btns"><Button size="xs" variant="ghost" active={bridgeTool === 'websockify'} onclick={() => bridgeTool = 'websockify'}>websockify</Button><Button size="xs" variant="ghost" active={bridgeTool === 'websocat'} onclick={() => bridgeTool = 'websocat'}>websocat</Button></span>
+                <br>{#if bridgeTool === 'websockify'}
+                  <code>pip install websockify</code><br>
+                  <code>websockify 4541 localhost:4532</code>
+                {:else}
+                  <code>cargo install websocat</code><br>
+                  <code>websocat --binary ws-l:0.0.0.0:4541 tcp:127.0.0.1:4532</code>
+                {/if}
+              </li>
+              <li>Enter <code>ws://localhost:4541</code> as the URL above</li>
+              <li>Click Connect</li>
+            </ol>
+          {/if}
+          <span class="guide-note">Doppler correction is sent as absolute frequency. Radio should be in VFO mode.</span>
+        </div>
+      </details>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet footer()}
+  <div class="rig-status-bar">
+    <div class="rig-status">
+      <span class="rig-dot"
+        class:ok={rigStore.status === 'connected'}
+        class:loading={rigStore.status === 'connecting'}
+        class:err={rigStore.status === 'error'}></span>
+      <span class="rig-status-text">{rigStore.status}</span>
+    </div>
+    <Select size="xs" class="rig-mode-sel" value={rigStore.radioMode}
+      onchange={(e) => {
+        const v = (e.target as HTMLSelectElement).value;
+        rigStore.setRadioMode(v);
+        satnogsModeName = '';
+        rigStore.sendRadioMode();
+      }}>
+      <option value="">—</option>
+      {#each RADIO_MODES as m}
+        {@const isMapped = satnogsModeName && satnogsModeName.toUpperCase() !== m && satnogsModeToRadio(satnogsModeName) === m}
+        <option value={m}>{isMapped ? `${satnogsModeName} (${m})` : m}</option>
+      {/each}
+    </Select>
+    {#if rigStore.status === 'connected'}
+      {#if rigStore.liveCorrection && rigStore.lastSentHz}
+        <span class="rig-freq">{formatFreq(rigStore.lastSentHz)}</span>
+      {/if}
+      <label class="rig-live-toggle">
+        <Checkbox checked={rigStore.liveCorrection} onchange={() => rigStore.setLiveCorrection(!rigStore.liveCorrection)} />
+        <span>Live</span>
+      </label>
+      <Button size="xs" onclick={() => rigStore.disconnect()}>Disconnect</Button>
+    {:else}
+      <Button size="xs" onclick={() => rigStore.connect()}
+        disabled={rigStore.status === 'connecting'}>Connect</Button>
+    {/if}
+  </div>
+  {#if rigStore.error}
+    <div class="rig-error">{rigStore.error}</div>
+  {/if}
 {/snippet}
 
 {#if uiStore.isMobile}
-  <MobileSheet id="doppler" title="Doppler Shift" icon={dopplerIcon}>
+  <MobileSheet id="doppler" title="Doppler Shift" icon={dopplerIcon} {headerExtra} {footer}>
     {@render windowContent()}
   </MobileSheet>
 {:else}
-  <DraggableWindow id="doppler" title="Doppler Shift" icon={dopplerIcon} bind:open={uiStore.dopplerWindowOpen} focus={uiStore.dopplerWindowFocus} initialX={200} initialY={150}>
+  <DraggableWindow id="doppler" title="Doppler Shift" icon={dopplerIcon} bind:open={uiStore.dopplerWindowOpen} focus={uiStore.dopplerWindowFocus} initialX={200} initialY={150} {headerExtra} {footer} footerPadding="8px 14px" noPad>
     {@render windowContent()}
   </DraggableWindow>
 {/if}
 
 <style>
-  .dw { min-width: 380px; }
+  .dw { min-width: 400px; }
   @media (max-width: 767px) { .dw { min-width: unset; width: 100%; } }
   .dw canvas { display: block; }
   .controls {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 8px;
+    padding: 8px 14px;
   }
   .controls label {
     display: flex;
@@ -673,5 +927,149 @@
     gap: 8px;
     z-index: 11;
     white-space: nowrap;
+  }
+
+  /* ── Header tabs ── */
+  .dw-header-extra {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    margin-left: auto;
+    margin-right: 8px;
+  }
+
+  /* ── Rig status bar ── */
+  .rig-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .rig-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 1;
+  }
+  .rig-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .rig-dot.ok { background: var(--live); }
+  .rig-dot.loading { background: var(--warning); animation: rig-blink 0.8s infinite; }
+  .rig-dot.err { background: var(--danger); }
+  @keyframes rig-blink { 50% { opacity: 0.3; } }
+  .rig-status-text {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: capitalize;
+  }
+  :global(.rig-mode-sel) { max-width: 90px; }
+  .rig-freq {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .rig-live-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+
+  /* ── Setup tab ── */
+  .setup-panel {
+    padding: 12px 14px;
+    width: 400px;
+    box-sizing: border-box;
+  }
+  .section-header {
+    font-size: 11px;
+    color: var(--text-ghost);
+    font-weight: normal;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 10px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-header:first-child { margin-top: 0; }
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .row:last-child { margin-bottom: 0; }
+  .row label { color: var(--text-dim); font-size: 12px; }
+  .rig-mode-btns { display: flex; gap: 2px; }
+  .offset-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  :global(.rig-url) { width: 160px; }
+  :global(.rig-offset) { width: 80px; }
+  .rig-error {
+    font-size: 10px;
+    color: var(--danger);
+    margin-top: 6px;
+    padding: 3px 6px;
+    background: color-mix(in srgb, var(--danger) 8%, transparent);
+    border: 1px solid var(--danger);
+    border-radius: 2px;
+    word-break: break-word;
+    max-width: 400px;
+  }
+  .guide-details {
+    margin-top: 8px;
+  }
+  .guide-details summary {
+    font-size: 11px;
+    color: var(--text-ghost);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .guide-details summary:hover { color: var(--text-dim); }
+  .guide-body {
+    margin-top: 6px;
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    overflow-wrap: break-word;
+  }
+  .guide-body b { color: var(--text-dim); }
+  .guide-body ul {
+    margin: 4px 0;
+    padding-left: 16px;
+  }
+  .guide-body ol {
+    margin: 4px 0;
+    padding-left: 22px;
+    list-style-position: outside;
+  }
+  .guide-body li { margin-bottom: 4px; }
+  .guide-body code {
+    font-size: 9px;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    padding: 1px 4px;
+    border-radius: 2px;
+  }
+  .guide-note {
+    font-size: 9px;
+    color: var(--text-muted);
+    display: block;
+    margin-top: 4px;
+  }
+  .bridge-btns {
+    display: inline-flex;
+    gap: 1px;
+    float: right;
   }
 </style>
