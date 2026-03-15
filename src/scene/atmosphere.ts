@@ -32,9 +32,9 @@ void main() {
   float brightness = mix(0.15, 1.0, sunBlend);
 
   // Atmosphere base color with sunset shift near terminator
-  vec3 dayColor = vec3(0.3, 0.6, 1.0);
-  vec3 sunsetColor = vec3(1.0, 0.5, 0.2);
-  float sunsetBlend = smoothstep(0.35, -0.15, NdotL);
+  vec3 dayColor = vec3(0.25, 0.58, 1.0);
+  vec3 sunsetColor = vec3(0.9, 0.45, 0.35);
+  float sunsetBlend = smoothstep(0.6, -0.25, NdotL);
   vec3 atmosColor = mix(dayColor, sunsetColor, sunsetBlend);
 
   // Forward-scatter glow: brighter when looking toward sun through the limb
@@ -56,7 +56,7 @@ export class Atmosphere {
 
   constructor() {
     const radius = (EARTH_RADIUS_KM + 80.0) / DRAW_SCALE;
-    const geometry = new THREE.SphereGeometry(radius, 64, 64);
+    const geometry = new THREE.SphereGeometry(radius, 128, 128);
 
     this.material = new THREE.ShaderMaterial({
       uniforms: {

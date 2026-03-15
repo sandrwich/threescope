@@ -81,11 +81,11 @@ void main() {
     vec3 sunsetWarm = vec3(1.0, 0.55, 0.2);
     float gradPos = smoothstep(-0.12, 0.12, intensity);
     vec3 sunsetColor = mix(sunsetDeep, sunsetWarm, gradPos);
-    vec3 scatteredDay = mix(day.rgb * ao, day.rgb * ao * sunsetColor * 1.5, scatterMult * 0.5);
+    vec3 scatteredDay = mix(day.rgb * ao, day.rgb * ao * sunsetColor * 1.5, scatterMult * 0.15);
 
     // Surface haze: blue-to-sunset atmospheric haze near terminator
     vec3 hazeColor = mix(vec3(0.15, 0.35, 0.75), sunsetColor, scatterMult);
-    float surfaceHaze = pow(max(1.0 - abs(intensity), 0.0), 2.0) * smoothstep(-0.1, 0.2, intensity) * 0.35;
+    float surfaceHaze = pow(max(1.0 - abs(intensity), 0.0), 2.0) * smoothstep(-0.1, 0.2, intensity) * 0.1;
     scatteredDay = mix(scatteredDay, hazeColor, surfaceHaze);
 
     // Boost night emission for bloom (HDR values > 1.0)
