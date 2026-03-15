@@ -11,6 +11,8 @@
   import { findMatchingPreset, getPresetSettings } from '../graphics';
   import { defaultConfig } from '../config';
 
+  let utcTitle = $derived(settingsStore.isUtc ? 'Switch to local time' : 'Switch to UTC');
+
   function toggleRtx() {
     const currentPreset = findMatchingPreset(settingsStore.graphics);
     if (currentPreset) {
@@ -113,6 +115,10 @@
               Az/El Grid
             </label>
           {/if}
+          <label class="toggle-label" title={utcTitle}>
+            <Checkbox checked={settingsStore.isUtc} onchange={() => settingsStore.toggleUtc()} />
+            UTC
+          </label>
         </div>
       {/if}
     {/if}

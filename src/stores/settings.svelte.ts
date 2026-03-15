@@ -87,6 +87,22 @@ class SettingsStore {
     localStorage.setItem('satvisor_timezone', tz);
   }
 
+  /** Toggle between UTC and the user's local timezone. */
+  toggleUtc() {
+    if (this.timezone === 'UTC') {
+      const prev = localStorage.getItem('satvisor_prev_timezone')
+        ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+      this.applyTimezone(prev);
+    } else {
+      localStorage.setItem('satvisor_prev_timezone', this.timezone);
+      this.applyTimezone('UTC');
+    }
+  }
+
+  get isUtc(): boolean {
+    return this.timezone === 'UTC';
+  }
+
   /** Short label for the current timezone, e.g. "EST", "UTC+2", or "UTC". */
   get timezoneAbbr(): string {
     if (this.timezone === 'UTC') return 'UTC';
