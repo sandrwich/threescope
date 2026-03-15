@@ -995,14 +995,16 @@
 
   /* ── Console tab ── */
   .console-tab {
-    width: 400px;
+    width: 100%;
+    max-width: 400px;
     height: 240px;
   }
 
   /* ── Setup tab ── */
   .setup-panel {
     padding: 12px 14px;
-    width: 400px;
+    width: 100%;
+    max-width: 400px;
     box-sizing: border-box;
   }
   .section-header {

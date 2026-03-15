@@ -1019,7 +1019,7 @@
       <canvas
         bind:this={canvasEl}
         width={SIZE} height={SIZE + INFO_H}
-        style="touch-action:none; cursor:crosshair; width:{SIZE}px; height:{SIZE + INFO_H}px"
+        style="touch-action:{uiStore.isMobile ? 'pan-y' : 'none'}; cursor:crosshair; width:{SIZE}px; height:{SIZE + INFO_H}px"
         onpointermove={onCanvasPointerMove}
         onpointerdown={onCanvasPointerDown}
         onpointerup={onCanvasPointerUp}
@@ -1246,7 +1246,7 @@
 {/snippet}
 
 {#if uiStore.isMobile}
-  <MobileSheet id="rotator" title="Rotator" icon={radarIcon}>
+  <MobileSheet id="rotator" title="Rotator" icon={radarIcon} {headerExtra}>
     {@render windowContent()}
   </MobileSheet>
 {:else}
@@ -1264,7 +1264,8 @@
     margin-right: 8px;
   }
   .radar-tab {
-    width: 400px;
+    width: 100%;
+    max-width: 400px;
   }
   .radar {
     position: relative;
@@ -1488,7 +1489,8 @@
 
   /* ── Console tab ── */
   .console-tab {
-    width: 400px;
+    width: 100%;
+    max-width: 400px;
   }
   .console-area {
     height: 420px;
@@ -1507,7 +1509,8 @@
   /* ── Setup tab ── */
   .setup-panel {
     padding: 12px 14px;
-    width: 400px;
+    width: 100%;
+    max-width: 400px;
     box-sizing: border-box;
   }
   .section-header {
