@@ -21,47 +21,51 @@ varying vec3 vWorldNormal;
 varying vec3 vViewDir;
 
 void main() {
-  float NdotV = clamp(dot(vWorldNormal, vViewDir), 0.0, 1.0);
+  // Flip normal for BackSide rendering
+  float NdotV = clamp(dot(-vWorldNormal, vViewDir), 0.0, 1.0);
   float NdotL = dot(vWorldNormal, sunDir);
-
-  // Sharper fresnel — concentrates glow closer to the limb edge
   float fresnel = pow(1.0 - NdotV, 3.5);
 
-  // Sun brightness: 15% on night side, 100% on day side (matches original range)
   float sunBlend = smoothstep(-0.3, 0.3, NdotL);
   float brightness = mix(0.15, 1.0, sunBlend);
+  float VdotL = dot(vViewDir, sunDir);
 
-  // Atmosphere base color with sunset shift near terminator
+  // Sunset shift near terminator
   vec3 dayColor = vec3(0.25, 0.58, 1.0);
-  vec3 sunsetColor = vec3(0.9, 0.45, 0.35);
-  float sunsetBlend = smoothstep(0.6, -0.25, NdotL);
+  vec3 sunsetColor = vec3(1.0, 0.5, 0.2);
+  float sunsetBlend = smoothstep(0.35, -0.15, NdotL);
   vec3 atmosColor = mix(dayColor, sunsetColor, sunsetBlend);
 
-  // Forward-scatter glow: brighter when looking toward sun through the limb
-  float VdotL = dot(vViewDir, sunDir);
-  float forwardGlow = pow(max(VdotL, 0.0), 8.0) * 0.25;
+  // Limb whitening — thicker atmosphere at edges shifts toward blue-white
+  atmosColor = mix(atmosColor, vec3(0.7, 0.85, 1.0), pow(fresnel, 1.5) * 0.7);
+
+  // Forward-scatter glow when looking toward the sun through the limb
+  float forwardGlow = pow(max(VdotL, 0.0), 8.0) * 0.15;
   atmosColor += vec3(1.0, 0.6, 0.3) * forwardGlow * sunBlend;
 
-  // HDR color for bloom (atmosphereStrength = 3.0 pushes values well above threshold)
-  vec3 color = atmosColor * brightness * atmosphereStrength;
-  float alpha = fresnel * brightness;
+  // Smooth fadeout into vacuum at the absolute edge
+  float vacuumFade = smoothstep(0.0, 0.25, NdotV);
 
-  gl_FragColor = vec4(color, alpha);
+  vec3 color = atmosColor * brightness * atmosphereStrength;
+  float alpha = fresnel * vacuumFade * brightness * 2.0;
+  gl_FragColor = vec4(color, clamp(alpha, 0.0, 1.0));
 }
 `;
 
 export class Atmosphere {
   mesh: THREE.Mesh;
   private material: THREE.ShaderMaterial;
+  private radius: number;
 
   constructor() {
     const radius = (EARTH_RADIUS_KM + 80.0) / DRAW_SCALE;
+    this.radius = radius;
     const geometry = new THREE.SphereGeometry(radius, 128, 128);
 
     this.material = new THREE.ShaderMaterial({
       uniforms: {
         sunDir: { value: new THREE.Vector3(1, 0, 0) },
-        atmosphereStrength: { value: 3.0 },
+        atmosphereStrength: { value: 5.0 },
       },
       vertexShader: ATMO_VERT,
       fragmentShader: ATMO_FRAG,
@@ -79,6 +83,16 @@ export class Atmosphere {
 
   setVisible(visible: boolean) {
     this.mesh.visible = visible;
+  }
+
+  setBloomEnabled(on: boolean) {
+    this.material.uniforms.atmosphereStrength.value = on ? 5.0 : 1.0;
+  }
+
+  setSphereDetail(segments: number) {
+    const oldGeo = this.mesh.geometry;
+    this.mesh.geometry = new THREE.SphereGeometry(this.radius, segments, segments);
+    oldGeo.dispose();
   }
 
   setScale(s: number) {

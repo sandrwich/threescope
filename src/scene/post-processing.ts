@@ -4,6 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import type { AntiAliasing } from '../graphics';
 
 export class PostProcessing {
   private composer: EffectComposer;
@@ -23,14 +24,14 @@ export class PostProcessing {
     const h = Math.round(window.innerHeight / 2);
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(w, h),
-      0.8,   // strength
-      0.4,   // radius
+      0.6,   // strength
+      0.2,   // radius
       0.95   // threshold
     );
     this.composer.addPass(this.bloomPass);
 
-    // SMAA antialiasing (EffectComposer bypasses renderer MSAA)
     this.smaaPass = new SMAAPass(window.innerWidth, window.innerHeight);
+    this.smaaPass.enabled = false;
     this.composer.addPass(this.smaaPass);
 
     this.composer.addPass(new OutputPass());
@@ -48,6 +49,14 @@ export class PostProcessing {
 
   render() {
     this.composer.render();
+  }
+
+  setBloomEnabled(on: boolean) {
+    this.bloomPass.enabled = on;
+  }
+
+  setAntiAliasing(mode: AntiAliasing) {
+    this.smaaPass.enabled = mode === 'smaa';
   }
 
   get bloomStrength(): number { return this.bloomPass.strength; }

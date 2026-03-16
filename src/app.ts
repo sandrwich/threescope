@@ -210,7 +210,7 @@ export class App {
     this.setLoading(0.1, 'Creating renderer...');
 
     // Renderer — insert canvas before the Svelte UI overlay
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.autoClear = false;
@@ -397,6 +397,8 @@ export class App {
       tex.flipY = false;
       tex.colorSpace = THREE.NoColorSpace;
     }
+    cloudTex.generateMipmaps = false;
+    cloudTex.minFilter = THREE.LinearFilter;
 
     // Star background (equirectangular -> 3D skybox)
     starTex.mapping = THREE.EquirectangularReflectionMapping;
@@ -1048,7 +1050,13 @@ export class App {
     this.bloomEnabled = s.bloom;
     this.earth.setNightEmission(s.bloom ? 1.5 : 1.0);
     this.sunScene.setBloomEnabled(s.bloom);
+    this.atmosphere.setBloomEnabled(s.bloom);
+    this.cloudLayer.setBloomEnabled(s.bloom);
+    this.postProcessing.setAntiAliasing(s.antiAliasing);
     this.atmosphereGlowEnabled = s.atmosphereGlow;
+    this.earth.setShowRimScatter(s.atmosphereGlow);
+    this.earth.setShowCloudShadows(s.cloudShadows);
+    this.earth.setShowGlare(s.oceanSpecular);
     this.earth.setBumpEnabled(s.bumpMapping);
     this.moonScene.setBumpEnabled(s.bumpMapping);
     this.earth.setAOEnabled(s.curvatureAO);
@@ -1065,6 +1073,7 @@ export class App {
       this.lastSphereDetail = s.sphereDetail;
       this.earth.setSphereDetail(s.sphereDetail);
       this.moonScene.setSphereDetail(s.sphereDetail);
+      this.atmosphere.setSphereDetail(s.sphereDetail);
     }
   }
 
@@ -1616,7 +1625,6 @@ export class App {
       // Update 3D scene (sky view shares the 3D scene but hides ground objects)
       if (!this.orreryCtrl.isOrreryMode && !isSkyView) {
         this.earth.update(epoch, gmstDeg, this.cfg.earthRotationOffset, this.cfg.showNightLights, this.cfg.showClouds, this.camera3d.position);
-        this.earth.setShowGlare(this.bloomEnabled);
         if (earthMode) this.cloudLayer.update(epoch, gmstDeg, this.cfg.earthRotationOffset, this.cfg.showClouds, this.cfg.showNightLights);
       }
       // Moon + sun update in both orbital and sky view
@@ -1754,19 +1762,13 @@ export class App {
         this.markerManager.hide();
       }
 
+      // Toggle bloom per-body (e.g. off for moon/planets)
       const activePlanet = this.orreryCtrl.currentActivePlanet;
       const bloomForBody = this.activeLock === TargetLock.PLANET
         ? (activePlanet?.bloom !== false)
         : (BODIES[this.activeLock]?.bloom !== false);
-      const useBloom = this.bloomEnabled && bloomForBody && !this.orreryCtrl.isOrreryMode;
-      if (useBloom) {
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.postProcessing.render();
-      } else {
-        this.renderer.toneMapping = THREE.NoToneMapping;
-        this.renderer.clear();
-        this.renderer.render(this.scene3d, this.camera3d);
-      }
+      this.postProcessing.setBloomEnabled(this.bloomEnabled && bloomForBody && !this.orreryCtrl.isOrreryMode);
+      this.postProcessing.render();
     } else {
       // Update 2D map
       this.mapRenderer.update({ epoch, gmstDeg, cfg: this.cfg, satellites: this.satellites, hoveredSat: this.hoveredSat, selectedSats: this.selectedSats, cam2dZoom: this.camera.zoom2d, camera2d: this.camera2d });
@@ -1777,12 +1779,11 @@ export class App {
       this.periSprite3d.visible = false;
       this.apoSprite3d.visible = false;
 
-      // Disable tone mapping for 2D direct render
-      const prevToneMapping = this.renderer.toneMapping;
+      // 2D map: direct render, no tone mapping needed
       this.renderer.toneMapping = THREE.NoToneMapping;
       this.renderer.clear();
       this.renderer.render(this.scene2d, this.camera2d);
-      this.renderer.toneMapping = prevToneMapping;
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     }
 
     // Mini planet spinner

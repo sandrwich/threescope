@@ -89,6 +89,11 @@
     onGfxChange();
   }
 
+  function onAaChange() {
+    settingsStore.graphics.antiAliasing = settingsStore.graphics.antiAliasing === 'smaa' ? 'off' : 'smaa';
+    onGfxChange();
+  }
+
   // --- Simulation ---
   function onSimPresetChange(e: Event) {
     const val = (e.target as HTMLSelectElement).value;
@@ -193,8 +198,8 @@
     <Checkbox bind:checked={settingsStore.graphics.bloom} onchange={onGfxChange} />
   </div>
   <div class="row">
-    <label>Atmosphere Glow<InfoTip>Additive rim-glow shell around Earth. Uses a Fresnel-based fragment shader on a slightly oversized sphere — fragments facing the camera get more glow. Only visible when bloom is enabled.</InfoTip></label>
-    <Checkbox bind:checked={settingsStore.graphics.atmosphereGlow} onchange={onGfxChange} />
+    <label>Anti-Aliasing<InfoTip>SMAA (Enhanced Subpixel Morphological Anti-Aliasing). Multi-pass edge-detection filter that smooths jagged edges on orbit lines, satellite sprites, and the earth limb.</InfoTip></label>
+    <Checkbox checked={settingsStore.graphics.antiAliasing === 'smaa'} onchange={onAaChange} />
   </div>
   <div class="row">
     <label>Bump Mapping<InfoTip>Perturbs surface normals in the fragment shader using a height map. Adds visible terrain detail (mountains, craters) to Earth, Moon, and planets without increasing vertex count. Uses 4 neighboring texel samples to estimate the local gradient.</InfoTip></label>
@@ -226,6 +231,20 @@
   <Slider label="Surface Relief" display={reliefDisplay} min={0} max={100} value={settingsStore.graphics.surfaceRelief} oninput={onReliefInput}>
     {#snippet tip()}<InfoTip>Perturbs vertex positions along normals using the height map. Controls the exaggeration multiplier — 0× is flat, 10× is extreme terrain relief.</InfoTip>{/snippet}
   </Slider>
+
+  <h4 class="section-header">Earth</h4>
+  <div class="row">
+    <label>Atmosphere Glow<InfoTip>Fresnel-based atmospheric rim around Earth — adds a blue scatter tint at the limb and a separate glow shell. Includes surface rim scatter on the day side.</InfoTip></label>
+    <Checkbox bind:checked={settingsStore.graphics.atmosphereGlow} onchange={onGfxChange} />
+  </div>
+  <div class="row">
+    <label>Cloud Shadows<InfoTip>Ray-sphere intersection per fragment to project cloud layer shadows onto the surface. Only active when clouds are visible.</InfoTip></label>
+    <Checkbox bind:checked={settingsStore.graphics.cloudShadows} onchange={onGfxChange} />
+  </div>
+  <div class="row">
+    <label>Ocean Specular<InfoTip>Sun glint on ocean surfaces using Fresnel reflectance and a two-lobe specular model. Suppressed under cloud shadows.</InfoTip></label>
+    <Checkbox bind:checked={settingsStore.graphics.oceanSpecular} onchange={onGfxChange} />
+  </div>
 
   <h4 class="section-header">Simulation</h4>
   <div class="row">

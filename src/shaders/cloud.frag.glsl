@@ -1,5 +1,6 @@
 uniform sampler2D cloudTexture;
 uniform vec3 sunDir;
+uniform float bloomEnabled;
 
 varying vec2 vUv;
 
@@ -19,7 +20,8 @@ void main() {
     vec3 sunsetWarm = vec3(1.0, 0.65, 0.55);
     float gradPos = smoothstep(-0.1, 0.0, intensity);
     vec3 sunsetColor = mix(sunsetDeep, sunsetWarm, gradPos);
-    vec3 cloudColor = mix(texel.rgb, sunsetColor, scatterMult * 0.7);
+    float sunsetStrength = bloomEnabled > 0.5 ? 0.6 : 0.5;
+    vec3 cloudColor = mix(texel.rgb, sunsetColor, scatterMult * sunsetStrength);
 
     gl_FragColor = vec4(cloudColor, texel.a * alpha);
 }

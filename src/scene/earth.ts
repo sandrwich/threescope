@@ -43,6 +43,8 @@ export class Earth {
         cloudUVOffset: { value: 0.0 },
         showClouds: { value: 0.0 },
         showGlare: { value: 1.0 },
+        showCloudShadows: { value: 1.0 },
+        showRimScatter: { value: 1.0 },
       },
       vertexShader: earthVertSrc,
       fragmentShader: earthFragSrc,
@@ -133,6 +135,14 @@ export class Earth {
 
   setShowGlare(on: boolean) {
     this.material.uniforms.showGlare.value = on ? 1.0 : 0.0;
+  }
+
+  setShowCloudShadows(on: boolean) {
+    this.material.uniforms.showCloudShadows.value = on ? 1.0 : 0.0;
+  }
+
+  setShowRimScatter(on: boolean) {
+    this.material.uniforms.showRimScatter.value = on ? 1.0 : 0.0;
   }
 
   setNightEmission(value: number) {

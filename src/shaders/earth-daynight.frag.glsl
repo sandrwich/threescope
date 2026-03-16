@@ -15,6 +15,8 @@ uniform vec3 viewPos;
 uniform float cloudUVOffset;
 uniform float showClouds;
 uniform float showGlare;
+uniform float showCloudShadows;
+uniform float showRimScatter;
 
 varying vec2 vUv;
 varying vec3 vWorldPos;
@@ -68,7 +70,8 @@ void main() {
         return;
     }
 
-    vec4 night = texture2D(nightTexture, vUv);
+    vec4 night = texture2D(nightTexture, vUv, -2.0);
+    if (nightEmission < 1.01) night.rgb *= 1.0 + smoothstep(0.05, 0.3, night.rgb) * 0.5;
 
     // Perturb normal with tangent-space normal map (for terminator shading, not eclipse)
     vec3 normal = baseNormal;
@@ -97,7 +100,7 @@ void main() {
 
     // --- Cloud shadows via ray-sphere intersection ---
     float cloudShadow = 1.0;
-    if (showClouds > 0.5 && rawIntensity > -0.1) {
+    if (showClouds > 0.5 && showCloudShadows > 0.5 && rawIntensity > -0.1) {
         // Trace ray from surface point toward sun, find where it hits the cloud sphere
         vec3 surfPos = baseNormal * EARTH_R;
         float cloudR = EARTH_R + CLOUD_ALT;
@@ -157,6 +160,14 @@ void main() {
 
         // Roughness from normal map breaks up the glare naturally
         scatteredDay += glare;
+    }
+
+    // Atmospheric rim scatter — blue tint at the limb where surface curves away
+    if (showRimScatter > 0.5) {
+        vec3 rimViewDir = normalize(viewPos - baseNormal * EARTH_R);
+        float rimNdotV = max(dot(baseNormal, rimViewDir), 0.0);
+        float rim = pow(1.0 - rimNdotV, 4.0) * smoothstep(-0.1, 0.3, rawIntensity);
+        scatteredDay += vec3(0.25, 0.58, 1.0) * rim;
     }
 
     // Boost night emission for bloom (HDR values > 1.0)

@@ -39,8 +39,8 @@ class SettingsStore {
     const savedFps = localStorage.getItem('satvisor_fps_limit');
     if (savedFps !== null) {
       const v = parseInt(savedFps, 10);
-      this.fpsSliderValue = v;
-      this.fpsLimit = v === 0 ? -1 : v > 480 ? 0 : v;
+      this.fpsSliderValue = Math.min(v, 482);
+      this.fpsLimit = v === 0 ? -1 : v > 480 ? (v > 482 ? v : 0) : v;
     }
     const savedFov = localStorage.getItem('satvisor_fov');
     if (savedFov !== null) this.fov = Math.max(10, Math.min(120, Number(savedFov)));
@@ -70,8 +70,8 @@ class SettingsStore {
   }
 
   applyFpsLimit(sliderValue: number) {
-    this.fpsSliderValue = sliderValue;
-    this.fpsLimit = sliderValue === 0 ? -1 : sliderValue > 480 ? 0 : sliderValue;
+    this.fpsSliderValue = Math.min(sliderValue, 482);
+    this.fpsLimit = sliderValue === 0 ? -1 : sliderValue > 480 ? (sliderValue > 482 ? sliderValue : 0) : sliderValue;
     localStorage.setItem('satvisor_fps_limit', String(sliderValue));
     this.onFpsLimitChange?.(this.fpsLimit);
   }

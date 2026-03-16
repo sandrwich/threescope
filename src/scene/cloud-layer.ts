@@ -22,6 +22,7 @@ export class CloudLayer {
       uniforms: {
         cloudTexture: { value: cloudTex },
         sunDir: { value: new THREE.Vector3(1, 0, 0) },
+        bloomEnabled: { value: 1.0 },
       },
       vertexShader: cloudVertSrc,
       fragmentShader: cloudFragSrc,
@@ -37,6 +38,10 @@ export class CloudLayer {
 
     this.mesh = new THREE.Mesh(geometry, this.shaderMat);
     this.mesh.visible = false;
+  }
+
+  setBloomEnabled(on: boolean) {
+    this.shaderMat.uniforms.bloomEnabled.value = on ? 1.0 : 0.0;
   }
 
   setScale(s: number) {
