@@ -1078,15 +1078,30 @@
 
       {#if rotatorStore.mode === 'serial'}
         <div class="row">
-          <label>Protocol<InfoTip>GS-232 for Yaesu and compatible rotators. EasyComm II for K3NG Arduino, SatNOGS, and Hamlib-compatible controllers.</InfoTip></label>
+          <label>Protocol<InfoTip>Serial protocol for your rotator controller.
+            <div class="tip-options">
+              <div><b>GS-232</b> — Yaesu G-5500, Kenpro, and compatible rotators</div>
+              <div><b>EasyComm</b> — K3NG Arduino, SatNOGS, Hamlib-compatible (II and III)</div>
+              <div><b>SPID</b> — SPID Rot2Prog, MD-01/MD-02, BIG-RAS controllers</div>
+              <div><b>RC2800</b> — M2 / Confluent Designs RC2800 controllers</div>
+              <div><b>Prosistel</b> — Prosistel D series az/el rotators</div>
+              <div><b>Prosistel CT</b> — Prosistel Combi-Track (10x angle encoding)</div>
+              <div><b>FLIR PTU</b> — FLIR/Teledyne pan-tilt units (D48, D100, D300)</div>
+            </div>
+          </InfoTip></label>
           <Select size="xs" value={rotatorStore.serialProtocol} disabled={rotLocked}
             onchange={(e) => rotatorStore.setSerialProtocol((e.target as HTMLSelectElement).value as any)}>
             <option value="gs232">GS-232</option>
-            <option value="easycomm">EasyComm II</option>
+            <option value="easycomm">EasyComm II/III</option>
+            <option value="spid">SPID</option>
+            <option value="rc2800">RC2800</option>
+            <option value="prosistel">Prosistel</option>
+            <option value="prosistel-ct">Prosistel CT</option>
+            <option value="flir">FLIR PTU</option>
           </Select>
         </div>
         <div class="row">
-          <label>Baud<InfoTip>Serial baud rate. Must match the rotator controller's setting. Common values: 9600 for most controllers, 19200 for some Yaesu models.</InfoTip></label>
+          <label>Baud<InfoTip>Serial baud rate. Must match the rotator controller's setting. Common values: 9600 for most controllers, 600 for SPID Rot2Prog, 19200 for some Yaesu models.</InfoTip></label>
           <Select size="xs" value={String(rotatorStore.baudRate)} disabled={rotLocked}
             onchange={(e) => rotatorStore.setBaudRate(Number((e.target as HTMLSelectElement).value))}>
             {#each BAUD_RATES as rate}
@@ -1240,14 +1255,17 @@
         <div class="guide-body">
           {#if rotatorStore.mode === 'serial'}
             Connect your rotator controller via USB-serial adapter. Select protocol
-            (GS-232 for Yaesu-type, EasyComm for K3NG/Hamlib-compatible controllers)
             and baud rate above. Then switch to the Radar tab and click Connect — the
             browser will show a serial port picker.
             <br><br>
             <b>Supported controllers</b>
             <ul>
-              <li><b>GS-232A/B</b> — Yaesu, Kenpro, and compatible rotators</li>
-              <li><b>EasyComm II</b> — K3NG Arduino controller, SatNOGS, Hamlib-compatible</li>
+              <li><b>GS-232A/B</b> — Yaesu G-5500, Kenpro, and compatible rotators (9600 baud)</li>
+              <li><b>EasyComm II/III</b> — K3NG Arduino, SatNOGS, Hamlib-compatible (9600 baud)</li>
+              <li><b>SPID</b> — Rot2Prog, MD-01/MD-02, BIG-RAS (600 baud)</li>
+              <li><b>RC2800</b> — M2 / Confluent Designs RC2800 (9600 baud)</li>
+              <li><b>Prosistel</b> — D series and Combi-Track rotators (9600 baud)</li>
+              <li><b>FLIR PTU</b> — Teledyne FLIR pan-tilt units, surplus PTUs (9600 baud)</li>
             </ul>
             <span class="guide-note">Requires Chrome or Edge desktop. Web Serial is not available in Firefox or Safari.</span>
           {:else}
@@ -1282,7 +1300,7 @@
         />
       </div>
       <div class="console-controls">
-        <span class="console-proto">Protocol <span class="console-proto-val">{rotatorStore.mode === 'network' ? 'rotctld' : rotatorStore.serialProtocol === 'gs232' ? 'GS-232' : 'EasyComm II'}</span></span>
+        <span class="console-proto">Protocol <span class="console-proto-val">{rotatorStore.mode === 'network' ? 'rotctld' : { gs232: 'GS-232', easycomm: 'EasyComm II/III', spid: 'SPID', rc2800: 'RC2800', prosistel: 'Prosistel', 'prosistel-ct': 'Prosistel CT', flir: 'FLIR PTU' }[rotatorStore.serialProtocol]}</span></span>
         <Button size="xs" variant="ghost" onclick={() => rotatorStore.clearLog()}>Clear</Button>
       </div>
       {@render rotPanel()}

@@ -124,6 +124,21 @@ class RotatorStore {
         if (this.serialProtocol === 'gs232') {
           const { GS232Driver } = await import('../rotator/gs232');
           driver = new GS232Driver();
+        } else if (this.serialProtocol === 'spid') {
+          const { SpidDriver } = await import('../rotator/spid');
+          driver = new SpidDriver();
+        } else if (this.serialProtocol === 'rc2800') {
+          const { RC2800Driver } = await import('../rotator/rc2800');
+          driver = new RC2800Driver();
+        } else if (this.serialProtocol === 'prosistel') {
+          const { ProsistelDriver } = await import('../rotator/prosistel');
+          driver = new ProsistelDriver(false);
+        } else if (this.serialProtocol === 'prosistel-ct') {
+          const { ProsistelDriver } = await import('../rotator/prosistel');
+          driver = new ProsistelDriver(true);
+        } else if (this.serialProtocol === 'flir') {
+          const { FlirDriver } = await import('../rotator/flir');
+          driver = new FlirDriver();
         } else {
           const { EasyCommDriver } = await import('../rotator/easycomm');
           driver = new EasyCommDriver();
@@ -657,7 +672,7 @@ class RotatorStore {
     const mode = g('mode');
     if (mode === 'serial' || mode === 'network') this.mode = mode;
     const proto = g('serial_protocol');
-    if (proto === 'gs232' || proto === 'easycomm') this.serialProtocol = proto;
+    if (proto === 'gs232' || proto === 'easycomm' || proto === 'spid' || proto === 'rc2800' || proto === 'prosistel' || proto === 'prosistel-ct' || proto === 'flir') this.serialProtocol = proto as SerialProtocol;
     const baud = g('baud_rate');
     if (baud) this.baudRate = Number(baud);
     const url = g('ws_url');
@@ -707,6 +722,12 @@ class RotatorStore {
   setSerialProtocol(proto: SerialProtocol): void {
     this.serialProtocol = proto;
     this.save('serial_protocol', proto);
+    // Auto-set typical baud rate for the protocol
+    const defaultBaud: Record<SerialProtocol, number> = {
+      gs232: 9600, easycomm: 9600, spid: 600,
+      rc2800: 9600, prosistel: 9600, 'prosistel-ct': 9600, flir: 9600,
+    };
+    this.setBaudRate(defaultBaud[proto] ?? 9600);
     this.clearError();
   }
 

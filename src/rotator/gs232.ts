@@ -2,7 +2,7 @@ import type { RotatorDriver, RotatorPosition, RotatorConnectOptions } from './pr
 import { SerialTransport } from './protocol';
 
 /**
- * GS-232A/B rotator protocol over Web Serial.
+ * GS-232A/B rotator protocol driver.
  *
  * Command reference:
  *   W{az:03d} {el:03d}\r  — set position (GS-232B format)

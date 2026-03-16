@@ -2,7 +2,7 @@ import type { RotatorDriver, RotatorPosition, RotatorConnectOptions } from './pr
 import { SerialTransport } from './protocol';
 
 /**
- * EasyComm II rotator protocol over Web Serial.
+ * EasyComm rotator protocol driver (compatible with II and III).
  *
  * Command reference:
  *   AZ135.0 EL45.0\n  — set position
@@ -10,7 +10,7 @@ import { SerialTransport } from './protocol';
  *   SA SE\n             — stop azimuth and elevation
  */
 export class EasyCommDriver implements RotatorDriver {
-  readonly name = 'EasyComm II';
+  readonly name = 'EasyComm';
   private transport = new SerialTransport();
 
   get connected() { return this.transport.connected; }

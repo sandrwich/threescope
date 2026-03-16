@@ -6,7 +6,7 @@
 import { formatHex, type OnLogCallback } from './console-types';
 
 /** Standard baud rates for serial connections. */
-export const BAUD_RATES = [4800, 9600, 19200, 38400, 57600, 115200] as const;
+export const BAUD_RATES = [600, 1200, 4800, 9600, 19200, 38400, 57600, 115200, 460800] as const;
 
 /**
  * Text-based serial transport with buffered read, async command queue,

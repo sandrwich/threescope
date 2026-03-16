@@ -8,7 +8,7 @@ export type { OnLogCallback };
 export type RotatorMode = 'serial' | 'network';
 
 /** Serial protocol variants. */
-export type SerialProtocol = 'gs232' | 'easycomm';
+export type SerialProtocol = 'gs232' | 'easycomm' | 'spid' | 'rc2800' | 'prosistel' | 'prosistel-ct' | 'flir';
 
 /** Current rotator position as reported by readback. */
 export interface RotatorPosition {
