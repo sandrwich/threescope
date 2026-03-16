@@ -379,7 +379,11 @@ export class App {
         texLoaded++;
         this.setLoading(0.1 + (texLoaded / texTotal) * 0.35, `Loading textures (${texLoaded}/${texTotal})...`);
         resolve(tex);
-      }, undefined, () => resolve(new THREE.Texture()));
+      }, undefined, () => {
+        texLoaded++;
+        this.setLoading(0.1 + (texLoaded / texTotal) * 0.35, `Loading textures (${texLoaded}/${texTotal})...`);
+        resolve(new THREE.Texture());
+      });
     });
 
     // Load ALL textures behind the loading screen — no deferred loads, no post-load stutter
@@ -1628,7 +1632,7 @@ export class App {
       }
 
       // Sun direction in ECI/world space
-      const sunEciDir = calculateSunPosition(epoch).normalize();
+      const sunEciDir = this.tmpVec3.copy(calculateSunPosition(epoch)).normalize();
       this.atmosphere.update(sunEciDir);
       this.moonScene.updateSunDir(sunEciDir);
       this.atmosphere.setVisible(this.atmosphereGlowEnabled && !isSkyView && this.activeLock !== TargetLock.PLANET && !this.orreryCtrl.isOrreryMode);
