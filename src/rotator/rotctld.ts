@@ -198,7 +198,14 @@ const RPRT_ERRORS: Record<string, string> = {
   '-12': 'Target not available',
   '-13': 'Bus error',
   '-14': 'Bus busy / collision',
+  '-15': 'Invalid parameter (null)',
+  '-16': 'Invalid VFO',
   '-17': 'Argument out of range',
+  '-18': 'Deprecated function',
+  '-19': 'Security error',
+  '-20': 'Rotator not powered on',
+  '-21': 'Limit exceeded',
+  '-22': 'Access denied',
 };
 
 /** Return human-readable error for RPRT -N responses, or undefined if OK. */

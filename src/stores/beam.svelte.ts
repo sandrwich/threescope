@@ -21,6 +21,8 @@ export interface BeamTrackingState {
   trackAz: number | null;
   trackEl: number | null;
   trackRange: number | null;
+  leadAz: number | null;
+  leadEl: number | null;
   timestamp: number;
 }
 
@@ -54,6 +56,9 @@ class BeamStore {
   trackAz = $state<number | null>(null);
   trackEl = $state<number | null>(null);
   trackRange = $state<number | null>(null);
+  // Lead position: where the satellite will be N seconds from now (for rotator lead time)
+  leadAz = $state<number | null>(null);
+  leadEl = $state<number | null>(null);
 
   // Locked satellite sky path (AOS → current → LOS)
   lockPath = $state<{ az: number; el: number }[]>([]);
@@ -104,8 +109,20 @@ class BeamStore {
     this.trackAz = null;
     this.trackEl = null;
     this.trackRange = null;
+    this.leadAz = null;
+    this.leadEl = null;
     this.lockPath = [];
     feedbackStore.fireDynamic(0);
+  }
+
+  updateLeadPosition(az: number, el: number) {
+    this.leadAz = az;
+    this.leadEl = el;
+  }
+
+  clearLeadPosition() {
+    this.leadAz = null;
+    this.leadEl = null;
   }
 
   updateTracking(az: number, el: number, rangeKm: number) {
@@ -124,6 +141,8 @@ class BeamStore {
     this.trackAz = null;
     this.trackEl = null;
     this.trackRange = null;
+    this.leadAz = null;
+    this.leadEl = null;
     this.lockPath = [];
     feedbackStore.fireDynamic(0);
     feedbackStore.fire(FeedbackEvent.SatBelowHorizon);
@@ -142,6 +161,8 @@ class BeamStore {
       trackAz: this.trackAz,
       trackEl: this.trackEl,
       trackRange: this.trackRange,
+      leadAz: this.leadAz,
+      leadEl: this.leadEl,
       timestamp: Date.now(),
     };
   }

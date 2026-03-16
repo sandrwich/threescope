@@ -986,7 +986,7 @@
           <span class="rot-pos-warn">CAN'T KEEP UP</span>
         {:else if rotatorStore.nextAosEpoch > 0}
           {@const secToAos = (rotatorStore.nextAosEpoch - timeStore.epoch) * 86400}
-          <span class="rot-pos-wait">AOS in {fmtCountdown(secToAos)}</span>
+          <span class="rot-pos-wait">{rotatorStore.nextAosSatName} in {fmtCountdown(secToAos)}{rotatorStore.parkedBetweenPasses ? ' (parked)' : ''}</span>
         {:else if offTarget}
           <span class="rot-pos-err">&Delta; {errAz?.toFixed(1)}° / {errEl?.toFixed(1)}°</span>
         {:else if hasActual && hasTarget}
@@ -999,7 +999,7 @@
       <div class="rot-actions">
         <label class="rot-autotrack">
           <Checkbox checked={rotatorStore.autoTrack} onchange={() => rotatorStore.setAutoTrack(!rotatorStore.autoTrack)} />
-          Auto slew<InfoTip>Continuously slew the rotator to follow the beam reticle. When tracking a satellite, sun, or moon, the rotator follows the target automatically. When unlocked, it follows manual reticle placement.</InfoTip>
+          Auto-track<InfoTip>Continuously slew the rotator to follow the beam reticle. When tracking a satellite, sun, or moon, the rotator follows the target automatically. When unlocked, it follows manual reticle placement.</InfoTip>
         </label>
         <div class="rot-btns">
           <Button size="xs" title="Slew to beam reticle position ({beamStore.aimAz.toFixed(1)}° / {beamStore.aimEl.toFixed(1)}°)" disabled={rotatorStore.autoTrack} onclick={() => rotatorStore.goto(beamStore.aimAz, beamStore.aimEl)}>Slew</Button>
@@ -1065,6 +1065,47 @@
 
   {:else if tab === 'setup'}
     <div class="setup-panel">
+      <h4 class="section-header">Connection</h4>
+      <div class="row">
+        <label>Mode<InfoTip>Serial connects directly to a rotator controller via USB. Rotctld connects to a Hamlib rotctld instance over a WebSocket bridge.</InfoTip></label>
+        <div class="rot-mode-btns">
+          <Button size="xs" variant="ghost" active={rotatorStore.mode === 'serial'}
+            disabled={rotLocked} onclick={() => rotatorStore.setMode('serial')}>serial</Button>
+          <Button size="xs" variant="ghost" active={rotatorStore.mode === 'network'}
+            disabled={rotLocked} onclick={() => rotatorStore.setMode('network')}>rotctld</Button>
+        </div>
+      </div>
+
+      {#if rotatorStore.mode === 'serial'}
+        <div class="row">
+          <label>Protocol<InfoTip>GS-232 for Yaesu and compatible rotators. EasyComm II for K3NG Arduino, SatNOGS, and Hamlib-compatible controllers.</InfoTip></label>
+          <Select size="xs" value={rotatorStore.serialProtocol} disabled={rotLocked}
+            onchange={(e) => rotatorStore.setSerialProtocol((e.target as HTMLSelectElement).value as any)}>
+            <option value="gs232">GS-232</option>
+            <option value="easycomm">EasyComm II</option>
+          </Select>
+        </div>
+        <div class="row">
+          <label>Baud<InfoTip>Serial baud rate. Must match the rotator controller's setting. Common values: 9600 for most controllers, 19200 for some Yaesu models.</InfoTip></label>
+          <Select size="xs" value={String(rotatorStore.baudRate)} disabled={rotLocked}
+            onchange={(e) => rotatorStore.setBaudRate(Number((e.target as HTMLSelectElement).value))}>
+            {#each BAUD_RATES as rate}
+              <option value={String(rate)}>{rate}</option>
+            {/each}
+          </Select>
+        </div>
+      {/if}
+
+      {#if rotatorStore.mode === 'network'}
+        <div class="row">
+          <label>URL<InfoTip>WebSocket URL of the rotctld bridge. Requires websockify or websocat bridging TCP to WebSocket. See the Guide below for setup instructions.</InfoTip></label>
+          <Input size="xs" class="rot-url" type="text" disabled={rotLocked}
+            value={rotatorStore.wsUrl}
+            onblur={(e) => rotatorStore.setWsUrl((e.currentTarget as HTMLInputElement).value)}
+            onkeydown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+        </div>
+      {/if}
+
       <h4 class="section-header">Antenna</h4>
       <div class="row">
         <label>Preset<InfoTip>Sets beam width, tolerance, and update rate for common antenna types.</InfoTip></label>
@@ -1079,59 +1120,79 @@
         <span>Tolerance {rotatorStore.tolerance}°</span>
         <span>Rate {rateDisplay}</span>
       </div>
-
-      <h4 class="section-header">Connection</h4>
       <div class="row">
-        <label>Mode</label>
-        <div class="rot-mode-btns">
-          <Button size="xs" variant="ghost" active={rotatorStore.mode === 'serial'}
-            disabled={rotLocked} onclick={() => rotatorStore.setMode('serial')}>serial</Button>
-          <Button size="xs" variant="ghost" active={rotatorStore.mode === 'network'}
-            disabled={rotLocked} onclick={() => rotatorStore.setMode('network')}>rotctld</Button>
+        <label>Az Range<InfoTip>Physical travel limits of the rotator in degrees. Many rotators can spin past 360° (e.g., 0 to 450 means 90° past north). Setting a range wider than 360° enables meridian flip correction, which avoids full-rotation whips on passes that cross north.</InfoTip></label>
+        <div class="park-custom">
+          <Input size="xs" type="number" min="-180" max="180" step="1"
+            value={rotatorStore.azMin}
+            onblur={(e) => rotatorStore.setAzLimits(Number((e.currentTarget as HTMLInputElement).value), rotatorStore.azMax)}
+            onkeydown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+          <span class="unit">–</span>
+          <Input size="xs" type="number" min="180" max="540" step="1"
+            value={rotatorStore.azMax}
+            onblur={(e) => rotatorStore.setAzLimits(rotatorStore.azMin, Number((e.currentTarget as HTMLInputElement).value))}
+            onkeydown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+          <span class="unit">°</span>
         </div>
       </div>
-
-      {#if rotatorStore.mode === 'serial'}
+      {#if rotatorStore.azMax - rotatorStore.azMin > 360}
         <div class="row">
-          <label>Protocol</label>
-          <Select size="xs" value={rotatorStore.serialProtocol} disabled={rotLocked}
-            onchange={(e) => rotatorStore.setSerialProtocol((e.target as HTMLSelectElement).value as any)}>
-            <option value="gs232">GS-232</option>
-            <option value="easycomm">EasyComm II</option>
-          </Select>
-        </div>
-        <div class="row">
-          <label>Baud</label>
-          <Select size="xs" value={String(rotatorStore.baudRate)} disabled={rotLocked}
-            onchange={(e) => rotatorStore.setBaudRate(Number((e.target as HTMLSelectElement).value))}>
-            {#each BAUD_RATES as rate}
-              <option value={String(rate)}>{rate}</option>
-            {/each}
-          </Select>
+          <label>Meridian Flip<InfoTip>Adjust azimuth commands by ±360° to avoid the rotator whipping through north on meridian-crossing passes. Requires extended-range rotator.</InfoTip></label>
+          <Checkbox checked={rotatorStore.meridianFlip} onchange={() => rotatorStore.setMeridianFlip(!rotatorStore.meridianFlip)} />
         </div>
       {/if}
 
-      {#if rotatorStore.mode === 'network'}
-        <div class="row">
-          <label>URL</label>
-          <Input size="xs" class="rot-url" type="text" disabled={rotLocked}
-            value={rotatorStore.wsUrl}
-            onblur={(e) => rotatorStore.setWsUrl((e.currentTarget as HTMLInputElement).value)}
-            onkeydown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
-        </div>
-      {/if}
-
-      <Slider label="Update rate" display={rateDisplay}
+      <h4 class="section-header">Tracking</h4>
+      {#snippet rateTip()}<InfoTip>How often position commands are sent to the rotator. Faster rates give smoother tracking but increase serial traffic. Dish antennas need faster rates than Yagis.</InfoTip>{/snippet}
+      <Slider label="Update period" display={rateDisplay} tip={rateTip}
         min={100} max={20000} step={100} value={rotatorStore.updateIntervalMs}
         oninput={(e) => rotatorStore.setUpdateInterval(Number((e.target as HTMLInputElement).value))} />
-
       {#snippet tolTip()}<InfoTip>Minimum error before sending a new position command. Reduces wear on the rotator gears. Set to 0 for continuous tracking.</InfoTip>{/snippet}
       <Slider label="Tolerance" display={tolDisplay} tip={tolTip}
         min={0} max={10} step={0.5} value={rotatorStore.tolerance}
         oninput={(e) => rotatorStore.setTolerance(Number((e.target as HTMLInputElement).value))} />
+      {#snippet leadTip()}<InfoTip>Command the rotator to point where the satellite will be this many seconds from now. Compensates for mechanical lag on fast LEO passes.</InfoTip>{/snippet}
+      <Slider label="Lead Time" display="{rotatorStore.trackingLeadSec.toFixed(1)}s" tip={leadTip}
+        min={0} max={5} step={0.1} value={rotatorStore.trackingLeadSec}
+        oninput={(e) => rotatorStore.setTrackingLead(Number((e.target as HTMLInputElement).value))} />
 
+      <h4 class="section-header">Scheduling</h4>
       <div class="row">
-        <label>Park Position</label>
+        <label>After Pass<InfoTip>Action when a tracked satellite goes below the horizon.
+          <div class="tip-options">
+            <div><b>Do nothing</b> — stop tracking, leave rotator where it is</div>
+            <div><b>Park</b> — stop tracking, slew to the park position</div>
+            <div><b>Schedule next</b> — find the earliest upcoming pass from the active Passes tab and auto-switch to that satellite at AOS. Parks during long gaps.</div>
+          </div>
+        </InfoTip></label>
+        <Select size="xs" value={rotatorStore.passEndAction}
+          onchange={(e) => rotatorStore.setPassEndAction((e.target as HTMLSelectElement).value as PassEndAction)}>
+          <option value="nothing">Do nothing</option>
+          <option value="park">Park</option>
+          <option value="slew-next">Schedule next pass</option>
+        </Select>
+      </div>
+      {#if rotatorStore.passEndAction !== 'nothing'}
+        {#snippet settleTip()}<InfoTip>Wait this many seconds after LOS before parking or slewing. Lets large antennas stop wobbling.</InfoTip>{/snippet}
+        <Slider label="Settle Delay" display="{rotatorStore.settleDelaySec}s" tip={settleTip}
+          min={0} max={30} step={1} value={rotatorStore.settleDelaySec}
+          oninput={(e) => rotatorStore.setSettleDelay(Number((e.target as HTMLInputElement).value))} />
+      {/if}
+      {#if rotatorStore.passEndAction === 'slew-next'}
+        {#snippet prepTip()}<InfoTip>When the gap to the next pass exceeds this time, the rotator parks and then unparks this many seconds before AOS to slew to the rise azimuth. Shorter gaps slew directly without parking.</InfoTip>{/snippet}
+        <Slider label="Pre-position" display="{Math.floor(rotatorStore.unparkBeforeAosSec / 60)}m {rotatorStore.unparkBeforeAosSec % 60}s" tip={prepTip}
+          min={30} max={600} step={10} value={rotatorStore.unparkBeforeAosSec}
+          oninput={(e) => rotatorStore.setUnparkBeforeAos(Number((e.target as HTMLInputElement).value))} />
+      {/if}
+      <div class="row">
+        <label>Park Position<InfoTip>Where the rotator goes when parked.
+          <div class="tip-options">
+            <div><b>North / Horizon</b> (0° az, 0° el) — fast slew to northbound passes</div>
+            <div><b>South / Horizon</b> (180° az, 0° el) — fast slew to southbound passes</div>
+            <div><b>Zenith</b> (0° az, 90° el) — stowed position, reduces wind loading</div>
+            <div><b>Custom</b> — set any az/el</div>
+          </div>
+        </InfoTip></label>
         <Select size="xs" value={rotatorStore.parkPreset}
           onchange={(e) => rotatorStore.setParkPreset((e.target as HTMLSelectElement).value as ParkPreset)}>
           {#each Object.entries(PARK_PRESETS) as [key, p]}
@@ -1156,22 +1217,6 @@
             <span class="unit">°</span>
           </div>
         </div>
-      {/if}
-
-      <div class="row">
-        <label>After Pass<InfoTip>Action when a tracked satellite goes below the horizon. Disables auto-slew automatically.</InfoTip></label>
-        <Select size="xs" value={rotatorStore.passEndAction}
-          onchange={(e) => rotatorStore.setPassEndAction((e.target as HTMLSelectElement).value as PassEndAction)}>
-          <option value="nothing">Do nothing</option>
-          <option value="park">Park</option>
-          <option value="slew-next">Slew to next AOS</option>
-        </Select>
-      </div>
-      {#if rotatorStore.passEndAction !== 'nothing'}
-        {#snippet settleTip()}<InfoTip>Wait this many seconds after LOS before parking or slewing. Lets large antennas stop wobbling.</InfoTip>{/snippet}
-        <Slider label="Settle Delay" display="{rotatorStore.settleDelaySec}s" tip={settleTip}
-          min={0} max={30} step={1} value={rotatorStore.settleDelaySec}
-          oninput={(e) => rotatorStore.setSettleDelay(Number((e.target as HTMLInputElement).value))} />
       {/if}
 
       <h4 class="section-header">Visual</h4>

@@ -767,6 +767,10 @@ export class App {
     rotatorStore.load();
     rigStore.load();
     beamStore.onTrackingUpdate = (state) => rotatorStore.handleTrackingUpdate(state);
+    rotatorStore.onSwitchSatellite = (noradId, satName) => {
+      uiStore.onSelectSatellite?.(noradId);
+      beamStore.lockToSatellite(noradId, satName);
+    };
     uiStore.loadPassFilters();
     uiStore.loadMarkerGroups(this.cfg.markerGroups);
 
@@ -1618,7 +1622,7 @@ export class App {
     // Tracking: lock aim (every frame), radar blips + sky path (throttled)
     if (observerStore.isSet && (uiStore.rotatorOpen || beamStore.locked || isSkyView)) {
       const obs = observerStore.location;
-      this.tracker.update(this.satellites, this.selectedSats, epoch, gmstDeg, obs.lat, obs.lon, obs.alt, this.timeSystem.timeMultiplier);
+      this.tracker.update(this.satellites, this.selectedSats, epoch, gmstDeg, obs.lat, obs.lon, obs.alt, this.timeSystem.timeMultiplier, rotatorStore.autoTrack ? rotatorStore.trackingLeadSec : 0);
     }
 
     if (this.viewMode === ViewMode.VIEW_3D || isSkyView) {

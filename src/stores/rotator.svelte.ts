@@ -2,6 +2,7 @@ import type { RotatorDriver, RotatorMode, SerialProtocol } from '../rotator/prot
 import type { ConsoleLogEntry } from '../serial/console-types';
 import { MAX_LOG_ENTRIES } from '../serial/console-types';
 import type { BeamTrackingState } from './beam.svelte';
+import type { SatellitePass } from '../passes/pass-types';
 import { beamStore } from './beam.svelte';
 import { uiStore } from './ui.svelte';
 import { timeStore } from './time.svelte';
@@ -53,6 +54,11 @@ class RotatorStore {
   parkEl = $state(0);
   passEndAction = $state<PassEndAction>('nothing');
   settleDelaySec = $state(5);
+  unparkBeforeAosSec = $state(60);
+  azMin = $state(0);
+  azMax = $state(360);
+  meridianFlip = $state(false);
+  trackingLeadSec = $state(0);
 
   // Runtime state
   status = $state<RotatorStatus>('disconnected');
@@ -78,6 +84,12 @@ class RotatorStore {
   // AOS epoch of the next pass we're waiting for (TLE epoch, 0 = not waiting)
   nextAosEpoch = $state(0);
   nextAosSatName = $state('');
+  nextAosNoradId = $state<number | null>(null);
+  nextAosAz = $state<number | null>(null);
+  parkedBetweenPasses = $state(false);
+
+  // Callback: switch beam lock to a different satellite (wired in app.ts)
+  onSwitchSatellite: ((noradId: number, satName: string) => void) | null = null;
 
   // Internals
   private driver: RotatorDriver | null = null;
@@ -95,6 +107,10 @@ class RotatorStore {
   private _cmdFailCount = 0;
   private _lastSentAz: number | null = null;
   private _lastSentEl: number | null = null;
+  // Meridian flip state: crossing direction + reference azimuths
+  private _flipCrossing: 'none' | 'southbound' | 'northbound' = 'none';
+  private _flipAosAz = 0;
+  private _flipLosAz = 0;
 
   async connect(): Promise<void> {
     if (this.status === 'connected' || this.status === 'connecting') return;
@@ -154,6 +170,10 @@ class RotatorStore {
       this.driver = driver;
       this.status = 'connected';
       this.startTimers();
+      // Ensure pass data is available for scheduling
+      if (uiStore.activePassList.length === 0 && !uiStore.passesComputing) {
+        uiStore.onRequestPasses?.();
+      }
     } catch (e: any) {
       // User cancelled the serial picker — not an error
       if (e?.name === 'NotAllowedError') {
@@ -196,6 +216,10 @@ class RotatorStore {
     this._lastSentEl = null;
     this.nextAosEpoch = 0;
     this.nextAosSatName = '';
+    this.nextAosNoradId = null;
+    this.nextAosAz = null;
+    this.parkedBetweenPasses = false;
+    this._flipCrossing = 'none';
   }
 
   async sendRaw(cmd: string): Promise<void> {
@@ -213,8 +237,10 @@ class RotatorStore {
     this.targetEl = el;
     this._lastSentAz = az;
     this._lastSentEl = el;
+    const cmdAz = Math.max(this.azMin, Math.min(this.azMax, az));
+    const cmdEl = Math.max(0, Math.min(90, el));
     try {
-      await this.driver.setPosition(az, el);
+      await this.driver.setPosition(cmdAz, cmdEl);
     } catch (e: any) {
       this.error = `Command failed: ${e?.message ?? 'unknown error'}`;
     }
@@ -227,6 +253,13 @@ class RotatorStore {
     this.targetEl = null;
     this._lastSentAz = null;
     this._lastSentEl = null;
+    this.nextAosEpoch = 0;
+    this.nextAosSatName = '';
+    this.nextAosNoradId = null;
+    this.nextAosAz = null;
+    this.parkedBetweenPasses = false;
+    this._flipCrossing = 'none';
+    if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
     try {
       await this.driver.stop();
     } catch (e: any) {
@@ -250,30 +283,49 @@ class RotatorStore {
       // Only trigger pass-end if we were actively tracking (sat was above horizon)
       if (this._wasTracking) {
         this._wasTracking = false;
+        this._flipCrossing = 'none';
         this.handlePassEnd(state.lockedNoradId);
       }
       return;
     }
+    // Pass starting — cancel any pending settle action and detect meridian flip
+    if (!this._wasTracking) {
+      if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
+      this.detectFlip();
+    }
     this._wasTracking = true;
     this.nextAosEpoch = 0;
     this.nextAosSatName = '';
-    // Update target — actual commands are sent by the tracking timer
-    this.targetAz = state.trackAz;
-    this.targetEl = state.trackEl;
+    this.nextAosNoradId = null;
+    this.nextAosAz = null;
+    this.parkedBetweenPasses = false;
+    // Update target — use lead position for commanding if available
+    this.targetAz = state.leadAz ?? state.trackAz;
+    this.targetEl = Math.max(0, state.leadEl ?? state.trackEl);
   }
 
   private _settleTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private handlePassEnd(noradId: number | null): void {
+  private handlePassEnd(_noradId: number | null): void {
     if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
     const act = () => {
-      if (this.passEndAction === 'slew-next' && noradId !== null) {
-        // Find next pass for the same sat and pre-position to AOS
-        const nextPass = this.findNextPass(noradId);
+      if (this.passEndAction === 'slew-next') {
+        // Find earliest upcoming pass across ALL selected satellites
+        const nextPass = this.findNextPass();
         if (nextPass) {
-          this.goto(nextPass.aosAz, 0);
           this.nextAosEpoch = nextPass.aosEpoch;
           this.nextAosSatName = nextPass.satName;
+          this.nextAosNoradId = nextPass.satNoradId;
+          this.nextAosAz = nextPass.aosAz;
+          // Park during long gaps, pre-position for short ones
+          const gapSec = (nextPass.aosEpoch - timeStore.epoch) * 86400;
+          if (gapSec > this.unparkBeforeAosSec) {
+            this.parkedBetweenPasses = true;
+            this.park();
+          } else {
+            this.parkedBetweenPasses = false;
+            this.goto(nextPass.aosAz, 0);
+          }
           // Keep auto-track on so it picks up when sat rises
           return;
         }
@@ -293,17 +345,24 @@ class RotatorStore {
     }
   }
 
-  private findNextPass(noradId: number) {
+  /**
+   * Find the best upcoming pass from the active Passes tab.
+   * Among overlapping passes, picks the highest max elevation.
+   */
+  private findNextPass(): SatellitePass | null {
     const epoch = timeStore.epoch;
-    // Search both pass lists for the next future pass of this satellite
-    for (const list of [uiStore.passes, uiStore.nearbyPasses]) {
-      for (const pass of list) {
-        if (pass.satNoradId === noradId && pass.aosEpoch > epoch) {
-          return pass;
-        }
+    let best: SatellitePass | null = null;
+    for (const pass of uiStore.activePassList) {
+      if (pass.aosEpoch <= epoch) continue;
+      if (!best) { best = pass; continue; }
+      // If this pass overlaps with best (starts before best ends), pick higher elevation
+      if (pass.aosEpoch < best.losEpoch) {
+        if (pass.maxEl > best.maxEl) best = pass;
+      } else if (pass.aosEpoch < best.aosEpoch) {
+        best = pass;
       }
     }
-    return null;
+    return best;
   }
 
   /**
@@ -342,6 +401,37 @@ class RotatorStore {
 
   private async tick(): Promise<void> {
     if (!this.driver?.connected) return;
+
+    // Refresh AOS azimuth from pass list (handles TLE updates while parked)
+    if (this.nextAosEpoch > 0 && this.nextAosNoradId !== null) {
+      for (const pass of uiStore.activePassList) {
+        if (pass.satNoradId === this.nextAosNoradId && pass.aosEpoch > timeStore.epoch) {
+          this.nextAosAz = pass.aosAz;
+          this.nextAosEpoch = pass.aosEpoch;
+          break;
+        }
+      }
+    }
+
+    // Unpark: pre-position to AOS azimuth when close enough
+    if (this.nextAosEpoch > 0 && this.parkedBetweenPasses && this.nextAosAz !== null) {
+      const secToAos = (this.nextAosEpoch - timeStore.epoch) * 86400;
+      if (secToAos <= this.unparkBeforeAosSec) {
+        this.parkedBetweenPasses = false;
+        this.goto(this.nextAosAz, 0);
+      }
+    }
+
+    // AOS reached: switch beam lock to the scheduled satellite
+    if (this.nextAosEpoch > 0 && this.nextAosNoradId !== null) {
+      const secToAos = (this.nextAosEpoch - timeStore.epoch) * 86400;
+      if (secToAos <= 0) {
+        const id = this.nextAosNoradId;
+        const name = this.nextAosSatName;
+        this.nextAosNoradId = null; // prevent re-firing
+        this.onSwitchSatellite?.(id, name);
+      }
+    }
 
     if (this._tickPhase === 'poll') {
       await this.tickPoll();
@@ -478,7 +568,11 @@ class RotatorStore {
     }
 
     try {
-      await this.driver.setPosition(this.targetAz, this.targetEl);
+      // Apply meridian flip + clamp to physical limits
+      let cmdAz = this.flipAz(this.targetAz);
+      cmdAz = Math.max(this.azMin, Math.min(this.azMax, cmdAz));
+      const cmdEl = Math.max(0, Math.min(90, this.targetEl));
+      await this.driver.setPosition(cmdAz, cmdEl);
       this._lastSentAz = this.targetAz;
       this._lastSentEl = this.targetEl;
       this._cmdFailCount = 0;
@@ -495,6 +589,65 @@ class RotatorStore {
 
   private stopTimers(): void {
     if (this._timer !== null) { clearTimeout(this._timer); this._timer = null; }
+  }
+
+  /**
+   * Detect north-crossing passes for meridian flip correction. Determines
+   * southbound vs northbound crossing and stores AOS/LOS azimuths for
+   * per-sample quadrant-aware offset.
+   */
+  private detectFlip(): void {
+    this._flipCrossing = 'none';
+    if (!this.meridianFlip || this.azMax - this.azMin <= 360) return;
+    const noradId = beamStore.lockedNoradId;
+    const epoch = timeStore.epoch;
+    let pass: SatellitePass | undefined;
+    for (const list of [uiStore.passes, uiStore.nearbyPasses]) {
+      pass = list.find(p => p.satNoradId === noradId && p.aosEpoch <= epoch && p.losEpoch >= epoch);
+      if (pass) break;
+    }
+    if (!pass?.skyPath?.length) return;
+    const path = pass.skyPath;
+    for (let i = 1; i < path.length; i++) {
+      const delta = path[i].az - path[i - 1].az;
+      if (Math.abs(delta) > 180) {
+        // LOS az in southern half (90-270) → southbound crossing; else northbound
+        const losAz = path[path.length - 1].az;
+        this._flipCrossing = (losAz >= 90 && losAz <= 270) ? 'southbound' : 'northbound';
+        this._flipAosAz = path[0].az;
+        this._flipLosAz = losAz;
+        return;
+      }
+    }
+  }
+
+  /** Compute meridian flip offset for a given azimuth based on crossing direction. */
+  private flipAz(az: number): number {
+    if (this._flipCrossing === 'none') return az;
+    if (this._flipCrossing === 'southbound') {
+      // Pass crosses north heading south
+      if (this._flipAosAz < 90 && az < 90) {
+        // Eastern start, current in NE quadrant → extend past 360
+        const flipped = az + 360;
+        return flipped <= this.azMax ? flipped : az;
+      }
+      if (this._flipAosAz >= 270 && az >= 270) {
+        // Western start, current in NW quadrant → go below 0
+        const flipped = az - 360;
+        return flipped >= this.azMin ? flipped : az;
+      }
+    } else {
+      // Northbound: use LOS azimuth as reference
+      if (this._flipLosAz < 90 && az < 90) {
+        const flipped = az + 360;
+        return flipped <= this.azMax ? flipped : az;
+      }
+      if (this._flipLosAz >= 270 && az >= 270) {
+        const flipped = az - 360;
+        return flipped >= this.azMin ? flipped : az;
+      }
+    }
+    return az;
   }
 
   // ── Persistence ──
@@ -523,6 +676,16 @@ class RotatorStore {
     if (settle) this.settleDelaySec = Number(settle);
     const tol = g('tolerance');
     if (tol) this.tolerance = Number(tol);
+    const unpark = g('unpark_before_aos');
+    if (unpark) this.unparkBeforeAosSec = Math.max(30, Math.min(600, Number(unpark)));
+    const azMinV = g('az_min');
+    if (azMinV) this.azMin = Number(azMinV);
+    const azMaxV = g('az_max');
+    if (azMaxV) this.azMax = Number(azMaxV);
+    const flip = g('meridian_flip');
+    if (flip === 'true') this.meridianFlip = true;
+    const lead = g('tracking_lead');
+    if (lead) this.trackingLeadSec = Math.max(0, Math.min(5, Number(lead)));
     // autoTrack and panelOpen are NOT restored — require explicit user action
   }
 
@@ -606,6 +769,28 @@ class RotatorStore {
   setTolerance(deg: number): void {
     this.tolerance = Math.max(0, Math.min(10, deg));
     this.save('tolerance', this.tolerance);
+  }
+
+  setUnparkBeforeAos(sec: number): void {
+    this.unparkBeforeAosSec = Math.max(30, Math.min(600, sec));
+    this.save('unpark_before_aos', this.unparkBeforeAosSec);
+  }
+
+  setAzLimits(min: number, max: number): void {
+    this.azMin = Math.max(-180, Math.min(180, min));
+    this.azMax = Math.max(180, Math.min(540, max));
+    this.save('az_min', this.azMin);
+    this.save('az_max', this.azMax);
+  }
+
+  setMeridianFlip(value: boolean): void {
+    this.meridianFlip = value;
+    this.save('meridian_flip', value);
+  }
+
+  setTrackingLead(sec: number): void {
+    this.trackingLeadSec = Math.max(0, Math.min(5, sec));
+    this.save('tracking_lead', this.trackingLeadSec);
   }
 }
 

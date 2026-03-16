@@ -154,6 +154,7 @@ export class Tracker {
     obsLon: number,
     obsAlt: number,
     timeMultiplier = 1,
+    leadTimeSec = 0,
   ) {
     const now = performance.now();
     const gmstRad = gmstDeg * DEG2RAD;
@@ -206,6 +207,22 @@ export class Tracker {
               const obsEci_ = observerEci(obsLat, obsLon, obsAlt, gmstRad);
               const range = slantRange(eci, obsEci_);
               beamStore.updateTracking(az, el, range);
+
+              // Compute lead position for rotator lag compensation
+              if (leadTimeSec > 0 && sat.satrec) {
+                const futureEpoch = epoch + leadTimeSec / 86400;
+                const futurePos = propagateToEpoch(sat.satrec, futureEpoch);
+                if (futurePos) {
+                  const futureEci = renderToEci(futurePos.x, futurePos.y, futurePos.z);
+                  const futureGmst = epochToGmst(futureEpoch) * DEG2RAD;
+                  const futureAzEl = getAzEl(futureEci.x, futureEci.y, futureEci.z, futureGmst, obsLat, obsLon, obsAlt);
+                  beamStore.updateLeadPosition(futureAzEl.az, Math.max(0, futureAzEl.el));
+                } else {
+                  beamStore.clearLeadPosition();
+                }
+              } else {
+                beamStore.clearLeadPosition();
+              }
 
               if (now >= this._skyPathNextUpdate || this._skyPathNoradId !== sat.noradId) {
                 this._skyPathNoradId = sat.noradId;

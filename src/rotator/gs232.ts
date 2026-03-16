@@ -37,7 +37,8 @@ export class GS232Driver implements RotatorDriver {
   }
 
   async setPosition(az: number, el: number): Promise<void> {
-    const azStr = Math.round(Math.max(0, Math.min(360, az))).toString().padStart(3, '0');
+    // Az clamping is handled by rotatorStore (supports extended range for meridian flip)
+    const azStr = Math.round(Math.max(0, az)).toString().padStart(3, '0');
     const elStr = Math.round(Math.max(0, Math.min(90, el))).toString().padStart(3, '0');
     await this.transport.sendOnly(`W${azStr} ${elStr}\r`);
   }
